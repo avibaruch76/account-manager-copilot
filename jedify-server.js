@@ -293,10 +293,20 @@ async function runCompetitiveAnalysis(params, onProgress) {
         `List the top 3 ${scopeLabel}s by total GGR (excluding "${entity}")${marketContext} from our data. Return ONLY the ${scopeLabel} names, one per line, nothing else.`,
         {}, 'competitive_discover'
       );
-      const lines = (discoveryResult.answer || '').split('\n')
-        .map(l => l.replace(/^\d+[\.\)\-]\s*/, '').replace(/[*"]/g, '').trim())
-        .filter(l => l.length > 0 && l.length < 100);
-      competitorNames = lines.slice(0, 3);
+      const raw = discoveryResult.answer || '';
+      // Try to extract "Operator Name: X" patterns first (Jedify often returns this format)
+      const namePattern = /(?:Operator|Brand|Account)\s*Name\s*[:\-]\s*([^\.\n,]+)/gi;
+      let matches = [...raw.matchAll(namePattern)].map(m => m[1].trim()).filter(Boolean);
+      if (matches.length === 0) {
+        // Fallback: split by newlines or ". " and clean up
+        const lines = raw.split(/[\n]|(?:\.\s)/)
+          .map(l => l.replace(/^\d+[\.\)\-]\s*/, '').replace(/[*"]/g, '').trim())
+          .filter(l => l.length > 2 && l.length < 100 && !/^(top|here|the |based|note)/i.test(l));
+        matches = lines;
+      }
+      competitorNames = matches.slice(0, 3);
+      console.log(`[competitive] Raw answer: ${raw.slice(0, 200)}`);
+      console.log(`[competitive] Parsed competitors: ${competitorNames.join(', ')}`);
       console.log(`[competitive] Discovered competitors: ${competitorNames.join(', ')}`);
     } catch (e) {
       console.error('[competitive] Discovery failed:', e.message);
