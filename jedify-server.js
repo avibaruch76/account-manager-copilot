@@ -1157,12 +1157,13 @@ const server = http.createServer(async (req, res) => {
         return;
       }
       console.log('[markets] Fetching distinct countries...');
+      // Use lightweight query on fact table only — no heavy joins needed for country list
       const rows = await runSQL(`
-        SELECT DISTINCT s.COUNTRY
-        FROM ${BASE_FROM}
-        WHERE ${MF} AND s.COUNTRY IS NOT NULL AND s.COUNTRY != ''
-        ORDER BY s.COUNTRY
-      `);
+        SELECT DISTINCT COUNTRY
+        FROM IN_RUBYPLAY.JEDIFY.FACT_SPINS_AGGREGATED_ALL_V
+        WHERE COUNTRY IS NOT NULL AND COUNTRY != ''
+        ORDER BY COUNTRY
+      `, 500);
       const markets = rows.map(r => r.COUNTRY).filter(Boolean);
       _marketsCache = { data: markets, fetchedAt: Date.now() };
       console.log(`[markets] Found ${markets.length} markets`);
