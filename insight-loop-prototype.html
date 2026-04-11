@@ -717,7 +717,9 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;">
       <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Market <span style="font-weight:400;color:#94A3B8;">(optional)</span></label>
-      <input type="text" id="comp-market" placeholder="e.g. Italy, UK, LatAm..." style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;min-width:160px;" />
+      <select id="comp-market" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;min-width:160px;">
+        <option value="">All Markets</option>
+      </select>
     </div>
     <button onclick="runCompetitive()" style="padding:8px 24px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">▶ Run</button>
   </div>
@@ -3549,6 +3551,26 @@ function refreshCompCharts() {
   renderPortfolioChart();
   populateGameDropdown();
 }
+
+// Load markets dropdown from Jedify data
+async function loadMarkets() {
+  try {
+    const resp = await fetch('http://localhost:3001/api/markets');
+    if (!resp.ok) return;
+    const { markets } = await resp.json();
+    const sel = document.getElementById('comp-market');
+    markets.forEach(m => {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m;
+      sel.appendChild(opt);
+    });
+    console.log(`[competitive] Loaded ${markets.length} markets`);
+  } catch (e) {
+    console.warn('[competitive] Failed to load markets:', e.message);
+  }
+}
+loadMarkets();
 
 // Populate manual competitor picker based on current scope
 function populateCompManualList() {

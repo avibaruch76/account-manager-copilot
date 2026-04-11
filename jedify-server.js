@@ -250,6 +250,10 @@ function trendArrow(trend) {
   return '→';
 }
 
+// ── Markets cache (for /api/markets dropdown) ────────────────────────────
+let _marketsCache = { data: null, fetchedAt: 0 };
+const MARKETS_CACHE_TTL = 3600000; // 1 hour
+
 // ── Competitive Intelligence pipeline ─────────────────────────────────────
 
 async function runCompetitiveAnalysis(params, onProgress) {
@@ -272,8 +276,9 @@ async function runCompetitiveAnalysis(params, onProgress) {
   const scopeLabel = scope === 'brand' ? 'brand' : scope === 'account' ? 'account' : 'operator';
   const entitySafe = escStr(entity);
 
-  // Optional market filter — used in Jedify discovery prompt and can narrow SQL if needed
+  // Optional market filter — used in Jedify discovery prompt AND as hard SQL filter
   const marketContext = market ? ` in the ${market} market` : '';
+  const marketFilter = market ? `AND s.COUNTRY = '${escStr(market)}'` : '';
 
   // Step 1: Discover top 3 competitors
   emit({ type: 'step', step: 'discover_competitors', name: 'Finding top competitors', index: 0, total: 5 });
@@ -316,7 +321,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
              ROUND(SUM(s.BETS_EUR), 0) AS BETS_EUR,
              COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
       FROM ${BASE_FROM}
-      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere}
+      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter}
       GROUP BY M ORDER BY M
     `);
     console.log(`[competitive] Operator data: ${operatorMonthly.length} months`);
@@ -338,7 +343,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
              ROUND(SUM(s.BETS_EUR), 0) AS BETS_EUR,
              COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
       FROM ${BASE_FROM}
-      WHERE ${MF} AND e.OPERATOR_NAME IN (${compList}) AND ${dateWhere}
+      WHERE ${MF} AND e.OPERATOR_NAME IN (${compList}) AND ${dateWhere} ${marketFilter}
       GROUP BY e.OPERATOR_NAME, M ORDER BY e.OPERATOR_NAME, M
     `);
     console.log(`[competitive] Competitor data: ${competitorMonthly.length} rows`);
@@ -357,7 +362,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
       SELECT g.NAME AS GAME_NAME, ROUND(SUM(s.GGR_EUR), 0) AS TOTAL_GGR
       FROM ${BASE_FROM}
       LEFT JOIN IN_RUBYPLAY.JEDIFY.GAME_INFO_V g ON s.GAME_ID = g.ID
-      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere}
+      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter}
         AND g.NAME IS NOT NULL
       GROUP BY g.NAME ORDER BY TOTAL_GGR DESC LIMIT 10
     `);
@@ -375,7 +380,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
                COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
         FROM ${BASE_FROM}
         LEFT JOIN IN_RUBYPLAY.JEDIFY.GAME_INFO_V g ON s.GAME_ID = g.ID
-        WHERE ${MF} AND e.OPERATOR_NAME IN (${allOperators}) AND ${dateWhere}
+        WHERE ${MF} AND e.OPERATOR_NAME IN (${allOperators}) AND ${dateWhere} ${marketFilter}
           AND g.NAME IN (${gameList})
         GROUP BY e.OPERATOR_NAME, g.NAME, M
         ORDER BY g.NAME, e.OPERATOR_NAME, M
@@ -1124,6 +1129,40 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, mcpReady }));
+    return;
+  }
+
+  // Markets dropdown data (cached)
+  if (req.method === 'GET' && req.url === '/api/markets') {
+    if (!mcpReady) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'MCP not ready yet.' }));
+      return;
+    }
+    try {
+      const now = Date.now();
+      if (_marketsCache.data && (now - _marketsCache.fetchedAt) < MARKETS_CACHE_TTL) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ markets: _marketsCache.data }));
+        return;
+      }
+      console.log('[markets] Fetching distinct countries...');
+      const rows = await runSQL(`
+        SELECT DISTINCT s.COUNTRY
+        FROM ${BASE_FROM}
+        WHERE ${MF} AND s.COUNTRY IS NOT NULL AND s.COUNTRY != ''
+        ORDER BY s.COUNTRY
+      `);
+      const markets = rows.map(r => r.COUNTRY).filter(Boolean);
+      _marketsCache = { data: markets, fetchedAt: Date.now() };
+      console.log(`[markets] Found ${markets.length} markets`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ markets }));
+    } catch (err) {
+      console.error('[markets] Error:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
     return;
   }
 
