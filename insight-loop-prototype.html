@@ -689,12 +689,13 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
   <div class="section-title">📈 Competitive Intelligence</div>
   <div class="section-sub">Compare operator performance against top market competitors.</div>
 
+  <!-- Info: Uses the same selection from the top filter -->
+  <div id="comp-selection-info" style="padding:12px 16px;background:#F0F4FF;border:1px solid #C7D2FE;border-radius:8px;margin-bottom:16px;font-size:13px;color:#4338CA;">
+    Select an operator, brand, or account from the <strong>Analysis</strong> tab filters above, then come back here to compare.
+  </div>
+
   <!-- Controls Row -->
   <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px;padding:16px;background:#F8FAFC;border-radius:10px;border:1px solid #E2E8F0;">
-    <div style="display:flex;flex-direction:column;gap:4px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Operator</label>
-      <select id="comp-operator" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;min-width:180px;"></select>
-    </div>
     <div style="display:flex;flex-direction:column;gap:4px;">
       <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Compare With</label>
       <select id="comp-mode" onchange="toggleManualPicker()" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;">
@@ -707,25 +708,16 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
       <select id="comp-manual-select" multiple size="4" style="padding:4px 8px;border:1px solid #CBD5E1;border-radius:6px;font-size:12px;min-width:200px;"></select>
     </div>
     <div style="display:flex;flex-direction:column;gap:4px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">End Month</label>
-      <input type="month" id="comp-end-month" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;" />
-    </div>
-    <div style="display:flex;flex-direction:column;gap:4px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Months Back</label>
-      <select id="comp-months-back" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;">
-        <option value="3">3</option>
-        <option value="6" selected>6</option>
-        <option value="9">9</option>
-        <option value="12">12</option>
-      </select>
-    </div>
-    <div style="display:flex;flex-direction:column;gap:4px;">
       <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Metric</label>
       <select id="comp-metric" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;">
         <option value="GGR">GGR</option>
         <option value="BETS">Bets Volume</option>
         <option value="PLAYERS">Active Players</option>
       </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Market <span style="font-weight:400;color:#94A3B8;">(optional)</span></label>
+      <input type="text" id="comp-market" placeholder="e.g. Italy, UK, LatAm..." style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;min-width:160px;" />
     </div>
     <button onclick="runCompetitive()" style="padding:8px 24px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">▶ Run</button>
   </div>
@@ -3267,13 +3259,21 @@ function toggleManualPicker() {
 }
 
 async function runCompetitive() {
-  const entity = document.getElementById('comp-operator').value;
-  if (!entity) { alert('Please select an operator'); return; }
+  // Reuse the main analysis selection
+  const pop = getSelectedPopulation();
+  if (!pop || pop.count === 0 || pop.scope === 'all') {
+    alert('Please select an operator, brand, or account from the Analysis tab filters first.');
+    return;
+  }
+
+  // Get the first selected entity name (competitive compares one entity at a time)
+  const entity = pop.label.split(',')[0].trim();
+  const scope = pop.scope; // 'operator', 'brand', or 'account'
 
   const mode = document.getElementById('comp-mode').value;
-  const endMonth = document.getElementById('comp-end-month').value;
-  const monthsBack = document.getElementById('comp-months-back').value;
+  const { endMonth, monthsBack } = getDateFilters();
   const metric = document.getElementById('comp-metric').value;
+  const market = (document.getElementById('comp-market').value || '').trim();
 
   let manualCompetitors = [];
   if (mode === 'manual') {
@@ -3281,6 +3281,16 @@ async function runCompetitive() {
     manualCompetitors = Array.from(sel.selectedOptions).map(o => o.value).slice(0, 3);
     if (manualCompetitors.length === 0) { alert('Please select at least one competitor'); return; }
   }
+
+  // Update selection info banner
+  const scopeLabel = scope === 'operator' ? 'Operator' : scope === 'brand' ? 'Brand' : 'Account';
+  document.getElementById('comp-selection-info').innerHTML =
+    `Comparing <strong>${entity}</strong> (${scopeLabel}) against top 3 ${scopeLabel.toLowerCase()}s by GGR` +
+    (market ? ` in <strong>${market}</strong> market` : '') +
+    ` | Period: ${endMonth || 'latest'}, ${monthsBack} months back`;
+  document.getElementById('comp-selection-info').style.background = '#F0FDF4';
+  document.getElementById('comp-selection-info').style.borderColor = '#BBF7D0';
+  document.getElementById('comp-selection-info').style.color = '#166534';
 
   // Show progress, hide results
   document.getElementById('comp-progress').style.display = 'block';
@@ -3295,8 +3305,8 @@ async function runCompetitive() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        entity, scope: 'operator', endMonth, monthsBack: parseInt(monthsBack),
-        metric, compareMode: mode, manualCompetitors
+        entity, scope, endMonth, monthsBack: parseInt(monthsBack),
+        metric, compareMode: mode, manualCompetitors, market
       })
     });
 
@@ -3540,21 +3550,33 @@ function refreshCompCharts() {
   populateGameDropdown();
 }
 
-// Populate competitive operator dropdown from existing OPERATORS data
-(function populateCompOperatorList() {
-  const select = document.getElementById('comp-operator');
+// Populate manual competitor picker based on current scope
+function populateCompManualList() {
   const manualSelect = document.getElementById('comp-manual-select');
-  if (typeof OPERATORS !== 'undefined') {
+  manualSelect.innerHTML = '';
+  const scope = currentScope;
+  if (scope === 'operator' && typeof OPERATORS !== 'undefined') {
     OPERATORS.forEach(op => {
-      select.innerHTML += `<option value="${op.name}">${op.name}</option>`;
+      manualSelect.innerHTML += `<option value="${op.name}">${op.name}</option>`;
+    });
+  } else if (scope === 'brand' && typeof BRANDS !== 'undefined') {
+    BRANDS.forEach(b => {
+      const name = typeof b === 'string' ? b : b.name;
+      manualSelect.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+  } else if (scope === 'account' && typeof ACCOUNTS !== 'undefined') {
+    ACCOUNTS.forEach(a => {
+      const name = typeof a === 'string' ? a : a.name;
+      manualSelect.innerHTML += `<option value="${name}">${name}</option>`;
+    });
+  } else if (typeof OPERATORS !== 'undefined') {
+    // Fallback to operators
+    OPERATORS.forEach(op => {
       manualSelect.innerHTML += `<option value="${op.name}">${op.name}</option>`;
     });
   }
-  // Set default end month
-  const now = new Date();
-  const em = document.getElementById('comp-end-month');
-  em.value = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-})();
+}
+populateCompManualList();
 
 </script>
 </body>

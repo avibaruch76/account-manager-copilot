@@ -253,7 +253,7 @@ function trendArrow(trend) {
 // ── Competitive Intelligence pipeline ─────────────────────────────────────
 
 async function runCompetitiveAnalysis(params, onProgress) {
-  const { entity, scope, endMonth, monthsBack, metric, compareMode, manualCompetitors } = params;
+  const { entity, scope, endMonth, monthsBack, metric, compareMode, manualCompetitors, market } = params;
   const emit = onProgress || (() => {});
   const metricCol = metric === 'BETS' ? 'BETS_EUR' : metric === 'PLAYERS' ? 'PLAYER_COUNT' : 'GGR_EUR';
 
@@ -267,8 +267,13 @@ async function runCompetitiveAnalysis(params, onProgress) {
     dateWhere = `s.DATE >= DATEADD(MONTH, -${mb}, DATE_TRUNC('MONTH', CURRENT_DATE())) AND s.DATE < DATE_TRUNC('MONTH', CURRENT_DATE())`;
   }
 
+  // Scope-aware: compare operators vs operators, brands vs brands, accounts vs accounts
   const scopeCol = scope === 'brand' ? 'e.BRAND_NAME' : scope === 'account' ? 'e.ACCOUNT_NAME' : 'e.OPERATOR_NAME';
+  const scopeLabel = scope === 'brand' ? 'brand' : scope === 'account' ? 'account' : 'operator';
   const entitySafe = escStr(entity);
+
+  // Optional market filter — used in Jedify discovery prompt and can narrow SQL if needed
+  const marketContext = market ? ` in the ${market} market` : '';
 
   // Step 1: Discover top 3 competitors
   emit({ type: 'step', step: 'discover_competitors', name: 'Finding top competitors', index: 0, total: 5 });
@@ -280,7 +285,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
   } else {
     try {
       const discoveryResult = await askJedifyWithRetry(
-        `List the top 3 operators by total GGR (excluding "${entity}") from our data. Return ONLY the operator names, one per line, nothing else.`,
+        `List the top 3 ${scopeLabel}s by total GGR (excluding "${entity}")${marketContext} from our data. Return ONLY the ${scopeLabel} names, one per line, nothing else.`,
         {}, 'competitive_discover'
       );
       const lines = (discoveryResult.answer || '').split('\n')
@@ -476,7 +481,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
     }).join(', ');
     const underGames = perGameResults.filter(g => g.underperforming).map(g => g.gameName).join(', ');
 
-    const prompt = `You are an account manager preparing for a QBR with ${scope} "${entity}".
+    const prompt = `You are an account manager preparing for a QBR with ${scopeLabel} "${entity}"${marketContext}.
 
 Competitive analysis shows:
 - ${entity} is ${opTrend} (slope: ${opSlope}) on ${metric || 'GGR'}
