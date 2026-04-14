@@ -1,107 +1,24 @@
 #!/usr/bin/env node
 /**
  * jedify-server.js
- * Local HTTP proxy that connects to Jedify MCP and runs real SQL queries.
+ * HTTP server that connects to Jedify MCP and runs real SQL queries.
  * Used by insight-loop-prototype.html for live analysis.
  *
- * Start: node jedify-server.js
- * It will open a browser for one-time Jedify OAuth authentication.
+ * Local:  node jedify-server.js
+ * Cloud:  Set JEDIFY_REFRESH_TOKEN env var, deploy to Render/etc.
  */
 
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { spawn } = require('child_process');
+const jedify = require('./jedify-direct');
 
-const PORT = 3001;
-const REMOTE_MCP_URL = 'https://be.jedify.com/mcp/sse';
-const DESCOPE_PROJECT_ID = 'P2fGtsAm5ziAZr0swDyMDO7Tce87';
+const PORT = process.env.PORT || 3001;
 
-// ── MCP subprocess management ──────────────────────────────────────────────
+// ── MCP connection (via jedify-direct.js) ─────────────────────────────────
 
-let mcpProcess = null;
-let msgId = 1;
-const pending = new Map();
-let stdoutBuf = '';
+const { sendMCP, notifyMCP, initMCP, isMCPReady, setMCPReady, getTokenStatus } = jedify;
 let mcpReady = false;
-
-function spawnMCP() {
-  console.log('[jedify] Spawning MCP auth proxy...');
-  mcpProcess = spawn('npx', ['@jedify/mcp-auth'], {
-    env: { ...process.env, REMOTE_MCP_URL, DESCOPE_PROJECT_ID },
-    stdio: ['pipe', 'pipe', 'pipe'],
-    shell: true
-  });
-
-  mcpProcess.stdout.on('data', chunk => {
-    stdoutBuf += chunk.toString();
-    let nl;
-    while ((nl = stdoutBuf.indexOf('\n')) !== -1) {
-      const line = stdoutBuf.slice(0, nl).trim();
-      stdoutBuf = stdoutBuf.slice(nl + 1);
-      if (!line) continue;
-      try {
-        const msg = JSON.parse(line);
-        if (msg.id !== undefined && pending.has(msg.id)) {
-          const { resolve } = pending.get(msg.id);
-          pending.delete(msg.id);
-          resolve(msg);
-        }
-      } catch (e) {
-        // Not JSON (log lines from the proxy) — ignore
-      }
-    }
-  });
-
-  mcpProcess.stderr.on('data', d => process.stderr.write(d));
-  mcpProcess.on('exit', (code) => {
-    console.error(`[jedify] MCP exited (${code}). Respawning in 3s...`);
-    mcpReady = false;
-    pending.forEach(({reject}) => reject(new Error('MCP process exited')));
-    pending.clear();
-    stdoutBuf = '';
-    setTimeout(() => {
-      spawnMCP();
-      initMCP().catch(e => console.error('[jedify] Re-init failed:', e.message));
-    }, 3000);
-  });
-}
-
-function sendMCP(message, timeoutMs = 120000) {
-  return new Promise((resolve, reject) => {
-    const id = msgId++;
-    message.jsonrpc = '2.0';
-    message.id = id;
-    pending.set(id, { resolve, reject });
-    mcpProcess.stdin.write(JSON.stringify(message) + '\n');
-    setTimeout(() => {
-      if (pending.has(id)) {
-        pending.delete(id);
-        reject(new Error(`MCP timeout for id=${id}`));
-      }
-    }, timeoutMs);
-  });
-}
-
-function notifyMCP(message) {
-  message.jsonrpc = '2.0';
-  mcpProcess.stdin.write(JSON.stringify(message) + '\n');
-}
-
-async function initMCP() {
-  console.log('[jedify] Initializing MCP session (browser auth may open)...');
-  await sendMCP({
-    method: 'initialize',
-    params: {
-      protocolVersion: '2025-11-25',
-      capabilities: {},
-      clientInfo: { name: 'insight-loop-server', version: '1.0.0' }
-    }
-  });
-  notifyMCP({ method: 'notifications/initialized' });
-  mcpReady = true;
-  console.log('[jedify] MCP session ready.');
-}
 
 async function runSQL(query, maxResults = 500) {
   const res = await sendMCP({
@@ -1343,24 +1260,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Token health check
+  if (req.method === 'GET' && req.url === '/api/token-status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(getTokenStatus()));
+    return;
+  }
+
   res.writeHead(404); res.end('Not found');
 });
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 (async () => {
-  spawnMCP();
-  // Give the process a moment to start before initializing
-  await new Promise(r => setTimeout(r, 1500));
   try {
     await initMCP();
+    mcpReady = true;
   } catch (e) {
     console.error('[jedify] Init failed:', e.message);
+    console.error('[jedify] Make sure JEDIFY_REFRESH_TOKEN env var is set.');
     process.exit(1);
   }
 
   server.listen(PORT, () => {
     console.log(`\n[jedify] Server running → http://localhost:${PORT}`);
-    console.log('[jedify] Open insight-loop-prototype.html and run an analysis.');
+    console.log(`[jedify] Mode: direct HTTP${process.env.JEDIFY_REFRESH_TOKEN ? ' (cloud)' : ' (local)'}`);
   });
 })();
