@@ -237,29 +237,39 @@ function processSSEBuffer() {
  * Handle a parsed SSE event.
  */
 function handleSSEEvent(eventType, data) {
-  if (eventType === 'endpoint') {
-    // data is something like "/mcp/message?sessionId=xxx"
+  // Try parsing as JSON-RPC first (Jedify sends JSON-RPC messages on the SSE stream)
+  let jsonMsg = null;
+  try { jsonMsg = JSON.parse(data); } catch (_) {}
+
+  // Handle endpoint event — can be plain path or JSON-RPC
+  if (eventType === 'endpoint' || (jsonMsg && jsonMsg.method === 'endpoint')) {
     const parsed = new URL(REMOTE_MCP_URL);
-    // Build full URL from the relative path
-    messageEndpoint = `${parsed.protocol}//${parsed.host}${data}`;
-    sessionId = new URL(messageEndpoint).searchParams.get('sessionId');
-    console.log(`[jedify-direct] Got MCP endpoint, sessionId=${sessionId}`);
+    let endpointPath;
+
+    if (jsonMsg && jsonMsg.params && jsonMsg.params.endpoint) {
+      // JSON-RPC format: {"jsonrpc":"2.0","method":"endpoint","params":{"endpoint":"/mcp/message"}}
+      endpointPath = jsonMsg.params.endpoint;
+    } else {
+      // Plain path format: /mcp/message?sessionId=xxx
+      endpointPath = data.trim();
+    }
+
+    messageEndpoint = `${parsed.protocol}//${parsed.host}${endpointPath}`;
+    try {
+      sessionId = new URL(messageEndpoint).searchParams.get('sessionId');
+    } catch (_) {
+      sessionId = null;
+    }
+    console.log(`[jedify-direct] Got MCP endpoint: ${messageEndpoint}`);
     return;
   }
 
-  if (eventType === 'message') {
-    // This could be a JSON-RPC response for a pending request
-    try {
-      const msg = JSON.parse(data);
-      if (msg.id !== undefined && pendingRequests.has(msg.id)) {
-        const { resolve, timer } = pendingRequests.get(msg.id);
-        clearTimeout(timer);
-        pendingRequests.delete(msg.id);
-        resolve(msg);
-      }
-    } catch (e) {
-      // Not JSON — possibly a log line, ignore
-    }
+  // Handle JSON-RPC responses for pending requests
+  if (jsonMsg && jsonMsg.id !== undefined && pendingRequests.has(jsonMsg.id)) {
+    const { resolve, timer } = pendingRequests.get(jsonMsg.id);
+    clearTimeout(timer);
+    pendingRequests.delete(jsonMsg.id);
+    resolve(jsonMsg);
     return;
   }
 
