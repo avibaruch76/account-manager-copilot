@@ -1813,9 +1813,23 @@ function runAnalysis() {
   const selection = buildSelectionPayload(pop);
   const enabledChecks = selection.enabledChecks || [];
 
-  // Initialize research timeline
+  // Initialize research timeline — pre-render all stages as grey
+  const TIMELINE_STAGES = [
+    'Submitting research request...',
+    'Jedify is reading the semantic model...',
+    'Querying performance data...',
+    'Analyzing trends and patterns...',
+    'Building insights...',
+    'Drafting recommendations...',
+    'Finalizing report...'
+  ];
   const timeline = document.getElementById('research-timeline');
-  if (timeline) timeline.innerHTML = '';
+  if (timeline) {
+    timeline.innerHTML = TIMELINE_STAGES.map((label, i) =>
+      `<div id="rt-stage-${i}" style="padding:5px 0;font-size:13px;color:#C0C8D4;display:flex;align-items:center;gap:8px">` +
+      `<span id="rt-icon-${i}" style="font-size:16px">⬜</span> ${label}</div>`
+    ).join('');
+  }
   const personaLabel = {
     qbr_customer: 'QBR Customer',
     am_actions: 'AM Actions',
@@ -2107,21 +2121,26 @@ async function readSSEStream(response) {
         const evt = JSON.parse(jsonStr);
 
         if (evt.type === 'stage') {
-          // Append a new stage line to the Research Timeline
-          const timeline = document.getElementById('research-timeline');
-          if (timeline) {
-            const div = document.createElement('div');
-            div.style.cssText = 'padding:5px 0;font-size:13px;color:#1D6A39;display:flex;align-items:center;gap:8px;animation:fadeIn .4s ease';
-            div.innerHTML = `<span style="color:#4A235A;font-size:16px">⏳</span> ${evt.label}`;
-            // Mark previous stage as done
-            const prev = timeline.lastElementChild;
-            if (prev) {
-              prev.innerHTML = prev.innerHTML.replace('⏳', '✅');
-              prev.style.color = '#64748B';
+          // Mark all previous stages as done (green ✅), current as active (⏳)
+          const total = evt.total || 7;
+          for (let s = 0; s < total; s++) {
+            const row = document.getElementById('rt-stage-' + s);
+            const icon = document.getElementById('rt-icon-' + s);
+            if (!row || !icon) continue;
+            if (s < evt.index) {
+              // Already done
+              icon.textContent = '✅';
+              row.style.color = '#64748B';
+            } else if (s === evt.index) {
+              // Currently active
+              icon.textContent = '⏳';
+              row.style.color = '#4A235A';
+              row.style.fontWeight = '700';
+              row.style.animation = 'fadeIn .4s ease';
             }
-            timeline.appendChild(div);
+            // Future stages stay grey ⬜
           }
-          const pct = Math.min(90, Math.round(((evt.index + 1) / (evt.total || 7)) * 90));
+          const pct = Math.min(90, Math.round(((evt.index + 1) / total) * 90));
           if (fill) fill.style.width = pct + '%';
         }
 
@@ -2967,9 +2986,23 @@ function confirmAndRun() {
 
   const enabledChecks = selection.enabledChecks || [];
 
-  // Initialize research timeline
+  // Initialize research timeline — pre-render all stages as grey
+  const TIMELINE_STAGES = [
+    'Submitting research request...',
+    'Jedify is reading the semantic model...',
+    'Querying performance data...',
+    'Analyzing trends and patterns...',
+    'Building insights...',
+    'Drafting recommendations...',
+    'Finalizing report...'
+  ];
   const timeline = document.getElementById('research-timeline');
-  if (timeline) timeline.innerHTML = '';
+  if (timeline) {
+    timeline.innerHTML = TIMELINE_STAGES.map((label, i) =>
+      `<div id="rt-stage-${i}" style="padding:5px 0;font-size:13px;color:#C0C8D4;display:flex;align-items:center;gap:8px">` +
+      `<span id="rt-icon-${i}" style="font-size:16px">⬜</span> ${label}</div>`
+    ).join('');
+  }
   const personaLabel = {
     qbr_customer: 'QBR Customer',
     am_actions: 'AM Actions',

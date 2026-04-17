@@ -926,8 +926,8 @@ async function askJedifyResearch(prompt, onStage) {
   console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, polling...`);
   if (onStage) onStage(0, RESEARCH_STAGES[0]);
 
-  // Poll until done (max 5 min at 5s intervals = 60 polls)
-  const maxPolls = 60;
+  // Poll until done (max 10 min at 5s intervals = 120 polls)
+  const maxPolls = 120;
   const pollInterval = 5000;
   let stageIdx = 0;
 
