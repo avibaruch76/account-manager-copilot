@@ -243,6 +243,12 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .save-indicator.show{opacity:1}
 
 @media(max-width:720px){.section,.config-section{padding:24px 16px}.hero{padding:28px 16px}.form-row{flex-direction:column}.form-row label{min-width:auto}.template-grid{grid-template-columns:1fr}.run-bar{padding:12px 16px;gap:10px}.run-bar select{min-width:200px}}
+.persona-selector{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 12px}
+.persona-btn{padding:7px 14px;border-radius:20px;border:1.5px solid #E0E8F0;background:white;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;transition:all .2s}
+.persona-btn:hover{border-color:#4A235A;color:#4A235A}
+.persona-btn.selected{background:#4A235A;color:white;border-color:#4A235A}
+.persona-btn.admin-btn.selected{background:#1D6A39;border-color:#1D6A39}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -298,6 +304,15 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       </select>
     </div>
 
+    <!-- ── Persona Selector ─────────────────────────────────────────── -->
+    <div style="margin-bottom:4px;font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px">Run as persona</div>
+    <div class="persona-selector" id="persona-selector">
+      <button class="persona-btn" data-persona="qbr_customer" onclick="selectPersona('qbr_customer',this)">🤝 QBR Customer</button>
+      <button class="persona-btn selected" data-persona="am_actions" onclick="selectPersona('am_actions',this)">⚡ AM Actions</button>
+      <button class="persona-btn" data-persona="am_detailed" onclick="selectPersona('am_detailed',this)">📊 AM Detailed</button>
+      <button class="persona-btn" data-persona="data_analyst" onclick="selectPersona('data_analyst',this)">🔬 Data Analyst</button>
+      <button class="persona-btn admin-btn" data-persona="admin" onclick="selectPersona('admin',this)">👑 All Personas</button>
+    </div>
     <button class="btn-run" id="run-btn" onclick="runAnalysis()">
       <span>▶</span> Run Analysis
     </button>
@@ -745,36 +760,39 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
     <div id="comp-progress-steps" style="font-size:13px;color:#64748B;"></div>
   </div>
 
-  <!-- Portfolio Chart -->
-  <div id="comp-portfolio-section" style="display:none;margin-bottom:24px;">
-    <div style="background:white;border-radius:10px;padding:20px;border:1px solid #E2E8F0;">
-      <div style="font-size:16px;font-weight:700;color:#1E293B;margin-bottom:4px;">📈 Portfolio Performance</div>
-      <div id="comp-portfolio-subtitle" style="font-size:13px;color:#64748B;margin-bottom:16px;"></div>
-      <canvas id="comp-portfolio-chart" height="300"></canvas>
-    </div>
-  </div>
-
-  <!-- Per-Game Section -->
-  <div id="comp-game-section" style="display:none;margin-bottom:24px;">
-    <div style="background:white;border-radius:10px;padding:20px;border:1px solid #E2E8F0;">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-        <div style="font-size:16px;font-weight:700;color:#1E293B;">🎮 Per-Game Comparison</div>
-        <select id="comp-game-select" onchange="renderGameChart()" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;"></select>
-        <label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#64748B;margin-left:auto;cursor:pointer;">
-          <input type="checkbox" id="comp-show-all-games" onchange="populateGameDropdown()" style="accent-color:#2563EB;" />
-          Show all games
-        </label>
+  <!-- Charts Row: Portfolio + Per-Game side-by-side -->
+  <div id="comp-charts-row" style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+    <!-- Portfolio Chart -->
+    <div id="comp-portfolio-section" style="display:none;flex:1 1 0;min-width:320px;">
+      <div style="background:white;border-radius:10px;padding:12px 16px;border:1px solid #E2E8F0;height:100%;">
+        <div style="font-size:14px;font-weight:700;color:#1E293B;">📈 Portfolio Performance</div>
+        <div id="comp-portfolio-subtitle" style="font-size:11px;color:#64748B;margin-bottom:6px;"></div>
+        <div style="position:relative;height:240px;"><canvas id="comp-portfolio-chart"></canvas></div>
       </div>
-      <div id="comp-game-filter-msg" style="font-size:12px;color:#E11D48;margin-bottom:8px;"></div>
-      <canvas id="comp-game-chart" height="280"></canvas>
+    </div>
+
+    <!-- Per-Game Section -->
+    <div id="comp-game-section" style="display:none;flex:1 1 0;min-width:320px;">
+      <div style="background:white;border-radius:10px;padding:12px 16px;border:1px solid #E2E8F0;height:100%;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <div style="font-size:14px;font-weight:700;color:#1E293B;">🎮 Per-Game</div>
+          <select id="comp-game-select" onchange="renderGameChart()" style="padding:4px 8px;border:1px solid #CBD5E1;border-radius:6px;font-size:12px;flex:1;min-width:0;"></select>
+          <label style="display:flex;align-items:center;gap:3px;font-size:11px;color:#64748B;cursor:pointer;">
+            <input type="checkbox" id="comp-show-all-games" onchange="populateGameDropdown()" style="accent-color:#2563EB;" />
+            All
+          </label>
+        </div>
+        <div id="comp-game-filter-msg" style="font-size:11px;color:#E11D48;margin-bottom:4px;"></div>
+        <div style="position:relative;height:240px;"><canvas id="comp-game-chart"></canvas></div>
+      </div>
     </div>
   </div>
 
   <!-- Action Items -->
   <div id="comp-actions-section" style="display:none;">
-    <div style="background:white;border-radius:10px;padding:20px;border:1px solid #E2E8F0;">
-      <div style="font-size:16px;font-weight:700;color:#1E293B;margin-bottom:12px;">🎯 Recommended Actions</div>
-      <div id="comp-actions-content" style="font-size:14px;color:#334155;line-height:1.8;white-space:pre-wrap;"></div>
+    <div style="background:white;border-radius:10px;padding:12px 16px;border:1px solid #E2E8F0;">
+      <div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:6px;">🎯 Recommended Actions</div>
+      <div id="comp-actions-content" style="font-size:13px;color:#334155;line-height:1.5;white-space:pre-wrap;max-height:140px;overflow:auto;"></div>
     </div>
   </div>
 </div>
@@ -794,6 +812,13 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 const CHECKS_STORAGE_KEY = 'ggr_checks_v2';
 const CONFIG_STORAGE_KEY = 'ggr_insight_loop_config'; // legacy, for migration + lastScope
 let _checks = []; // live state — array of check objects
+let _selectedPersona = 'am_actions';
+
+function selectPersona(persona, btn) {
+  _selectedPersona = persona;
+  document.querySelectorAll('.persona-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
 let _currentRole = localStorage.getItem('ggr_role') || 'admin'; // 'admin' or 'user'
 
 function toggleRole() {
@@ -1985,7 +2010,14 @@ async function fetchJedifyAnalysis(selection, abortSignal) {
     const globalPrompt = document.getElementById('global-prompt-prefix')?.value || '';
     const personaPrompts = typeof getPersonaPrompts === 'function' ? getPersonaPrompts() : {};
     const customPersonaPrompts = getCustomPersonaPrompts();
-    const payload = { ...selection, globalPrompt, personaPrompts, customPersonaPrompts };
+    const enabledOptionalCheckIds = _checks
+      .filter(c => c.type === 'optional' && c.enabled)
+      .map(c => c.id);
+    const payload = {
+      ...selection,
+      persona: _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona,
+      enabledOptionalCheckIds
+    };
 
     // Combine timeout + optional abort signal
     const timeoutSignal = AbortSignal.timeout(1800000);
