@@ -1959,7 +1959,7 @@ function runAnalysis(customPrompt) {
     if (currentWidth < 10) fill.style.width = (currentWidth + 1) + '%';
   }, 3000);
 
-  fetchJedifyAnalysis(selection, _analysisAbortController?.signal).then(data => {
+  fetchJedifyAnalysis(selection, _analysisAbortController?.signal, customPrompt).then(data => {
     clearInterval(progressTimer);
 
     fill.style.width = '100%';
@@ -2092,7 +2092,7 @@ const API_BASE = (location.port === '3001' || location.port === '' || location.p
   ? ''
   : 'http://localhost:3001';
 
-async function fetchJedifyAnalysis(selection, abortSignal) {
+async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
   // Admin mode: fire all 4 personas in parallel, render each as it completes
   if (_selectedPersona === 'admin') {
     const personas = ['qbr_customer', 'am_actions', 'am_detailed', 'data_analyst'];
