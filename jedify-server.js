@@ -971,195 +971,29 @@ async function askJedifyResearch(prompt, onStage) {
 // ── /api/research endpoint — Jedify Research Mode pipeline ──────────────────
 
 async function runResearch(reqBody, onProgress) {
-  const { entity, scope, dateRange, enabledChecks, globalPrompt, personaPrompts, skipConfirmation, checkDefinitions, customPersonaPrompts } = reqBody;
-  const emit = onProgress || (() => {});  // no-op if no callback
-  const scopeLabel = scope || 'operator';  // human-readable: "account", "operator", "brand"
+  const { entity, scope, dateRange, enabledOptionalCheckIds, persona } = reqBody;
+  const emit = onProgress || (() => {});
+  const scopeLabel = scope || 'operator';
+  const activePersona = persona || 'am_actions';
 
-  console.log(`[research] Starting Jedify Research pipeline for ${scopeLabel}: ${entity}`);
-  console.log(`[research] Enabled checks: ${enabledChecks.join(', ')}`);
-  console.log(`[research] Date range: ${dateRange.start} → ${dateRange.end}`);
+  console.log(`[research] Starting research — ${scopeLabel}: "${entity}", persona: ${activePersona}`);
 
-  // Phase 1: Pre-qualify entity — ALWAYS return for user confirmation unless skipConfirmation
-  if (!skipConfirmation) {
-    emit({ type: 'step', step: 'qualify', name: `Confirming ${scopeLabel}`, index: 0, total: enabledChecks.length + 3 });
-    console.log(`[research] Phase 1: Confirming ${scopeLabel} "${entity}"...`);
-    let qualification = null;
-    try {
-      qualification = await askJedifyWithRetry(`Confirm that ${scopeLabel} "${entity}" exists in our data. What is the exact name used in the database? Just confirm the name, no need for detailed analysis.`, {}, 'phase1-confirm');
-      console.log(`[research] Phase 1 done. Answer: ${(qualification.answer || '').slice(0, 100)}`);
-    } catch (e) {
-      console.warn(`[research] Confirmation failed: ${e.message}.`);
-      qualification = { answer: 'Confirmation failed: ' + e.message };
-    }
-    emit({ type: 'done', step: 'qualify', index: 0 });
+  const prompt = buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona);
+  console.log(`[research] Prompt built (${prompt.length} chars). Submitting to Jedify...`);
 
-    // ALWAYS return for user confirmation — let the user verify before spending 15 min on checks
-    return {
-      entity,
-      scope: scopeLabel,
-      operator: entity,  // backward compat
-      needsConfirmation: true,
-      qualification: qualification.answer || 'No response from Jedify.',
-      checks: [],
-      customerSummary: null,
-      actionItems: null,
-      generatedAt: new Date().toISOString()
-    };
-  }
+  const onStage = (idx, label) => {
+    emit({ type: 'stage', index: idx, total: RESEARCH_STAGES.length, label });
+  };
 
-  // Phase 2: Run enabled checks sequentially (only reached after user confirms)
-  // Use 0-based indices since the "Confirming" step is not shown in the UI for confirmed runs
-  const customPersonaIds = Object.keys(customPersonaPrompts || {});
-  console.log(`[research] Phase 2: Running ${enabledChecks.length} research checks (confirmed)...`);
-  if (customPersonaIds.length > 0) console.log(`[research] Custom personas: ${customPersonaIds.join(', ')}`);
-  const totalSteps = enabledChecks.length + 1 + 2 + customPersonaIds.length;  // checks + competitive_context + customer_summary + action_items + custom personas
-  const checks = [];
-  for (let i = 0; i < enabledChecks.length; i++) {
-    const checkId = enabledChecks[i];
-    let checkFn = RESEARCH_REGISTRY[checkId];
+  const report = await askJedifyResearch(prompt, onStage);
 
-    // If frontend sent a question override (custom check OR edited builtin), use it
-    if (checkDefinitions && checkDefinitions[checkId]) {
-      const def = checkDefinitions[checkId];
-      console.log(`[research] Using custom question for: ${checkId} ("${def.name}")`);
-      checkFn = buildResearchCheck(checkId, def.name, def.question);
-    }
-
-    if (!checkFn) {
-      console.warn(`[research] Unknown check: ${checkId}, skipping`);
-      checks.push({ id: checkId, name: checkId, status: 'warning', finding: 'Check not implemented.', answer: '', explanation: '', data: [], columns: [], sql: '' });
-      emit({ type: 'done', step: checkId, index: i, status: 'warning' });
-      continue;
-    }
-
-    const checkName = (checkDefinitions && checkDefinitions[checkId]?.name) || RESEARCH_REGISTRY[checkId]?.displayName || checkId;
-    emit({ type: 'step', step: checkId, name: checkName, index: i, total: totalSteps });
-    console.log(`[research]   → [${i+1}/${enabledChecks.length}] ${checkId}...`);
-    const result = await checkFn(entity, scopeLabel, dateRange);
-    checks.push(result);
-    emit({ type: 'done', step: checkId, index: i, status: result.status, finding: result.finding });
-    console.log(`[research]   ✓ ${checkId}: ${result.status} (${result.finding.slice(0, 60)}...)`);
-  }
-
-  // Phase 2.5: Lightweight competitive context for persona prompts
-  let competitiveContext = '';
-  try {
-    emit({ type: 'step', step: 'competitive_context', name: 'Loading competitive context', index: enabledChecks.length, total: totalSteps });
-    console.log(`[research] Phase 2.5: Getting competitive context...`);
-
-    const compResult = await askJedifyWithRetry(
-      `Compare ${scopeLabel} "${entity}" against the top 3 operators by GGR in the market. ` +
-      `How is ${entity} performing relative to market leaders? Focus on: GGR trends, game performance gaps, ` +
-      `and specific games where ${entity} is underperforming. Keep it concise — 3-4 bullet points.`,
-      {}, 'competitive_context'
-    );
-    competitiveContext = compResult.answer || '';
-    console.log(`[research] Phase 2.5 done: ${competitiveContext.slice(0, 100)}...`);
-    emit({ type: 'done', step: 'competitive_context', index: enabledChecks.length });
-  } catch (e) {
-    console.warn(`[research] Phase 2.5 competitive context failed:`, e.message);
-    emit({ type: 'done', step: 'competitive_context', index: enabledChecks.length, status: 'error' });
-  }
-
-  // Phase 3: Generate AI summaries for Customer + AM Action personas
-  console.log(`[research] Phase 3: Generating persona summaries...`);
-  const phase3Start = enabledChecks.length + 1;  // +1 for competitive context step
-
-  let customerSummary = null;
-  let actionItems = null;
-
-  try {
-    emit({ type: 'step', step: 'customer_summary', name: 'Generating executive summary', index: phase3Start, total: totalSteps });
-    console.log(`[research]   → Customer summary...`);
-    const findingsSummary = checks
-      .filter(c => c.status !== 'error')
-      .map(c => `${c.name}: ${c.finding}`)
-      .join('\n');
-
-    const customerPrompt = (personaPrompts && personaPrompts.customer)
-      ? personaPrompts.customer
-      : 'Generate 3-4 executive summary cards for a QBR meeting. Use ONLY positive framing — highlight growth, opportunities, and strengths. Each card should have a headline and a 1-2 sentence description. Format as numbered items.';
-    const competitiveAddendum = competitiveContext
-      ? `\n\nCompetitive Context:\n${competitiveContext}`
-      : '';
-    customerSummary = await askJedifyWithRetry(
-      `You are preparing a QBR executive summary for ${scopeLabel} "${entity}". ${customerPrompt}\n\nFindings:\n${findingsSummary}${competitiveAddendum}`
-    );
-    emit({ type: 'done', step: 'customer_summary', index: phase3Start });
-    console.log(`[research]   ✓ Customer summary done`);
-  } catch (e) {
-    console.warn(`[research]   ✗ Customer summary failed:`, e.message);
-    customerSummary = { answer: 'Summary generation failed: ' + e.message, data: [], columns: [], sql: '' };
-    emit({ type: 'done', step: 'customer_summary', index: phase3Start, status: 'error' });
-  }
-
-  try {
-    emit({ type: 'step', step: 'action_items', name: 'Generating action items', index: phase3Start + 1, total: totalSteps });
-    console.log(`[research]   → Action items...`);
-    const checkDetails = checks
-      .filter(c => c.status !== 'error')
-      .map(c => `${c.name} [${c.status}]: ${c.answer.slice(0, 300)}`)
-      .join('\n\n');
-
-    const actionPrompt = (personaPrompts && personaPrompts.action)
-      ? personaPrompts.action
-      : 'Generate specific action items in these categories:\n- DO: 2-3 specific actions to take (with data backing)\n- DON\'T: 1-2 pitfalls to avoid (with reframing suggestions)\n- ASK: 2-3 questions to pose to the operator (with expected impact)\nFormat each item with the category prefix (DO/DON\'T/ASK) followed by the action.';
-    const competitiveActions = competitiveContext
-      ? `\n\nCompetitive Intelligence:\n${competitiveContext}`
-      : '';
-    actionItems = await askJedifyWithRetry(
-      `You are an account manager preparing for a call with ${scopeLabel} "${entity}". ${actionPrompt}\n\nFindings:\n${checkDetails}${competitiveActions}`
-    );
-    emit({ type: 'done', step: 'action_items', index: phase3Start + 1 });
-    console.log(`[research]   ✓ Action items done`);
-  } catch (e) {
-    console.warn(`[research]   ✗ Action items failed:`, e.message);
-    actionItems = { answer: 'Action item generation failed: ' + e.message, data: [], columns: [], sql: '' };
-    emit({ type: 'done', step: 'action_items', index: phase3Start + 1, status: 'error' });
-  }
-
-  // Phase 3b: Generate custom persona summaries
-  const customPersonaResults = {};
-  if (customPersonaIds.length > 0) {
-    console.log(`[research] Phase 3b: Generating ${customPersonaIds.length} custom persona summaries...`);
-    const findingsSummary = checks
-      .filter(c => c.status !== 'error')
-      .map(c => `${c.name} [${c.status}]: ${c.answer.slice(0, 300)}`)
-      .join('\n\n');
-
-    for (let j = 0; j < customPersonaIds.length; j++) {
-      const pId = customPersonaIds[j];
-      const pPrompt = customPersonaPrompts[pId];
-      const stepIdx = phase3Start + 2 + j;
-      emit({ type: 'step', step: 'custom_persona_' + pId, name: 'Generating ' + pId, index: stepIdx, total: totalSteps });
-      console.log(`[research]   → Custom persona: ${pId}...`);
-      try {
-        const result = await askJedifyWithRetry(
-          `You are generating a specialized report for ${scopeLabel} "${entity}". ${pPrompt}\n\nFindings:\n${findingsSummary}`
-        );
-        customPersonaResults[pId] = result;
-        emit({ type: 'done', step: 'custom_persona_' + pId, index: stepIdx });
-        console.log(`[research]   ✓ Custom persona ${pId} done`);
-      } catch (e) {
-        console.warn(`[research]   ✗ Custom persona ${pId} failed:`, e.message);
-        customPersonaResults[pId] = { answer: 'Generation failed: ' + e.message, data: [], columns: [], sql: '' };
-        emit({ type: 'done', step: 'custom_persona_' + pId, index: stepIdx, status: 'error' });
-      }
-    }
-  }
-
-  console.log(`[research] Pipeline complete! ${checks.length} checks, ${checks.filter(c => c.status !== 'error').length} successful.`);
+  console.log(`[research] Research complete. Report length: ${report.length} chars.`);
 
   return {
     entity,
     scope: scopeLabel,
-    operator: entity,  // backward compat
-    needsConfirmation: false,
-    checks,
-    customerSummary,
-    actionItems,
-    customPersonaResults,
-    competitiveContext,
+    persona: activePersona,
+    report,
     generatedAt: new Date().toISOString()
   };
 }
@@ -1260,7 +1094,6 @@ const server = http.createServer(async (req, res) => {
         // Build entity name and scope from selection payload
         const entity = reqBody.entity || ((reqBody.values && reqBody.values.length > 0) ? reqBody.values.join(', ') : reqBody.operator || 'Unknown');
         const scope = reqBody.scope || 'operator';
-        const skipConfirmation = reqBody.skipConfirmation || false;
         const endMonth = reqBody.endMonth || '';
         const monthsBack = parseInt(reqBody.monthsBack) || 6;
         let startLabel = '', endLabel = '';
@@ -1275,9 +1108,8 @@ const server = http.createServer(async (req, res) => {
           startLabel = `${monthsBack} months ago`;
         }
         const dateRange = { start: startLabel, end: endLabel };
-        const enabledChecks = reqBody.enabledChecks || ['ggr_trend', 'concentration', 'hidden_gems', 'benchmark_gap', 'new_launches', 'open_scan'];
-        const globalPrompt = reqBody.globalPrompt || '';
-        const personaPrompts = reqBody.personaPrompts || {};
+        const enabledOptionalCheckIds = reqBody.enabledOptionalCheckIds || [];
+        const persona = reqBody.persona || 'am_actions';
 
         // SSE streaming — send progress events as each check completes
         res.writeHead(200, {
@@ -1291,9 +1123,7 @@ const server = http.createServer(async (req, res) => {
           res.write(`data: ${JSON.stringify(evt)}\n\n`);
         };
 
-        const checkDefinitions = reqBody.checkDefinitions || {};
-        const customPersonaPrompts = reqBody.customPersonaPrompts || {};
-        const results = await runResearch({ entity, scope, dateRange, enabledChecks, globalPrompt, personaPrompts, skipConfirmation, checkDefinitions, customPersonaPrompts }, onProgress);
+        const results = await runResearch({ entity, scope, dateRange, enabledOptionalCheckIds, persona }, onProgress);
         // Send final result as the last event
         res.write(`data: ${JSON.stringify({ type: 'result', data: results })}\n\n`);
         res.end();
