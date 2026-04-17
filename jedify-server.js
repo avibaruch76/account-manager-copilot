@@ -1011,6 +1011,8 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
 let _cancelToken = null;
 // Last completed result — kept in memory so browser can recover if SSE dropped
 let _lastCompletedResult = null;
+// All active SSE response objects — so SIGTERM can notify them before shutdown
+const _activeSSeClients = new Set();
 
 async function runResearch(reqBody, onProgress) {
   const { entity, scope, dateRange, enabledOptionalCheckIds, persona, customPrompt, globalRules } = reqBody;
@@ -1225,16 +1227,22 @@ const server = http.createServer(async (req, res) => {
           'X-Accel-Buffering': 'no'  // disable nginx buffering if behind proxy
         });
 
+        // Track this client so SIGTERM can notify it
+        _activeSSeClients.add(res);
+        res.on('close', () => _activeSSeClients.delete(res));
+
         const onProgress = (evt) => {
           res.write(`data: ${JSON.stringify(evt)}\n\n`);
         };
 
         const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona }, onProgress);
         // Send final result as the last event
+        _activeSSeClients.delete(res);
         res.write(`data: ${JSON.stringify({ type: 'result', data: results })}\n\n`);
         res.end();
       } catch (err) {
         console.error('[research] Pipeline error:', err);
+        _activeSSeClients.delete(res);
         // If headers already sent (SSE mode), send error as event
         if (res.headersSent) {
           res.write(`data: ${JSON.stringify({ type: 'error', error: err.message })}\n\n`);
@@ -1331,6 +1339,28 @@ const server = http.createServer(async (req, res) => {
   }
 
   res.writeHead(404); res.end('Not found');
+});
+
+// ── Graceful shutdown — notify browser before Render kills the process ───────
+process.on('SIGTERM', () => {
+  console.log('[jedify] SIGTERM received — notifying active SSE clients and shutting down...');
+
+  // Cancel any running Jedify inquiry
+  if (_cancelToken) _cancelToken.cancelled = true;
+
+  // Notify every connected browser so they show a helpful message instead of silence
+  const msg = JSON.stringify({
+    type: 'error',
+    error: 'Server is restarting (new deploy). Please wait ~30 seconds then run again.'
+  });
+  for (const client of _activeSSeClients) {
+    try { client.write(`data: ${msg}\n\n`); client.end(); } catch (_) {}
+  }
+  _activeSSeClients.clear();
+
+  // Give in-flight responses a moment to flush, then exit
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000);
 });
 
 // ── Boot ────────────────────────────────────────────────────────────────────
