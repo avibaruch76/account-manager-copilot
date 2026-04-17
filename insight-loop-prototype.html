@@ -660,13 +660,13 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
       <span style="font-size:20px;">🔍</span>
       <div>
-        <div style="font-size:16px;font-weight:800;color:#1E2761;">Ask Jedify — Deep Research</div>
-        <div style="font-size:12px;color:#64748B;">Ask follow-up questions in natural language. Jedify will find the right data and explain it.</div>
+        <div style="font-size:16px;font-weight:800;color:#1E2761;">Ask Jedify</div>
+        <div style="font-size:12px;color:#64748B;">Ask a data question in natural language. Jedify will query the data and return the answer.</div>
       </div>
     </div>
     <div id="jedify-chat-messages" style="max-height:500px;overflow-y:auto;margin-bottom:12px;"></div>
     <div style="display:flex;gap:8px;">
-      <input type="text" id="jedify-chat-input" placeholder="e.g. Why did GGR drop for this operator in February? Which games lost the most players?" style="flex:1;padding:10px 14px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:13px;font-family:inherit;" onkeydown="if(event.key==='Enter')sendJedifyQuestion()">
+      <input type="text" id="jedify-chat-input" placeholder="e.g. Show me the top 10 games by GGR this month for brand X" style="flex:1;padding:10px 14px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:13px;font-family:inherit;" onkeydown="if(event.key==='Enter')sendJedifyQuestion()">
       <button onclick="sendJedifyQuestion()" style="background:linear-gradient(135deg,#4A235A,#7D3C98);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">Ask Jedify</button>
     </div>
   </div>
