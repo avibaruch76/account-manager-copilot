@@ -1171,7 +1171,7 @@ const server = http.createServer(async (req, res) => {
           res.write(`data: ${JSON.stringify(evt)}\n\n`);
         };
 
-        const results = await runResearch({ entity, scope, dateRange, enabledOptionalCheckIds, persona }, onProgress);
+        const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona }, onProgress);
         // Send final result as the last event
         res.write(`data: ${JSON.stringify({ type: 'result', data: results })}\n\n`);
         res.end();
