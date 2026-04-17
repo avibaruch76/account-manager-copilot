@@ -905,7 +905,7 @@ const RESEARCH_STAGES = [
 // STAGE_POLL_AT[i] = minimum poll number before emitting stage i
 const STAGE_POLL_AT = [0, 2, 5, 9, 14, 20, 28];
 
-async function askJedifyResearch(prompt, onStage) {
+async function askJedifyResearch(prompt, onStage, onHeartbeat) {
   // Submit the research question
   console.log(`[jedify-research] Submitting ask_a_research_question (prompt length: ${prompt.length})`);
   const askRes = await sendMCP({
@@ -934,6 +934,9 @@ async function askJedifyResearch(prompt, onStage) {
   for (let i = 1; i <= maxPolls; i++) {
     await new Promise(r => setTimeout(r, pollInterval));
 
+    // Send heartbeat every poll to keep SSE connection alive through Render's idle timeout
+    if (onHeartbeat) onHeartbeat(i);
+
     // Advance stage based on poll count
     while (stageIdx + 1 < STAGE_POLL_AT.length && i >= STAGE_POLL_AT[stageIdx + 1]) {
       stageIdx++;
@@ -957,8 +960,8 @@ async function askJedifyResearch(prompt, onStage) {
       const generalStatus = statusParsed.status?.general || statusParsed.status;
       const iteration = statusParsed.current_iteration || 0;
       const maxIter = statusParsed.max_iterations || 1;
-      const progress = statusParsed.progress || 0;
-      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progress}%`);
+      const progressPct = Math.round((statusParsed.progress || 0) * 100);
+      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progressPct}%`);
 
       // Emit real progress stage based on iteration count
       if (onStage && maxIter > 0) {
@@ -999,7 +1002,9 @@ async function runResearch(reqBody, onProgress) {
     emit({ type: 'stage', index: idx, total: RESEARCH_STAGES.length, label });
   };
 
-  const report = await askJedifyResearch(prompt, onStage);
+  const report = await askJedifyResearch(prompt, onStage, (pollNum) => {
+    emit({ type: 'heartbeat', poll: pollNum });
+  });
 
   console.log(`[research] Research complete. Report length: ${report.length} chars.`);
 

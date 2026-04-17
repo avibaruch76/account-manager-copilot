@@ -2230,6 +2230,7 @@ async function readSSEStream(response) {
           if (fill) fill.style.width = pct + '%';
         }
 
+        if (evt.type === 'heartbeat') { /* keepalive — ignore visually */ }
         if (evt.type === 'step') { /* legacy — ignore */ }
         if (evt.type === 'done') { /* legacy — ignore */ }
 
