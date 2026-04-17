@@ -848,6 +848,50 @@ const RESEARCH_REGISTRY = {
     `Compare {scope} {entity}'s theoretical GGR vs actual invoiced revenue. Are there discrepancies suggesting revenue leakage?`),
 };
 
+// ── Persona prompt instructions ───────────────────────────────────────────────
+const PERSONA_INSTRUCTIONS = {
+  qbr_customer:
+    'Present this as a customer-facing QBR summary. Use ONLY favorable metrics and positive framing. ' +
+    'Show numbers that highlight opportunities or successes (e.g., "this game has 25% better D7 retention ' +
+    'than competitors — promote it more prominently"). Format as 5-7 specific, actionable talking points. ' +
+    'Never mention negative metrics directly — reframe as opportunities.',
+
+  am_actions:
+    'Present this as Account Manager action items for a call with this operator. ' +
+    'Be direct and concise. Back each item with ONE concrete number and a market comparison. ' +
+    'Example: "Promote Game X — it\'s 0.5% of this operator\'s portfolio but 5% of market GGR. 10× underweighted." ' +
+    'Format as a numbered list of 5-8 items.',
+
+  am_detailed:
+    'Present this as an Account Manager briefing with full data support. ' +
+    'For each recommendation: state the action, the operator\'s relevant numbers, the market comparison, ' +
+    'and all data used to arrive at the recommendation. ' +
+    'Format: recommendation first, then "Supporting data:" section with the evidence.',
+
+  data_analyst:
+    'Present the complete research findings as a comprehensive report suitable for download. ' +
+    'Include all discovered metrics, trend data, anomalies, and methodology notes. ' +
+    'Use headers for each research area. Completeness and accuracy over brevity.'
+};
+
+// ── Build the research prompt for ask_a_research_question ─────────────────────
+function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona) {
+  const checks = require('./research-checks');
+  const selectedChecks = [
+    ...checks.mandatory,
+    ...checks.optional.filter(c => enabledOptionalIds.includes(c.id))
+  ];
+
+  const bullets = selectedChecks.map(c => `• ${c.query}`).join('\n');
+  const instruction = PERSONA_INSTRUCTIONS[persona] || PERSONA_INSTRUCTIONS.am_actions;
+
+  return (
+    `Research ${scope} "${entity}" performance from ${dateRange.start} to ${dateRange.end}.\n\n` +
+    `Investigate the following:\n${bullets}\n\n` +
+    instruction
+  );
+}
+
 // ── /api/research endpoint — Jedify Research Mode pipeline ──────────────────
 
 async function runResearch(reqBody, onProgress) {
