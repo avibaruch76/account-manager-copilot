@@ -955,11 +955,23 @@ async function askJedifyResearch(prompt, onStage) {
       const statusParsed = JSON.parse(statusText);
 
       const generalStatus = statusParsed.status?.general || statusParsed.status;
-      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} keys=${Object.keys(statusParsed).join(',')}`);
+      const iteration = statusParsed.current_iteration || 0;
+      const maxIter = statusParsed.max_iterations || 1;
+      const progress = statusParsed.progress || 0;
+      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progress}%`);
 
-      if (generalStatus === 'done' || statusParsed.answer || statusParsed.report || statusParsed.result) {
-        const report = statusParsed.answer || statusParsed.report || statusParsed.result || JSON.stringify(statusParsed);
-        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}, report preview: ${report.slice(0, 200)}`);
+      // Emit real progress stage based on iteration count
+      if (onStage && maxIter > 0) {
+        const realStageIdx = Math.min(Math.floor((iteration / maxIter) * (RESEARCH_STAGES.length - 2)) + 1, RESEARCH_STAGES.length - 2);
+        if (realStageIdx > stageIdx) {
+          stageIdx = realStageIdx;
+          onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
+        }
+      }
+
+      if (generalStatus === 'done' || statusParsed.is_complete) {
+        const report = statusParsed.final_answer || statusParsed.answer || statusParsed.report || '';
+        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
         if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
         return report;
       }
