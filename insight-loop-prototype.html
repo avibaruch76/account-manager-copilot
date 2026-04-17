@@ -403,9 +403,7 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
     <h3>🔄 Running Analysis</h3>
     <p class="brand-label" id="run-brand-label"></p>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-    <ul class="progress-steps" id="progress-steps">
-      <!-- Built dynamically from enabled checks -->
-    </ul>
+    <div id="research-timeline" style="text-align:left;margin:16px 0"></div>
     <p id="run-eta" style="font-size:11px;color:#94A3B8;margin-top:8px">Connecting to Jedify...</p>
   </div>
 </div>
@@ -1815,23 +1813,18 @@ function runAnalysis() {
   const selection = buildSelectionPayload(pop);
   const enabledChecks = selection.enabledChecks || [];
 
-  // Build dynamic progress steps from enabled checks
-  const stepsContainer = document.getElementById('progress-steps');
-  stepsContainer.innerHTML = '';
-  const scopeLabel = selection.scope || 'operator';
-  const stepNames = [`Confirming ${scopeLabel}...`];
-  enabledChecks.forEach(id => {
-    stepNames.push(CHECK_DISPLAY_NAMES[id] || id);
-  });
-  stepNames.push('Generating executive summary');
-  stepNames.push('Generating action items');
-  _customPersonas.forEach(p => { stepNames.push('Generating ' + p.name); });
-  stepNames.push('Building results');
-  stepNames.forEach(name => {
-    const li = document.createElement('li');
-    li.innerHTML = `<span class="icon"></span>${name}`;
-    stepsContainer.appendChild(li);
-  });
+  // Initialize research timeline
+  const timeline = document.getElementById('research-timeline');
+  if (timeline) timeline.innerHTML = '';
+  const personaLabel = {
+    qbr_customer: 'QBR Customer',
+    am_actions: 'AM Actions',
+    am_detailed: 'AM Detailed',
+    data_analyst: 'Data Analyst',
+    admin: 'All Personas'
+  }[_selectedPersona] || _selectedPersona;
+  document.getElementById('run-eta').innerHTML =
+    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}</strong> — Jedify is researching. This takes 1-3 minutes.`;
 
   // Show overlay
   const overlay = document.getElementById('run-overlay');
@@ -1848,12 +1841,7 @@ function runAnalysis() {
   btn.classList.add('running');
   btn.innerHTML = '<span>\u23F3</span> Running...';
 
-  // Animate first step
-  const allSteps = document.querySelectorAll('#progress-steps li');
-  if (allSteps.length > 0) allSteps[0].classList.add('active');
   fill.style.width = '5%';
-  const etaMinutes = Math.ceil(enabledChecks.length * 1.2 + 3); // ~1.2 min per check + 3 min for summaries
-  document.getElementById('run-eta').textContent = `Estimated time: ~${etaMinutes} minutes. Jedify is running deep research...`;
 
   // Display name: show all selected values for the scope
   let displayName;
@@ -1874,10 +1862,7 @@ function runAnalysis() {
   fetchJedifyAnalysis(selection, _analysisAbortController?.signal).then(data => {
     clearInterval(progressTimer);
 
-    // Mark all steps as done
-    allSteps.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
     fill.style.width = '100%';
-    const elapsed = Math.round((Date.now() - Date.now()) / 1000); // will be ~0 but that's fine
     document.getElementById('run-eta').innerHTML = '<strong style="color:#1D6A39">\u2705 All checks complete!</strong> Building results...';
 
     setTimeout(() => {
@@ -2052,7 +2037,6 @@ async function readSSEStream(response) {
   let buffer = '';
   let finalResult = null;
 
-  const allSteps = document.querySelectorAll('#progress-steps li');
   const fill = document.getElementById('progress-fill');
   const eta = document.getElementById('run-eta');
   const startTime = Date.now();
@@ -2073,43 +2057,27 @@ async function readSSEStream(response) {
       try {
         const evt = JSON.parse(jsonStr);
 
-        if (evt.type === 'step') {
-          // A new step is starting — mark it active
-          const stepIdx = evt.index;
-          if (allSteps[stepIdx]) {
-            // Mark previous steps as done if not already
-            for (let i = 0; i < stepIdx; i++) {
-              allSteps[i].classList.remove('active');
-              allSteps[i].classList.add('done');
+        if (evt.type === 'stage') {
+          // Append a new stage line to the Research Timeline
+          const timeline = document.getElementById('research-timeline');
+          if (timeline) {
+            const div = document.createElement('div');
+            div.style.cssText = 'padding:5px 0;font-size:13px;color:#1D6A39;display:flex;align-items:center;gap:8px;animation:fadeIn .4s ease';
+            div.innerHTML = `<span style="color:#4A235A;font-size:16px">⏳</span> ${evt.label}`;
+            // Mark previous stage as done
+            const prev = timeline.lastElementChild;
+            if (prev) {
+              prev.innerHTML = prev.innerHTML.replace('⏳', '✅');
+              prev.style.color = '#64748B';
             }
-            allSteps[stepIdx].classList.add('active');
+            timeline.appendChild(div);
           }
-          const totalSteps = evt.total || allSteps.length;
-          const pct = Math.min(90, Math.round((stepIdx / totalSteps) * 90) + 5);
+          const pct = Math.min(90, Math.round(((evt.index + 1) / (evt.total || 7)) * 90));
           if (fill) fill.style.width = pct + '%';
-
-          // Update ETA based on elapsed time
-          const elapsed = Math.round((Date.now() - startTime) / 1000);
-          const elapsedMin = Math.floor(elapsed / 60);
-          const elapsedSec = elapsed % 60;
-          const stepName = evt.name || evt.step;
-          if (eta) eta.innerHTML = `<strong style="color:#F39C12">⏳ ${stepName}</strong> <span style="color:#94A3B8">(${elapsedMin}:${String(elapsedSec).padStart(2,'0')} elapsed, step ${stepIdx + 1}/${totalSteps})</span>`;
         }
 
-        if (evt.type === 'done') {
-          // A step completed — mark it done with status
-          const stepIdx = evt.index;
-          if (allSteps[stepIdx]) {
-            allSteps[stepIdx].classList.remove('active');
-            allSteps[stepIdx].classList.add('done');
-            // Show finding preview next to the step name
-            if (evt.finding) {
-              const preview = evt.finding.length > 60 ? evt.finding.slice(0, 57) + '...' : evt.finding;
-              const statusColor = evt.status === 'error' ? '#E74C3C' : evt.status === 'critical' ? '#E74C3C' : evt.status === 'warning' ? '#F39C12' : '#1D6A39';
-              allSteps[stepIdx].innerHTML += ` <span style="font-size:10px;color:${statusColor};font-weight:400;margin-left:4px">— ${preview}</span>`;
-            }
-          }
-        }
+        if (evt.type === 'step') { /* legacy — ignore */ }
+        if (evt.type === 'done') { /* legacy — ignore */ }
 
         if (evt.type === 'result') {
           finalResult = evt.data;
@@ -2886,25 +2854,20 @@ function confirmAndRun() {
   btn.innerHTML = '<span>⏳</span> Running...';
 
   const enabledChecks = selection.enabledChecks || [];
-  const stepsContainer = document.getElementById('progress-steps');
-  stepsContainer.innerHTML = '';
-  const stepNames = [];
-  enabledChecks.forEach(id => { stepNames.push(CHECK_DISPLAY_NAMES[id] || id); });
-  stepNames.push('Generating executive summary');
-  stepNames.push('Generating action items');
-  _customPersonas.forEach(p => { stepNames.push('Generating ' + p.name); });
-  stepNames.push('Building results');
-  stepNames.forEach(name => {
-    const li = document.createElement('li');
-    li.innerHTML = `<span class="icon"></span>${name}`;
-    stepsContainer.appendChild(li);
-  });
 
-  const allSteps = document.querySelectorAll('#progress-steps li');
-  if (allSteps.length > 0) allSteps[0].classList.add('active');
+  // Initialize research timeline
+  const timeline = document.getElementById('research-timeline');
+  if (timeline) timeline.innerHTML = '';
+  const personaLabel = {
+    qbr_customer: 'QBR Customer',
+    am_actions: 'AM Actions',
+    am_detailed: 'AM Detailed',
+    data_analyst: 'Data Analyst',
+    admin: 'All Personas'
+  }[_selectedPersona] || _selectedPersona;
+  document.getElementById('run-eta').innerHTML =
+    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}</strong> — Jedify is researching. This takes 1-3 minutes.`;
   fill.style.width = '5%';
-  const etaMinutes = Math.ceil(enabledChecks.length * 1.2 + 3);
-  document.getElementById('run-eta').textContent = `Estimated time: ~${etaMinutes} minutes. Running full analysis...`;
 
   const progressTimer = setInterval(() => {
     const currentWidth = parseFloat(fill.style.width) || 5;
@@ -2914,7 +2877,6 @@ function confirmAndRun() {
   fetchJedifyAnalysis(selection, _analysisAbortController?.signal).then(data => {
     clearInterval(progressTimer);
     console.log('[confirmAndRun] fetchJedifyAnalysis returned:', data ? Object.keys(data) : 'null', data?.checks?.length || 0, 'checks');
-    allSteps.forEach(s => { s.classList.remove('active'); s.classList.add('done'); });
     fill.style.width = '100%';
     document.getElementById('run-eta').innerHTML = '<strong style="color:#1D6A39">All checks complete!</strong> Building results...';
 
