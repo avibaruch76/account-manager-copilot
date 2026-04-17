@@ -949,15 +949,17 @@ async function askJedifyResearch(prompt, onStage) {
         }
       }, 30000);
 
-      if (statusRes.error) continue;
+      if (statusRes.error) { console.warn(`[jedify-research] Poll ${i} statusRes.error:`, statusRes.error); continue; }
       const statusText = statusRes.result?.content?.[0]?.text;
-      if (!statusText) continue;
+      if (!statusText) { console.warn(`[jedify-research] Poll ${i} no statusText`); continue; }
       const statusParsed = JSON.parse(statusText);
 
       const generalStatus = statusParsed.status?.general || statusParsed.status;
-      if (generalStatus === 'done' || statusParsed.answer) {
-        const report = statusParsed.answer || statusParsed.report || '';
-        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
+      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} keys=${Object.keys(statusParsed).join(',')}`);
+
+      if (generalStatus === 'done' || statusParsed.answer || statusParsed.report || statusParsed.result) {
+        const report = statusParsed.answer || statusParsed.report || statusParsed.result || JSON.stringify(statusParsed);
+        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}, report preview: ${report.slice(0, 200)}`);
         if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
         return report;
       }
