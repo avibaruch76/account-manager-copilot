@@ -177,6 +177,9 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .btn-run:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(29,106,57,.35)}
 .btn-run:active{transform:translateY(0)}
 .btn-run.running{background:linear-gradient(135deg,#C05010,#E67E22);pointer-events:none}
+.btn-cancel{background:linear-gradient(135deg,#7F1D1D,#DC2626);color:white;border:none;padding:10px 22px;border-radius:8px;font-size:14px;font-weight:800;cursor:pointer;display:none;align-items:center;gap:8px;transition:all .2s}
+.btn-cancel:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(220,38,38,.35)}
+.btn-cancel.visible{display:flex}
 .run-status{font-size:12px;color:#64748B;margin-left:auto}
 .run-status strong{color:#1D6A39}
 
@@ -324,9 +327,14 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button class="persona-btn" data-persona="data_analyst" onclick="selectPersona('data_analyst',this)">🔬 Data Analyst</button>
       <button class="persona-btn admin-btn" data-persona="admin" onclick="selectPersona('admin',this)">👑 All Personas</button>
     </div>
-    <button class="btn-run" id="run-btn" onclick="previewPrompt()">
-      <span>▶</span> Run Analysis
-    </button>
+    <div style="display:flex;align-items:center;gap:10px">
+      <button class="btn-run" id="run-btn" onclick="previewPrompt()">
+        <span>▶</span> Run Analysis
+      </button>
+      <button class="btn-cancel" id="cancel-btn" onclick="cancelAnalysis()">
+        <span>✕</span> Cancel
+      </button>
+    </div>
     <div style="margin-top:6px;font-size:11px;color:#94A3B8">
       <a href="#" onclick="runAnalysis();return false;" style="color:#94A3B8">Skip preview & run directly</a>
     </div>
@@ -1853,6 +1861,30 @@ function getSelectedPopulation() {
 }
 
 // ═══════════════════════════════════════════════════════
+// CANCEL ANALYSIS
+// ═══════════════════════════════════════════════════════
+async function cancelAnalysis() {
+  if (!_analysisRunning) return;
+
+  // Abort the SSE connection to the server
+  if (_analysisAbortController) _analysisAbortController.abort();
+
+  // Tell the server to stop polling + cancel Jedify inquiry
+  try {
+    await fetch(API_BASE + '/api/cancel-research', { method: 'POST' });
+  } catch (e) { /* ignore */ }
+
+  // Reset UI
+  _analysisRunning = false;
+  const btn = document.getElementById('run-btn');
+  btn.classList.remove('running');
+  btn.innerHTML = '<span>▶</span> Run Analysis';
+  document.getElementById('cancel-btn').classList.remove('visible');
+  document.getElementById('run-overlay').classList.remove('active');
+  showToast('Analysis cancelled.');
+}
+
+// ═══════════════════════════════════════════════════════
 // RUN ANALYSIS — with concurrency guard
 // ═══════════════════════════════════════════════════════
 let _analysisRunning = false;
@@ -1877,6 +1909,7 @@ function runAnalysis(customPrompt) {
       const btn = document.getElementById('run-btn');
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
+      document.getElementById('cancel-btn').classList.remove('visible');
       showToast('Previous analysis stopped.', true);
       // Fall through to start new analysis
     } else {
@@ -1936,10 +1969,11 @@ function runAnalysis(customPrompt) {
   const fill = document.getElementById('progress-fill');
   fill.style.width = '0%';
 
-  // Update run button
+  // Update run button + show cancel
   const btn = document.getElementById('run-btn');
   btn.classList.add('running');
   btn.innerHTML = '<span>\u23F3</span> Running...';
+  document.getElementById('cancel-btn').classList.add('visible');
 
   fill.style.width = '5%';
 
@@ -1969,6 +2003,7 @@ function runAnalysis(customPrompt) {
       overlay.classList.remove('active');
       btn.classList.remove('running');
       btn.innerHTML = '<span>\u25B6</span> Run Analysis';
+      document.getElementById('cancel-btn').classList.remove('visible');
       _analysisRunning = false;
 
       if (data && data.error) {
@@ -3148,6 +3183,7 @@ function confirmAndRun() {
       overlay.classList.remove('active');
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
+      document.getElementById('cancel-btn').classList.remove('visible');
       _analysisRunning = false;
 
       if (data && data.error) {

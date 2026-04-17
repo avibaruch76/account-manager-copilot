@@ -910,7 +910,10 @@ const RESEARCH_STAGES = [
 // STAGE_POLL_AT[i] = minimum poll number before emitting stage i
 const STAGE_POLL_AT = [0, 2, 5, 9, 14, 20, 28];
 
-async function askJedifyResearch(prompt, onStage, onHeartbeat) {
+// Active inquiry ID — stored so /api/cancel-research can stop it
+let _activeInquiryId = null;
+
+async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
   // Submit the research question
   console.log(`[jedify-research] Submitting ask_a_research_question (prompt length: ${prompt.length})`);
   const askRes = await sendMCP({
@@ -928,6 +931,7 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat) {
   const inquiryId = askParsed.inquiry_id;
   if (!inquiryId) throw new Error('No inquiry_id in response: ' + askText.slice(0, 200));
 
+  _activeInquiryId = inquiryId;
   console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, polling...`);
   if (onStage) onStage(0, RESEARCH_STAGES[0]);
 
@@ -936,61 +940,75 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat) {
   const pollInterval = 5000;
   let stageIdx = 0;
 
-  for (let i = 1; i <= maxPolls; i++) {
-    await new Promise(r => setTimeout(r, pollInterval));
+  try {
+    for (let i = 1; i <= maxPolls; i++) {
+      await new Promise(r => setTimeout(r, pollInterval));
 
-    // Send heartbeat every poll to keep SSE connection alive through Render's idle timeout
-    if (onHeartbeat) onHeartbeat(i);
-
-    // Advance stage based on poll count
-    while (stageIdx + 1 < STAGE_POLL_AT.length && i >= STAGE_POLL_AT[stageIdx + 1]) {
-      stageIdx++;
-      if (onStage) onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
-    }
-
-    try {
-      const statusRes = await sendMCP({
-        method: 'tools/call',
-        params: {
-          name: 'check_question_status',
-          arguments: { inquiry_id: inquiryId, inquiry_type: 'research' }
-        }
-      }, 30000);
-
-      if (statusRes.error) { console.warn(`[jedify-research] Poll ${i} statusRes.error:`, statusRes.error); continue; }
-      const statusText = statusRes.result?.content?.[0]?.text;
-      if (!statusText) { console.warn(`[jedify-research] Poll ${i} no statusText`); continue; }
-      const statusParsed = JSON.parse(statusText);
-
-      const generalStatus = statusParsed.status?.general || statusParsed.status;
-      const iteration = statusParsed.current_iteration || 0;
-      const maxIter = statusParsed.max_iterations || 1;
-      const progressPct = Math.round((statusParsed.progress || 0) * 100);
-      console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progressPct}%`);
-
-      // Emit real progress stage based on iteration count
-      if (onStage && maxIter > 0) {
-        const realStageIdx = Math.min(Math.floor((iteration / maxIter) * (RESEARCH_STAGES.length - 2)) + 1, RESEARCH_STAGES.length - 2);
-        if (realStageIdx > stageIdx) {
-          stageIdx = realStageIdx;
-          onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
-        }
+      // Check if cancelled
+      if (cancelToken && cancelToken.cancelled) {
+        console.log(`[jedify-research] Cancelled at poll ${i}`);
+        throw new Error('cancelled');
       }
 
-      if (generalStatus === 'done' || statusParsed.is_complete) {
-        const report = statusParsed.final_answer || statusParsed.answer || statusParsed.report || '';
-        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
-        if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
-        return report;
+      // Send heartbeat every poll to keep SSE connection alive through Render's idle timeout
+      if (onHeartbeat) onHeartbeat(i);
+
+      // Advance stage based on poll count
+      while (stageIdx + 1 < STAGE_POLL_AT.length && i >= STAGE_POLL_AT[stageIdx + 1]) {
+        stageIdx++;
+        if (onStage) onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
       }
-    } catch (e) {
-      console.warn(`[jedify-research] Poll ${i} error (continuing):`, e.message);
+
+      try {
+        const statusRes = await sendMCP({
+          method: 'tools/call',
+          params: {
+            name: 'check_question_status',
+            arguments: { inquiry_id: inquiryId, inquiry_type: 'research' }
+          }
+        }, 30000);
+
+        if (statusRes.error) { console.warn(`[jedify-research] Poll ${i} statusRes.error:`, statusRes.error); continue; }
+        const statusText = statusRes.result?.content?.[0]?.text;
+        if (!statusText) { console.warn(`[jedify-research] Poll ${i} no statusText`); continue; }
+        const statusParsed = JSON.parse(statusText);
+
+        const generalStatus = statusParsed.status?.general || statusParsed.status;
+        const iteration = statusParsed.current_iteration || 0;
+        const maxIter = statusParsed.max_iterations || 1;
+        const progressPct = Math.round((statusParsed.progress || 0) * 100);
+        console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progressPct}%`);
+
+        // Emit real progress stage based on iteration count
+        if (onStage && maxIter > 0) {
+          const realStageIdx = Math.min(Math.floor((iteration / maxIter) * (RESEARCH_STAGES.length - 2)) + 1, RESEARCH_STAGES.length - 2);
+          if (realStageIdx > stageIdx) {
+            stageIdx = realStageIdx;
+            onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
+          }
+        }
+
+        if (generalStatus === 'done' || statusParsed.is_complete) {
+          const report = statusParsed.final_answer || statusParsed.answer || statusParsed.report || '';
+          console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
+          if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
+          return report;
+        }
+      } catch (e) {
+        if (e.message === 'cancelled') throw e;
+        console.warn(`[jedify-research] Poll ${i} error (continuing):`, e.message);
+      }
     }
+    throw new Error('Research timed out after ' + (maxPolls * pollInterval / 1000) + 's');
+  } finally {
+    _activeInquiryId = null;
   }
-  throw new Error('Research timed out after ' + (maxPolls * pollInterval / 1000) + 's');
 }
 
 // ── /api/research endpoint — Jedify Research Mode pipeline ──────────────────
+
+// Cancel token for the active research run — set cancelled=true to stop polling
+let _cancelToken = null;
 
 async function runResearch(reqBody, onProgress) {
   const { entity, scope, dateRange, enabledOptionalCheckIds, persona, customPrompt, globalRules } = reqBody;
@@ -1007,9 +1025,10 @@ async function runResearch(reqBody, onProgress) {
     emit({ type: 'stage', index: idx, total: RESEARCH_STAGES.length, label });
   };
 
+  _cancelToken = { cancelled: false };
   const report = await askJedifyResearch(prompt, onStage, (pollNum) => {
     emit({ type: 'heartbeat', poll: pollNum });
-  });
+  }, _cancelToken);
 
   console.log(`[research] Research complete. Report length: ${report.length} chars.`);
 
@@ -1034,6 +1053,30 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, mcpReady }));
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/cancel-research') {
+    // Signal the poll loop to stop
+    if (_cancelToken) _cancelToken.cancelled = true;
+
+    // Tell Jedify to stop the active inquiry
+    if (_activeInquiryId) {
+      const idToCancel = _activeInquiryId;
+      console.log(`[research] Cancelling inquiry ${idToCancel}`);
+      try {
+        await sendMCP({
+          method: 'tools/call',
+          params: { name: 'stop_question', arguments: { inquiry_id: idToCancel } }
+        }, 10000);
+        console.log(`[research] Jedify stop_question sent for ${idToCancel}`);
+      } catch (e) {
+        console.warn(`[research] stop_question error (ignored):`, e.message);
+      }
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, cancelled: _activeInquiryId || 'none' }));
     return;
   }
 
