@@ -871,6 +871,7 @@ async function previewPrompt() {
   }
   const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
   const persona = _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona;
+  const globalRules = document.getElementById('global-prompt-prefix')?.value || '';
 
   const textarea = document.getElementById('prompt-preview-text');
   textarea.value = 'Loading prompt...';
@@ -880,7 +881,7 @@ async function previewPrompt() {
     const res = await fetch(API_BASE + '/api/build-prompt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, persona })
+      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, persona, globalRules })
     });
     const data = await res.json();
     textarea.value = data.prompt || data.error || 'Error building prompt';
@@ -2150,6 +2151,7 @@ async function fetchJedifyAnalysis(selection, abortSignal) {
       ...selection,
       persona: _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona,
       enabledOptionalCheckIds,
+      globalRules: globalPrompt,
       ...(customPrompt ? { customPrompt } : {})
     };
 
