@@ -892,6 +892,82 @@ function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, perso
   );
 }
 
+// ── Research stage labels (emitted as polling progresses) ─────────────────────
+const RESEARCH_STAGES = [
+  'Submitting research request...',
+  'Jedify is reading the semantic model...',
+  'Querying performance data...',
+  'Analyzing trends and patterns...',
+  'Building insights...',
+  'Drafting recommendations...',
+  'Finalizing report...'
+];
+// STAGE_POLL_AT[i] = minimum poll number before emitting stage i
+const STAGE_POLL_AT = [0, 2, 5, 9, 14, 20, 28];
+
+async function askJedifyResearch(prompt, onStage) {
+  // Submit the research question
+  console.log(`[jedify-research] Submitting ask_a_research_question (prompt length: ${prompt.length})`);
+  const askRes = await sendMCP({
+    method: 'tools/call',
+    params: {
+      name: 'ask_a_research_question',
+      arguments: { question: prompt }
+    }
+  }, 120000);
+
+  if (askRes.error) throw new Error('ask_a_research_question error: ' + (askRes.error.message || JSON.stringify(askRes.error)));
+  const askText = askRes.result?.content?.[0]?.text;
+  if (!askText) throw new Error('Empty response from ask_a_research_question');
+  const askParsed = JSON.parse(askText);
+  const inquiryId = askParsed.inquiry_id;
+  if (!inquiryId) throw new Error('No inquiry_id in response: ' + askText.slice(0, 200));
+
+  console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, polling...`);
+  if (onStage) onStage(0, RESEARCH_STAGES[0]);
+
+  // Poll until done (max 5 min at 5s intervals = 60 polls)
+  const maxPolls = 60;
+  const pollInterval = 5000;
+  let stageIdx = 0;
+
+  for (let i = 1; i <= maxPolls; i++) {
+    await new Promise(r => setTimeout(r, pollInterval));
+
+    // Advance stage based on poll count
+    while (stageIdx + 1 < STAGE_POLL_AT.length && i >= STAGE_POLL_AT[stageIdx + 1]) {
+      stageIdx++;
+      if (onStage) onStage(stageIdx, RESEARCH_STAGES[stageIdx]);
+    }
+
+    try {
+      const statusRes = await sendMCP({
+        method: 'tools/call',
+        params: {
+          name: 'check_question_status',
+          arguments: { inquiry_id: inquiryId, inquiry_type: 'research' }
+        }
+      }, 30000);
+
+      if (statusRes.error) continue;
+      const statusText = statusRes.result?.content?.[0]?.text;
+      if (!statusText) continue;
+      const statusParsed = JSON.parse(statusText);
+
+      const generalStatus = statusParsed.status?.general || statusParsed.status;
+      if (generalStatus === 'done' || statusParsed.answer) {
+        const report = statusParsed.answer || statusParsed.report || '';
+        console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
+        if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
+        return report;
+      }
+    } catch (e) {
+      console.warn(`[jedify-research] Poll ${i} error (continuing):`, e.message);
+    }
+  }
+  throw new Error('Research timed out after ' + (maxPolls * pollInterval / 1000) + 's');
+}
+
 // ── /api/research endpoint — Jedify Research Mode pipeline ──────────────────
 
 async function runResearch(reqBody, onProgress) {
