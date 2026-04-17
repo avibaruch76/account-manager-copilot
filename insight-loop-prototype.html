@@ -681,10 +681,20 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
   <div class="section-sub">Click each tab to see how the same research produces different outputs.</div>
 
   <div class="persona-tabs">
-    <div class="ptab active" onclick="showPersona('chief',this)">👔 Customer QBR</div>
-    <div class="ptab" onclick="showPersona('action',this)">🎯 AM — Action Mode</div>
-    <div class="ptab" onclick="showPersona('detailed',this)">📊 AM — Detailed</div>
-    <div class="ptab" onclick="showPersona('analyst',this)">🔬 Data Analyst</div>
+    <div class="ptab" onclick="showPersona('all-results',this)" data-persona-id="all-results">📋 All Results</div>
+    <div class="ptab active" onclick="showPersona('chief',this)" data-persona-id="chief">👔 Customer QBR</div>
+    <div class="ptab" onclick="showPersona('action',this)" data-persona-id="action">🎯 AM — Action Mode</div>
+    <div class="ptab" onclick="showPersona('detailed',this)" data-persona-id="detailed">📊 AM — Detailed</div>
+    <div class="ptab" onclick="showPersona('analyst',this)" data-persona-id="analyst">🔬 Data Analyst</div>
+  </div>
+
+  <!-- ALL RESULTS -->
+  <div class="persona-content" id="persona-all-results">
+    <div style="text-align:center;padding:60px 20px;color:#94A3B8;">
+      <div style="font-size:40px;margin-bottom:12px;">📋</div>
+      <p style="font-size:14px;font-weight:700;">All Results</p>
+      <p style="font-size:12px;">Run an analysis to see all persona reports collected here.</p>
+    </div>
   </div>
 
   <!-- AM ACTION -->
@@ -2267,6 +2277,13 @@ const PERSONA_PANE_ID = {
   data_analyst: 'persona-analyst'
 };
 
+const PERSONA_TAB_ID = {
+  qbr_customer: 'chief',
+  am_actions:   'action',
+  am_detailed:  'detailed',
+  data_analyst: 'analyst'
+};
+
 const PERSONA_TITLE = {
   qbr_customer: '🤝 QBR Customer Summary',
   am_actions:   '⚡ AM Action Items',
@@ -2274,23 +2291,17 @@ const PERSONA_TITLE = {
   data_analyst: '🔬 Full Data Analysis'
 };
 
-function renderResearchReport(data) {
-  const paneId = PERSONA_PANE_ID[data.persona];
-  if (!paneId) return;
-  const pane = document.getElementById(paneId);
-  if (!pane) return;
-
-  // Format report text: handle markdown bold and numbered lists
+function buildReportHtml(data) {
   const formatted = (data.report || 'No report returned.')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/\n\n/g, '</p><p>')
     .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
 
-  const html = `
+  return `
     <div style="background:white;border-radius:12px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:16px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <h3 style="margin:0;font-size:16px;color:#1E2761">${PERSONA_TITLE[data.persona]}</h3>
-        <span style="font-size:11px;color:#94A3B8">${data.entity} · ${new Date(data.generatedAt).toLocaleTimeString()}</span>
+        <h3 style="margin:0;font-size:16px;color:#1E2761">${PERSONA_TITLE[data.persona] || data.persona}</h3>
+        <span style="font-size:11px;color:#94A3B8">${data.entity || ''} · ${data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ''}</span>
       </div>
       <div style="font-size:14px;line-height:1.7;color:#334155"><p>${formatted}</p></div>
       ${data.persona === 'data_analyst' ? `
@@ -2300,14 +2311,39 @@ function renderResearchReport(data) {
           </button>
         </div>` : ''}
     </div>`;
+}
 
+function renderResearchReport(data) {
+  const paneId = PERSONA_PANE_ID[data.persona];
+  if (!paneId) return;
+  const pane = document.getElementById(paneId);
+  if (!pane) return;
+
+  const html = buildReportHtml(data);
+
+  // Write into the persona's own tab
   pane.innerHTML = html;
 
+  // Also append into All Results tab (don't clear — accumulate when admin runs all)
+  const allPane = document.getElementById('persona-all-results');
+  if (allPane) {
+    // Clear placeholder on first result
+    if (allPane.querySelector('p')) allPane.innerHTML = '';
+    // Remove old entry for this persona if re-running
+    const existing = allPane.querySelector(`[data-persona="${data.persona}"]`);
+    if (existing) existing.remove();
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('data-persona', data.persona);
+    wrapper.innerHTML = html;
+    allPane.appendChild(wrapper);
+  }
+
   // Switch to this persona's tab
-  document.querySelectorAll('.persona-tabs .tab-btn').forEach(t => t.classList.remove('active'));
+  const shortId = PERSONA_TAB_ID[data.persona];
   document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
+  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
   pane.classList.add('visible');
-  const tabBtn = document.querySelector(`.persona-tabs .tab-btn[data-pane="${paneId}"]`);
+  const tabBtn = document.querySelector(`.ptab[data-persona-id="${shortId}"]`);
   if (tabBtn) tabBtn.classList.add('active');
 }
 
