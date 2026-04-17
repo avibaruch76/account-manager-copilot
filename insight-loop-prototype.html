@@ -1877,6 +1877,12 @@ function runAnalysis() {
         return;
       }
 
+      // New research pipeline — text report per persona
+      if (data && data.report !== undefined) {
+        renderResearchReport(data);
+        return;
+      }
+
       if (data && (data.needsConfirmation || data.needsClarification)) {
         // Jedify Phase 1 returned — always show confirmation modal
         showConfirmationModal(data.qualification || data.clarification || data.answer || 'Entity found.', selection, displayName, data.scope || selection.scope);
@@ -1987,6 +1993,49 @@ const API_BASE = (location.port === '3001' || location.port === '' || location.p
   : 'http://localhost:3001';
 
 async function fetchJedifyAnalysis(selection, abortSignal) {
+  // Admin mode: fire all 4 personas in parallel, render each as it completes
+  if (_selectedPersona === 'admin') {
+    const personas = ['qbr_customer', 'am_actions', 'am_detailed', 'data_analyst'];
+    // Show placeholder in all persona panes immediately
+    personas.forEach(p => {
+      const paneId = PERSONA_PANE_ID[p];
+      const pane = document.getElementById(paneId);
+      if (pane) pane.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ ${PERSONA_TITLE[p]} — researching...</div>`;
+    });
+    // Fire 4 requests in parallel, render each as done
+    const requests = personas.map(persona => {
+      const payload = {
+        ...selection,
+        persona,
+        enabledOptionalCheckIds: _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id)
+      };
+      return fetch(API_BASE + '/api/research', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(1800000)
+      }).then(res => {
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+        if (res.headers.get('content-type')?.includes('text/event-stream')) return readSSEStream(res);
+        return res.json();
+      }).then(data => {
+        if (data && data.report !== undefined) renderResearchReport(data);
+      }).catch(err => {
+        const paneId = PERSONA_PANE_ID[persona];
+        const pane = document.getElementById(paneId);
+        if (pane) pane.innerHTML = `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ ${PERSONA_TITLE[persona]} failed: ${err.message}</div>`;
+      });
+    });
+    // Show QBR Customer tab while all run
+    const firstPane = document.getElementById('persona-chief');
+    if (firstPane) {
+      document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
+      firstPane.classList.add('visible');
+    }
+    await Promise.all(requests);
+    return { report: 'admin_done' };
+  }
+
   // Use /api/research for Jedify Research Mode, fallback to /api/analyze for legacy
   const useResearch = selection.useResearchMode !== false;
   const endpoint = API_BASE + (useResearch ? '/api/research' : '/api/analyze');
@@ -2103,6 +2152,69 @@ function fmt(n) {
 }
 
 function gameName(g) { return g.GAME_NAME || ('Game #' + g.GAME_ID) || '—'; }
+
+// ── Render a persona text report into its tab pane ────────────────────────────
+const PERSONA_PANE_ID = {
+  qbr_customer: 'persona-chief',
+  am_actions:   'persona-action',
+  am_detailed:  'persona-detailed',
+  data_analyst: 'persona-analyst'
+};
+
+const PERSONA_TITLE = {
+  qbr_customer: '🤝 QBR Customer Summary',
+  am_actions:   '⚡ AM Action Items',
+  am_detailed:  '📊 AM Detailed Briefing',
+  data_analyst: '🔬 Full Data Analysis'
+};
+
+function renderResearchReport(data) {
+  const paneId = PERSONA_PANE_ID[data.persona];
+  if (!paneId) return;
+  const pane = document.getElementById(paneId);
+  if (!pane) return;
+
+  // Format report text: handle markdown bold and numbered lists
+  const formatted = (data.report || 'No report returned.')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+  const html = `
+    <div style="background:white;border-radius:12px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <h3 style="margin:0;font-size:16px;color:#1E2761">${PERSONA_TITLE[data.persona]}</h3>
+        <span style="font-size:11px;color:#94A3B8">${data.entity} · ${new Date(data.generatedAt).toLocaleTimeString()}</span>
+      </div>
+      <div style="font-size:14px;line-height:1.7;color:#334155"><p>${formatted}</p></div>
+      ${data.persona === 'data_analyst' ? `
+        <div style="margin-top:16px">
+          <button onclick="downloadReport()" style="padding:8px 16px;background:#1D6A39;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
+            ⬇ Download Report
+          </button>
+        </div>` : ''}
+    </div>`;
+
+  pane.innerHTML = html;
+
+  // Switch to this persona's tab
+  document.querySelectorAll('.persona-tabs .tab-btn').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
+  pane.classList.add('visible');
+  const tabBtn = document.querySelector(`.persona-tabs .tab-btn[data-pane="${paneId}"]`);
+  if (tabBtn) tabBtn.classList.add('active');
+}
+
+function downloadReport() {
+  const pane = document.getElementById('persona-analyst');
+  if (!pane) return;
+  const text = pane.innerText;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'jedify-research-report.txt';
+  a.click();
+}
 
 function renderRealResults(data, displayName) {
   // Accept new response shape: { checks, summary: { monthly, games, brands } }
@@ -2889,6 +3001,12 @@ function confirmAndRun() {
       if (data && data.error) {
         showToast('Analysis failed: ' + data.error, true);
         document.getElementById('check-results-sub').textContent = 'Analysis failed: ' + data.error;
+        return;
+      }
+
+      // New research pipeline — text report per persona
+      if (data && data.report !== undefined) {
+        renderResearchReport(data);
         return;
       }
 
