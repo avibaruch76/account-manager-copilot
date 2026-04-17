@@ -1059,6 +1059,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url === '/api/research-config') {
+    const checks = require('./research-checks');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(checks));
+    return;
+  }
+
   // Markets dropdown data (cached)
   if (req.method === 'GET' && req.url === '/api/markets') {
     if (!mcpReady) {
