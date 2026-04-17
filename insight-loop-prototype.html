@@ -848,8 +848,8 @@ function selectPersona(persona, btn) {
 let _pendingSelection = null; // holds selection payload while prompt preview is open
 
 async function previewPrompt() {
-  const pop = buildPopulation();
-  if (!pop || !pop.brands || pop.brands.length === 0) {
+  const pop = getSelectedPopulation();
+  if (!pop || pop.count === 0) {
     showToast('Please select an operator, brand, or account first.', true);
     return;
   }
