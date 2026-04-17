@@ -226,6 +226,17 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .run-overlay.active{display:flex}
 .run-modal{background:white;border-radius:16px;padding:36px 44px;max-width:520px;width:90%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.3)}
 .run-modal h3{font-size:20px;font-weight:800;color:#1E2761;margin-bottom:6px}
+/* PROMPT PREVIEW MODAL */
+.prompt-overlay{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(30,39,97,.85);z-index:400;justify-content:center;align-items:center}
+.prompt-overlay.active{display:flex}
+.prompt-modal{background:white;border-radius:16px;padding:28px 32px;max-width:700px;width:95%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.prompt-modal h3{font-size:17px;font-weight:800;color:#1E2761;margin:0 0 4px}
+.prompt-modal .subtitle{font-size:12px;color:#94A3B8;margin-bottom:14px}
+.prompt-modal textarea{flex:1;min-height:300px;font-size:12px;font-family:monospace;border:1.5px solid #E0E8F0;border-radius:8px;padding:12px;resize:vertical;color:#334155;line-height:1.6}
+.prompt-modal .actions{display:flex;gap:10px;margin-top:16px;justify-content:flex-end}
+.prompt-modal .btn-run{padding:10px 22px;background:#4A235A;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer}
+.prompt-modal .btn-run:hover{background:#6B3680}
+.prompt-modal .btn-cancel{padding:10px 18px;background:white;color:#64748B;border:1.5px solid #E0E8F0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer}
 .run-modal .brand-label{font-size:14px;color:#4A235A;font-weight:700;margin-bottom:20px}
 .progress-bar{background:#E0E8F0;border-radius:20px;height:8px;margin:16px 0;overflow:hidden}
 .progress-fill{height:100%;border-radius:20px;background:linear-gradient(90deg,#4A235A,#1D6A39);width:0%;transition:width .4s ease-out}
@@ -313,9 +324,12 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button class="persona-btn" data-persona="data_analyst" onclick="selectPersona('data_analyst',this)">🔬 Data Analyst</button>
       <button class="persona-btn admin-btn" data-persona="admin" onclick="selectPersona('admin',this)">👑 All Personas</button>
     </div>
-    <button class="btn-run" id="run-btn" onclick="runAnalysis()">
+    <button class="btn-run" id="run-btn" onclick="previewPrompt()">
       <span>▶</span> Run Analysis
     </button>
+    <div style="margin-top:6px;font-size:11px;color:#94A3B8">
+      <a href="#" onclick="runAnalysis();return false;" style="color:#94A3B8">Skip preview & run directly</a>
+    </div>
     <div class="run-status" id="run-status">
       <span id="config-summary"></span>
     </div>
@@ -395,6 +409,19 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 
   <!-- SELECTION CHIPS -->
   <div class="selection-chips" id="selection-chips"></div>
+</div>
+
+<!-- ═══ PROMPT PREVIEW MODAL ═══ -->
+<div class="prompt-overlay" id="prompt-overlay">
+  <div class="prompt-modal">
+    <h3>🔍 Research Prompt Preview</h3>
+    <p class="subtitle">This is the exact prompt that will be sent to Jedify. You can edit it before running.</p>
+    <textarea id="prompt-preview-text" spellcheck="false"></textarea>
+    <div class="actions">
+      <button class="btn-cancel" onclick="closePromptPreview()">Cancel</button>
+      <button class="btn-run" onclick="confirmAndRunWithPrompt()">✅ Confirm &amp; Run</button>
+    </div>
+  </div>
 </div>
 
 <!-- ═══ PROGRESS OVERLAY ═══ -->
@@ -816,6 +843,64 @@ function selectPersona(persona, btn) {
   _selectedPersona = persona;
   document.querySelectorAll('.persona-btn').forEach(b => b.classList.remove('selected'));
   btn.classList.add('selected');
+}
+
+let _pendingSelection = null; // holds selection payload while prompt preview is open
+
+async function previewPrompt() {
+  const pop = buildPopulation();
+  if (!pop || !pop.brands || pop.brands.length === 0) {
+    showToast('Please select an operator, brand, or account first.', true);
+    return;
+  }
+  const selection = buildSelectionPayload(pop);
+  const entity = selection.entity || (selection.values && selection.values[0]) || selection.operator || 'Unknown';
+  const scope = selection.scope || 'operator';
+  const endMonth = selection.endMonth || '';
+  const monthsBack = parseInt(selection.monthsBack) || 6;
+  let startLabel = '', endLabel = '';
+  if (endMonth && /^\d{4}-\d{2}$/.test(endMonth)) {
+    const [y, m] = endMonth.split('-').map(Number);
+    const endDate = new Date(y, m - 1, 1);
+    const startDate = new Date(y, m - monthsBack, 1);
+    startLabel = startDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    endLabel = endDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  } else {
+    endLabel = 'current month';
+    startLabel = monthsBack + ' months ago';
+  }
+  const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
+  const persona = _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona;
+
+  const textarea = document.getElementById('prompt-preview-text');
+  textarea.value = 'Loading prompt...';
+  document.getElementById('prompt-overlay').classList.add('active');
+
+  try {
+    const res = await fetch(API_BASE + '/api/build-prompt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, persona })
+    });
+    const data = await res.json();
+    textarea.value = data.prompt || data.error || 'Error building prompt';
+  } catch (e) {
+    textarea.value = 'Error: ' + e.message;
+  }
+
+  _pendingSelection = selection;
+}
+
+function closePromptPreview() {
+  document.getElementById('prompt-overlay').classList.remove('active');
+  _pendingSelection = null;
+}
+
+function confirmAndRunWithPrompt() {
+  const customPrompt = document.getElementById('prompt-preview-text').value.trim();
+  document.getElementById('prompt-overlay').classList.remove('active');
+  // Run with the (possibly edited) prompt
+  runAnalysis(customPrompt);
 }
 let _currentRole = localStorage.getItem('ggr_role') || 'admin'; // 'admin' or 'user'
 
@@ -1772,7 +1857,7 @@ function getSelectedPopulation() {
 let _analysisRunning = false;
 let _analysisAbortController = null;
 
-function runAnalysis() {
+function runAnalysis(customPrompt) {
   const pop = getSelectedPopulation();
 
   if (pop.count === 0) {
@@ -2064,7 +2149,8 @@ async function fetchJedifyAnalysis(selection, abortSignal) {
     const payload = {
       ...selection,
       persona: _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona,
-      enabledOptionalCheckIds
+      enabledOptionalCheckIds,
+      ...(customPrompt ? { customPrompt } : {})
     };
 
     // Combine timeout + optional abort signal

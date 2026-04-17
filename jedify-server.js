@@ -985,15 +985,15 @@ async function askJedifyResearch(prompt, onStage) {
 // ── /api/research endpoint — Jedify Research Mode pipeline ──────────────────
 
 async function runResearch(reqBody, onProgress) {
-  const { entity, scope, dateRange, enabledOptionalCheckIds, persona } = reqBody;
+  const { entity, scope, dateRange, enabledOptionalCheckIds, persona, customPrompt } = reqBody;
   const emit = onProgress || (() => {});
   const scopeLabel = scope || 'operator';
   const activePersona = persona || 'am_actions';
 
   console.log(`[research] Starting research — ${scopeLabel}: "${entity}", persona: ${activePersona}`);
 
-  const prompt = buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona);
-  console.log(`[research] Prompt built (${prompt.length} chars). Submitting to Jedify...`);
+  const prompt = customPrompt || buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona);
+  console.log(`[research] Prompt ${customPrompt ? '(custom, user-edited)' : '(auto-built)'} (${prompt.length} chars). Submitting to Jedify...`);
 
   const onStage = (idx, label) => {
     emit({ type: 'stage', index: idx, total: RESEARCH_STAGES.length, label });
@@ -1031,6 +1031,29 @@ const server = http.createServer(async (req, res) => {
     const checks = require('./research-checks');
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(checks));
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/build-prompt') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { entity, scope, dateRange, enabledOptionalCheckIds, persona } = JSON.parse(body);
+        const prompt = buildResearchPrompt(
+          entity || 'Unknown',
+          scope || 'operator',
+          dateRange || { start: '6 months ago', end: 'current month' },
+          enabledOptionalCheckIds || [],
+          persona || 'am_actions'
+        );
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ prompt }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
