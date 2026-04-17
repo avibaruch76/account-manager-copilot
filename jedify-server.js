@@ -1009,6 +1009,8 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
 
 // Cancel token for the active research run — set cancelled=true to stop polling
 let _cancelToken = null;
+// Last completed result — kept in memory so browser can recover if SSE dropped
+let _lastCompletedResult = null;
 
 async function runResearch(reqBody, onProgress) {
   const { entity, scope, dateRange, enabledOptionalCheckIds, persona, customPrompt, globalRules } = reqBody;
@@ -1032,13 +1034,14 @@ async function runResearch(reqBody, onProgress) {
 
   console.log(`[research] Research complete. Report length: ${report.length} chars.`);
 
-  return {
+  _lastCompletedResult = {
     entity,
     scope: scopeLabel,
     persona: activePersona,
     report,
     generatedAt: new Date().toISOString()
   };
+  return _lastCompletedResult;
 }
 
 // ── HTTP server ─────────────────────────────────────────────────────────────
@@ -1053,6 +1056,18 @@ const server = http.createServer(async (req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, mcpReady }));
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/api/research-status') {
+    if (_lastCompletedResult) {
+      // Return last completed result (browser can recover if SSE was interrupted)
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(_lastCompletedResult));
+    } else {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ active: !!_activeInquiryId, inquiry_id: _activeInquiryId || null }));
+    }
     return;
   }
 

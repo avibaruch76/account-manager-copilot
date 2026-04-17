@@ -2283,7 +2283,19 @@ async function readSSEStream(response) {
       }
     }
   }
-  return finalResult || { error: 'Stream ended without result' };
+  if (finalResult) return finalResult;
+
+  // SSE closed without a result — check if server has a completed result (e.g. after reconnect)
+  try {
+    const statusRes = await fetch(API_BASE + '/api/research-status');
+    if (statusRes.ok) {
+      const status = await statusRes.json();
+      if (status.report) return status;  // server completed while SSE was broken
+      if (status.active) return { error: 'Connection interrupted — Jedify is still researching. Please wait and try again in a minute.' };
+    }
+  } catch (e) { /* ignore */ }
+
+  return { error: 'Connection was interrupted (server may have restarted). Please try again.' };
 }
 
 function fmt(n) {
