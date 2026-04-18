@@ -1122,6 +1122,9 @@ async function runResearch(reqBody, onProgress) {
 
 // ── HTTP server ─────────────────────────────────────────────────────────────
 
+const MAX_BODY_BYTES = 64 * 1024; // 64KB — prompts are ~2KB, this is very generous
+const IS_PROD = !!APP_PASSWORD; // treat as production when password is set
+
 const server = http.createServer(async (req, res) => {
   // CORS — restrict to known origin in production, open locally
   const allowedOrigin = APP_URL || (APP_PASSWORD ? null : '*');
@@ -1130,6 +1133,16 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+
+  // #6 — Request size limit: reject bodies over 64KB before reading
+  if (req.method === 'POST') {
+    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+    if (contentLength > MAX_BODY_BYTES) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Request too large.' }));
+      return;
+    }
+  }
 
   // Health check — always public (Render uses this)
   if (req.url === '/health') {
@@ -1460,6 +1473,34 @@ const server = http.createServer(async (req, res) => {
   }
 
   res.writeHead(404); res.end('Not found');
+});
+
+// ── #8 — Sanitize error responses in production ──────────────────────────────
+// Wrap the server handler so any unhandled throw returns a generic 500,
+// not a stack trace.
+const _originalHandler = server.listeners('request')[0];
+server.removeAllListeners('request');
+server.on('request', async (req, res) => {
+  try {
+    await _originalHandler(req, res);
+  } catch (err) {
+    console.error('[server] Unhandled error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        error: IS_PROD ? 'Internal server error.' : err.message
+      }));
+    }
+  }
+});
+
+// Catch unhandled promise rejections — log but don't crash
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught exception:', err);
+  // Don't exit — let Render's health checks decide if restart is needed
 });
 
 // ── Graceful shutdown — notify browser before Render kills the process ───────
