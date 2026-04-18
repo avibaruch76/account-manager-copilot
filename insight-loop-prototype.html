@@ -511,6 +511,12 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
   </h3>
   <ul class="check-list" id="mandatory-list"></ul>
 
+  <!-- OPTIONAL CHECKS -->
+  <h3 style="font-size:14px;font-weight:800;color:#4A235A;margin:28px 0 12px;display:flex;align-items:center;gap:8px">
+    🧠 Agent-Decided Checks <span style="font-size:11px;color:#64748B;font-weight:400">— agent picks 1-3 based on context</span>
+  </h3>
+  <ul class="check-list" id="optional-list"></ul>
+
   <!-- ADD NEW CHECK -->
   <div class="add-check-panel" id="add-panel">
     <h4>➕ Add a New Research Check</h4>
@@ -569,12 +575,6 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       </div>
     </div>
   </div>
-
-  <!-- OPTIONAL CHECKS -->
-  <h3 style="font-size:14px;font-weight:800;color:#4A235A;margin:28px 0 12px;display:flex;align-items:center;gap:8px">
-    🧠 Agent-Decided Checks <span style="font-size:11px;color:#64748B;font-weight:400">— agent picks 1-3 based on context</span>
-  </h3>
-  <ul class="check-list" id="optional-list"></ul>
 
   <!-- PERSONA PROMPT EDITOR -->
   <h3 style="font-size:14px;font-weight:800;color:#1E2761;margin:28px 0 12px;display:flex;align-items:center;gap:8px">
@@ -3505,7 +3505,127 @@ async function generateWordReport() {
   }
 
   try {
-    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel, AlignmentType, BorderStyle } = docx;
+    const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType, HeadingLevel, AlignmentType, BorderStyle, ShadingType } = docx;
+
+    // ── Helper: convert markdown text (with pipe tables) to Word content blocks ──
+    function mdToWord(text) {
+      if (!text) return [];
+      const out = [];
+      const lines = text.split('\n');
+      let i = 0;
+      while (i < lines.length) {
+        const raw = lines[i];
+        const trimmed = raw.trim();
+
+        // Markdown table block
+        if (trimmed.startsWith('|')) {
+          const tableLines = [];
+          while (i < lines.length && lines[i].trim().startsWith('|')) {
+            tableLines.push(lines[i].trim());
+            i++;
+          }
+          // Filter out separator rows like |---|---|
+          const dataLines = tableLines.filter(l => !/^\|[\s\-\|:]+\|$/.test(l));
+          if (dataLines.length === 0) continue;
+
+          const parsedRows = dataLines.map(l =>
+            l.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+          );
+          const numCols = Math.max(...parsedRows.map(r => r.length));
+          if (numCols === 0) continue;
+
+          const colW = Math.floor(9360 / numCols); // twips, page width ~9360
+          const cellBorder = (color) => ({ style: BorderStyle.SINGLE, size: 4, color });
+
+          const wordRows = parsedRows.map((row, ri) => {
+            const isHeader = ri === 0;
+            // Pad row to numCols
+            while (row.length < numCols) row.push('');
+            return new TableRow({
+              tableHeader: isHeader,
+              children: row.map(cell => {
+                const clean = cell
+                  .replace(/\*\*/g, '')
+                  .replace(/[✅❌⚠️🔴🟡🟢🔵]/gu, match => {
+                    const map = {'✅':'[OK]','❌':'[NO]','⚠️':'[!]','🔴':'[RED]','🟡':'[AMB]','🟢':'[GRN]','🔵':'[BLU]'};
+                    return map[match] || '';
+                  })
+                  .trim();
+                const borders = {
+                  top:    cellBorder('CCCCCC'),
+                  bottom: cellBorder('CCCCCC'),
+                  left:   cellBorder('CCCCCC'),
+                  right:  cellBorder('CCCCCC'),
+                };
+                return new TableCell({
+                  width: { size: colW, type: WidthType.DXA },
+                  borders,
+                  shading: isHeader
+                    ? { fill: '1E2761', val: ShadingType.CLEAR, color: 'auto' }
+                    : undefined,
+                  children: [new Paragraph({
+                    children: [new TextRun({
+                      text: clean,
+                      bold: isHeader,
+                      size: 18,
+                      color: isHeader ? 'FFFFFF' : '222222'
+                    })]
+                  })]
+                });
+              })
+            });
+          });
+
+          out.push(new Table({
+            rows: wordRows,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            margins: { top: 60, bottom: 60, left: 80, right: 80 }
+          }));
+          out.push(new Paragraph({ text: '', spacing: { after: 120 } }));
+          continue;
+        }
+
+        // Heading lines (## or #)
+        const h2 = trimmed.match(/^##\s+(.*)/);
+        const h1 = trimmed.match(/^#\s+(.*)/);
+        if (h1) {
+          out.push(new Paragraph({ children: [new TextRun({ text: h1[1], bold: true, size: 28 })], spacing: { before: 240, after: 100 } }));
+          i++; continue;
+        }
+        if (h2) {
+          out.push(new Paragraph({ children: [new TextRun({ text: h2[1], bold: true, size: 24 })], spacing: { before: 200, after: 80 } }));
+          i++; continue;
+        }
+
+        // Bold lines (standalone **text**)
+        const boldFull = trimmed.match(/^\*\*(.+)\*\*$/);
+        if (boldFull) {
+          out.push(new Paragraph({ children: [new TextRun({ text: boldFull[1], bold: true, size: 22 })], spacing: { after: 60 } }));
+          i++; continue;
+        }
+
+        // Bullet lines
+        const bullet = trimmed.match(/^[-*•]\s+(.*)/);
+        if (bullet) {
+          out.push(new Paragraph({
+            bullet: { level: 0 },
+            children: [new TextRun({ text: bullet[1].replace(/\*\*/g, ''), size: 20 })],
+            spacing: { after: 60 }
+          }));
+          i++; continue;
+        }
+
+        // Plain text (non-empty)
+        if (trimmed) {
+          out.push(new Paragraph({
+            children: [new TextRun({ text: trimmed.replace(/\*\*/g, ''), size: 22 })],
+            spacing: { after: 80 }
+          }));
+        }
+        i++;
+      }
+      return out;
+    }
 
     const children = [];
 
@@ -3528,10 +3648,7 @@ async function generateWordReport() {
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 200 }
       }));
-      children.push(new Paragraph({
-        children: [new TextRun({ text: data.customerSummary.answer, size: 22 })],
-        spacing: { after: 300 }
-      }));
+      mdToWord(data.customerSummary.answer).forEach(b => children.push(b));
     }
 
     // Action Items
@@ -3541,10 +3658,7 @@ async function generateWordReport() {
         heading: HeadingLevel.HEADING_2,
         spacing: { before: 300, after: 200 }
       }));
-      children.push(new Paragraph({
-        children: [new TextRun({ text: data.actionItems.answer, size: 22 })],
-        spacing: { after: 300 }
-      }));
+      mdToWord(data.actionItems.answer).forEach(b => children.push(b));
     }
 
     // Per-check sections
@@ -3564,12 +3678,9 @@ async function generateWordReport() {
         }));
       }
 
-      // Full answer
+      // Full answer — parse markdown (including pipe tables) into proper Word blocks
       if (check.answer) {
-        children.push(new Paragraph({
-          children: [new TextRun({ text: check.answer, size: 22 })],
-          spacing: { after: 100 }
-        }));
+        mdToWord(check.answer).forEach(block => children.push(block));
       }
 
       // Explanation
@@ -3586,18 +3697,18 @@ async function generateWordReport() {
           ? check.columns.map(c => typeof c === 'string' ? c : c.name || c)
           : Object.keys(check.data[0]);
 
-        const noBorders = {
-          top: { style: BorderStyle.NONE, size: 0 },
-          bottom: { style: BorderStyle.SINGLE, size: 1, color: 'DDDDDD' },
-          left: { style: BorderStyle.NONE, size: 0 },
-          right: { style: BorderStyle.NONE, size: 0 },
-        };
+        const colW = Math.floor(9360 / cols.length);
+        const cellBorder = { style: BorderStyle.SINGLE, size: 4, color: 'CCCCCC' };
+        const allBorders = { top: cellBorder, bottom: cellBorder, left: cellBorder, right: cellBorder };
 
         // Header row
         const headerRow = new TableRow({
+          tableHeader: true,
           children: cols.map(c => new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: String(c).replace(/_/g, ' '), bold: true, size: 18 })] })],
-            borders: noBorders,
+            width: { size: colW, type: WidthType.DXA },
+            borders: allBorders,
+            shading: { fill: '1E2761', val: ShadingType.CLEAR, color: 'auto' },
+            children: [new Paragraph({ children: [new TextRun({ text: String(c).replace(/_/g, ' '), bold: true, size: 18, color: 'FFFFFF' })] })]
           }))
         });
 
@@ -3608,15 +3719,17 @@ async function generateWordReport() {
             if (val == null) val = '';
             if (typeof val === 'number') val = val.toLocaleString();
             return new TableCell({
-              children: [new Paragraph({ children: [new TextRun({ text: String(val), size: 18 })] })],
-              borders: noBorders,
+              width: { size: colW, type: WidthType.DXA },
+              borders: allBorders,
+              children: [new Paragraph({ children: [new TextRun({ text: String(val), size: 18, color: '222222' })] })]
             });
           })
         }));
 
         const table = new Table({
           rows: [headerRow, ...dataRows],
-          width: { size: 100, type: WidthType.PERCENTAGE }
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          margins: { top: 60, bottom: 60, left: 80, right: 80 }
         });
         children.push(table);
       }
