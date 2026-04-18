@@ -2423,25 +2423,123 @@ const PERSONA_TITLE = {
   data_analyst: '🔬 Full Data Analysis'
 };
 
-function buildReportHtml(data) {
-  const formatted = (data.report || 'No report returned.')
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+// ── Lightweight markdown → HTML renderer ─────────────────────────────────────
+function renderMarkdown(raw) {
+  const lines = raw.split('\n');
+  let html = '';
+  let inTable = false;
+  let inList = false;
+  let tableHeaderDone = false;
 
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i]
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    // Inline: **bold**, *italic*, `code`
+    line = line
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/`(.+?)`/g, '<code style="background:#F1F5F9;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>');
+
+    // Table row: starts with |
+    if (/^\s*\|/.test(line)) {
+      if (!inTable) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<div style="overflow-x:auto;margin:14px 0"><table style="width:100%;border-collapse:collapse;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-radius:8px;overflow:hidden">`;
+        inTable = true;
+        tableHeaderDone = false;
+      }
+      // Skip separator rows (---|---|---)
+      const stripped = line.replace(/[\|\-:\s]/g, '');
+      if (stripped === '') { tableHeaderDone = true; continue; }
+
+      const cells = line.split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1);
+      if (!tableHeaderDone) {
+        html += '<thead><tr>' + cells.map(c =>
+          `<th style="padding:10px 14px;background:#1E2761;color:white;text-align:left;font-size:12px;font-weight:700;white-space:nowrap">${c.trim()}</th>`
+        ).join('') + '</tr></thead><tbody>';
+      } else {
+        const isTotal = /total/i.test(cells[0] || '');
+        const rowBg = isTotal ? '#F0F4FF' : 'white';
+        const rowStyle = isTotal ? 'font-weight:700' : '';
+        const rowHtml = cells.map(c => {
+          const v = c.trim();
+          let style = `padding:9px 14px;border-bottom:1px solid #E2E8F0;white-space:nowrap;${rowStyle}`;
+          if (/^\+\d/.test(v)) style += ';color:#1D6A39;font-weight:700';
+          else if (/^-\d/.test(v) && !/^—/.test(v)) style += ';color:#DC2626;font-weight:700';
+          return `<td style="${style}">${v}</td>`;
+        }).join('');
+        html += `<tr style="background:${rowBg}" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='${rowBg}'">${rowHtml}</tr>`;
+      }
+      continue;
+    } else if (inTable) {
+      html += '</tbody></table></div>';
+      inTable = false; tableHeaderDone = false;
+    }
+
+    // Headings
+    if (/^###\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<h4 style="font-size:12px;font-weight:800;color:#4A235A;margin:18px 0 5px;text-transform:uppercase;letter-spacing:.5px">${line.replace(/^###\s+/, '')}</h4>`;
+      continue;
+    }
+    if (/^##\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<h3 style="font-size:15px;font-weight:800;color:#1E2761;margin:22px 0 8px;padding-bottom:6px;border-bottom:2px solid #E0E8F0">${line.replace(/^##\s+/, '')}</h3>`;
+      continue;
+    }
+    if (/^#\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<h2 style="font-size:17px;font-weight:800;color:#1E2761;margin:26px 0 10px">${line.replace(/^#\s+/, '')}</h2>`;
+      continue;
+    }
+
+    // Numbered list
+    if (/^\d+\.\s+/.test(line)) {
+      if (inList) { html += '</ul>'; inList = false; }
+      html += `<div style="display:flex;gap:10px;margin:5px 0;font-size:14px;line-height:1.65"><span style="color:#4A235A;font-weight:700;min-width:22px">${line.match(/^\d+/)[0]}.</span><span>${line.replace(/^\d+\.\s+/, '')}</span></div>`;
+      continue;
+    }
+
+    // Bullet list
+    if (/^[-•]\s+/.test(line)) {
+      if (!inList) { html += '<ul style="margin:8px 0 8px 0;padding:0;list-style:none">'; inList = true; }
+      html += `<li style="padding:3px 0;font-size:14px;line-height:1.65;display:flex;gap:8px"><span style="color:#7D3C98;flex-shrink:0;margin-top:3px">▸</span><span>${line.replace(/^[-•]\s+/, '')}</span></li>`;
+      continue;
+    } else if (inList) { html += '</ul>'; inList = false; }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) {
+      html += '<hr style="border:none;border-top:1px solid #E0E8F0;margin:16px 0">'; continue;
+    }
+
+    // Blank line
+    if (line.trim() === '') { html += '<div style="height:6px"></div>'; continue; }
+
+    // Trend / assessment callout — lines starting with "Trend" or "Assessment"
+    if (/^(Trend|Assessment|Summary|Note):?/i.test(line.trim())) {
+      html += `<div style="background:#F0F4FF;border-left:3px solid #4A235A;padding:10px 14px;border-radius:0 8px 8px 0;margin:10px 0;font-size:13px;color:#1E2761">${line}</div>`;
+      continue;
+    }
+
+    // Plain paragraph
+    html += `<p style="margin:3px 0;font-size:14px;line-height:1.7;color:#334155">${line}</p>`;
+  }
+
+  if (inTable) html += '</tbody></table></div>';
+  if (inList) html += '</ul>';
+  return html;
+}
+
+function buildReportHtml(data) {
+  const formatted = renderMarkdown(data.report || 'No report returned.');
   return `
     <div style="background:white;border-radius:12px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:16px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
         <h3 style="margin:0;font-size:16px;color:#1E2761">${PERSONA_TITLE[data.persona] || data.persona}</h3>
         <span style="font-size:11px;color:#94A3B8">${data.entity || ''} · ${data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : ''}</span>
       </div>
-      <div style="font-size:14px;line-height:1.7;color:#334155"><p>${formatted}</p></div>
-      ${data.persona === 'data_analyst' ? `
-        <div style="margin-top:16px">
-          <button onclick="downloadReport()" style="padding:8px 16px;background:#1D6A39;color:white;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">
-            ⬇ Download Report
-          </button>
-        </div>` : ''}
+      <div>${formatted}</div>
     </div>`;
 }
 
