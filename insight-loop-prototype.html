@@ -517,6 +517,65 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
   </h3>
   <ul class="check-list" id="optional-list"></ul>
 
+  <!-- ADD NEW CHECK -->
+  <div class="add-check-panel" id="add-panel">
+    <h4>➕ Add a New Research Check</h4>
+    <p class="sub">Write what you want the agent to always check, in plain English. No code needed — the agent translates it to Jedify queries.</p>
+
+    <!-- TEMPLATES -->
+    <p style="font-size:11px;font-weight:700;color:#4A235A;margin-bottom:8px">Quick templates — click to pre-fill:</p>
+    <div class="template-grid">
+      <div class="template-card" onclick="fillTemplate('Bet Per Round Trend','Check if the average bet per round is increasing or decreasing over the last 3 months. Flag if it drops more than 15%.','When avg bet drops, it can signal player base shifting to lower-value segments.')">
+        <h5>💰 Bet Per Round Trend</h5>
+        <p>Is average bet increasing or decreasing? Early signal for revenue quality.</p>
+      </div>
+      <div class="template-card" onclick="fillTemplate('Game Family Adoption','Check how many game families from our portfolio the brand has activated vs how many are available. Flag if adoption is below 60%.','Low family adoption = easy wins. Just activate what already exists.')">
+        <h5>🎰 Game Family Adoption</h5>
+        <p>How much of our portfolio has the brand actually activated?</p>
+      </div>
+      <div class="template-card" onclick="fillTemplate('Weekend vs Weekday Pattern','Compare GGR on weekends vs weekdays for the brand. Flag if the pattern is significantly different from global average.','Different patterns may indicate different player demographics or market mix.')">
+        <h5>📅 Weekend vs Weekday</h5>
+        <p>Does the brand perform differently on weekends? Timing optimization.</p>
+      </div>
+      <div class="template-card" onclick="fillTemplate('RTP Outlier Detection','Check if any game at this brand has an RTP that deviates more than 2% from its expected RTP. Flag outliers.','RTP outliers can indicate issues with game configuration or bonus abuse.')">
+        <h5>🎯 RTP Outlier Detection</h5>
+        <p>Are any games running with unexpected RTP? Quality control check.</p>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="form-row">
+        <label>Check Name</label>
+        <input type="text" id="new-check-name" placeholder="e.g., Bet Per Round Trend">
+      </div>
+      <div class="form-row">
+        <label>What to Check</label>
+        <textarea id="new-check-query" placeholder="Describe in plain English what the agent should research. e.g., 'Compare GGR on weekends vs weekdays for the brand. Flag if the pattern differs from global average.'"></textarea>
+      </div>
+      <div class="form-row">
+        <label>Why It Matters</label>
+        <textarea id="new-check-why" placeholder="Why is this insight important for a QBR? e.g., 'Different patterns may indicate different player demographics.'" style="min-height:40px"></textarea>
+      </div>
+      <div class="form-row">
+        <label>Type</label>
+        <select id="new-check-type">
+          <option value="mandatory">🔒 Mandatory — always run</option>
+          <option value="optional">🧠 Agent Decides — run when relevant</option>
+        </select>
+      </div>
+      <div class="form-row" id="trigger-row" style="display:none">
+        <label>Trigger Conditions</label>
+        <textarea id="new-check-triggers" placeholder="When should the agent run this? e.g., 'When GGR is declining' or 'When AM mentions promotions'" style="min-height:40px"></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
+        <button class="btn-add" onclick="addNewCheck()">Add Check to Config</button>
+        <button class="btn-secondary" onclick="clearForm()">Clear</button>
+        <span class="save-indicator" id="save-indicator">💾 Saved</span>
+        <span id="check-count" style="font-size:11px;color:#64748B;margin-left:auto"></span>
+      </div>
+    </div>
+  </div>
+
   <!-- PERSONA PROMPT EDITOR -->
   <h3 style="font-size:14px;font-weight:800;color:#1E2761;margin:28px 0 12px;display:flex;align-items:center;gap:8px">
     🎭 Persona Prompts <span style="font-size:11px;color:#64748B;font-weight:400">— customize how each persona formats the output</span>
@@ -609,64 +668,7 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
     </div>
   </div>
 
-  <!-- ADD NEW CHECK -->
-  <div class="add-check-panel" id="add-panel">
-    <h4>➕ Add a New Research Check</h4>
-    <p class="sub">Write what you want the agent to always check, in plain English. No code needed — the agent translates it to Jedify queries.</p>
 
-    <!-- TEMPLATES -->
-    <p style="font-size:11px;font-weight:700;color:#4A235A;margin-bottom:8px">Quick templates — click to pre-fill:</p>
-    <div class="template-grid">
-      <div class="template-card" onclick="fillTemplate('Bet Per Round Trend','Check if the average bet per round is increasing or decreasing over the last 3 months. Flag if it drops more than 15%.','When avg bet drops, it can signal player base shifting to lower-value segments.')">
-        <h5>💰 Bet Per Round Trend</h5>
-        <p>Is average bet increasing or decreasing? Early signal for revenue quality.</p>
-      </div>
-      <div class="template-card" onclick="fillTemplate('Game Family Adoption','Check how many game families from our portfolio the brand has activated vs how many are available. Flag if adoption is below 60%.','Low family adoption = easy wins. Just activate what already exists.')">
-        <h5>🎰 Game Family Adoption</h5>
-        <p>How much of our portfolio has the brand actually activated?</p>
-      </div>
-      <div class="template-card" onclick="fillTemplate('Weekend vs Weekday Pattern','Compare GGR on weekends vs weekdays for the brand. Flag if the pattern is significantly different from global average.','Different patterns may indicate different player demographics or market mix.')">
-        <h5>📅 Weekend vs Weekday</h5>
-        <p>Does the brand perform differently on weekends? Timing optimization.</p>
-      </div>
-      <div class="template-card" onclick="fillTemplate('RTP Outlier Detection','Check if any game at this brand has an RTP that deviates more than 2% from its expected RTP. Flag outliers.','RTP outliers can indicate issues with game configuration or bonus abuse.')">
-        <h5>🎯 RTP Outlier Detection</h5>
-        <p>Are any games running with unexpected RTP? Quality control check.</p>
-      </div>
-    </div>
-
-    <div style="margin-top:16px">
-      <div class="form-row">
-        <label>Check Name</label>
-        <input type="text" id="new-check-name" placeholder="e.g., Bet Per Round Trend">
-      </div>
-      <div class="form-row">
-        <label>What to Check</label>
-        <textarea id="new-check-query" placeholder="Describe in plain English what the agent should research. e.g., 'Compare GGR on weekends vs weekdays for the brand. Flag if the pattern differs from global average.'"></textarea>
-      </div>
-      <div class="form-row">
-        <label>Why It Matters</label>
-        <textarea id="new-check-why" placeholder="Why is this insight important for a QBR? e.g., 'Different patterns may indicate different player demographics.'" style="min-height:40px"></textarea>
-      </div>
-      <div class="form-row">
-        <label>Type</label>
-        <select id="new-check-type">
-          <option value="mandatory">🔒 Mandatory — always run</option>
-          <option value="optional">🧠 Agent Decides — run when relevant</option>
-        </select>
-      </div>
-      <div class="form-row" id="trigger-row" style="display:none">
-        <label>Trigger Conditions</label>
-        <textarea id="new-check-triggers" placeholder="When should the agent run this? e.g., 'When GGR is declining' or 'When AM mentions promotions'" style="min-height:40px"></textarea>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
-        <button class="btn-add" onclick="addNewCheck()">Add Check to Config</button>
-        <button class="btn-secondary" onclick="clearForm()">Clear</button>
-        <span class="save-indicator" id="save-indicator">💾 Saved</span>
-        <span id="check-count" style="font-size:11px;color:#64748B;margin-left:auto"></span>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
