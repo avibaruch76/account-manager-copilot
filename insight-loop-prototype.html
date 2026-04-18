@@ -263,6 +263,7 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .persona-btn.selected{background:#4A235A;color:white;border-color:#4A235A}
 .persona-btn.admin-btn.selected{background:#1D6A39;border-color:#1D6A39}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media print{body>*{display:none!important}#react-panel{display:block!important;position:static!important;box-shadow:none!important}#download-btns,#jedify-chat-panel,.nav{display:none!important}}
 /* ── Login overlay ── */
 #login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1E2761 0%,#4A235A 100%);z-index:9999;display:flex;align-items:center;justify-content:center}
 #login-overlay.hidden{display:none}
@@ -348,7 +349,6 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button class="persona-btn" data-persona="qbr_customer" onclick="selectPersona('qbr_customer',this)">🤝 QBR Customer</button>
       <button class="persona-btn selected" data-persona="am_actions" onclick="selectPersona('am_actions',this)">⚡ AM Actions</button>
       <button class="persona-btn" data-persona="am_detailed" onclick="selectPersona('am_detailed',this)">📊 AM Detailed</button>
-      <button class="persona-btn" data-persona="data_analyst" onclick="selectPersona('data_analyst',this)">🔬 Data Analyst</button>
       <button class="persona-btn admin-btn" data-persona="admin" onclick="selectPersona('admin',this)">👑 All Personas</button>
     </div>
     <div style="display:flex;align-items:center;gap:10px">
@@ -670,8 +670,14 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 <!-- CHECK RESULTS (replaces old ReAct Loop)                        -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="section visible-section" id="react-panel">
-  <div class="section-title">📊 Analysis Results</div>
-  <div class="section-sub" id="check-results-sub">Run an analysis to see real check results here.</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
+    <div class="section-title" style="margin:0">📊 Analysis Results</div>
+    <div id="download-btns" style="display:none;gap:8px;display:none">
+      <button onclick="downloadAnalysisPDF()" style="padding:7px 14px;background:#1E2761;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ PDF</button>
+      <button onclick="downloadAnalysisWord()" style="padding:7px 14px;background:#1D6A39;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ Word</button>
+    </div>
+  </div>
+  <div class="section-sub" id="check-results-sub">Run an analysis to see full results here. Data Analyst report always appears here.</div>
 
   <!-- Persona header card — populated dynamically -->
   <div id="persona-header-card" style="display:none;background:linear-gradient(135deg,#1E2761 0%,#4A235A 60%,#7D3C98 100%);border-radius:12px;padding:20px 24px;margin-bottom:20px;color:white;">
@@ -709,14 +715,22 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <hr class="div">
 <div class="section" id="output-panel" style="display:none">
-  <div class="section-title">📤 Output — Same Data, 4 Personas</div>
-  <div class="section-sub">Click each tab to see how the same research produces different outputs.</div>
+  <div class="section-title">📤 Output by Persona</div>
+  <div class="section-sub">Click each tab to see how the same research produces different outputs per audience.</div>
 
   <div class="persona-tabs">
     <div class="ptab active" onclick="showPersona('chief',this)" data-persona-id="chief">👔 Customer QBR</div>
     <div class="ptab" onclick="showPersona('action',this)" data-persona-id="action">🎯 AM — Action Mode</div>
     <div class="ptab" onclick="showPersona('detailed',this)" data-persona-id="detailed">📊 AM — Detailed</div>
-    <div class="ptab" onclick="showPersona('analyst',this)" data-persona-id="analyst">🔬 Data Analyst</div>
+  </div>
+
+  <!-- CUSTOMER QBR -->
+  <div class="persona-content visible" id="persona-chief">
+    <div style="text-align:center;padding:60px 20px;color:#94A3B8;">
+      <div style="font-size:40px;margin-bottom:12px;">👔</div>
+      <p style="font-size:14px;font-weight:700;">Customer QBR Summary</p>
+      <p style="font-size:12px;">Run an analysis to see the executive summary with positive framing for QBR meetings.</p>
+    </div>
   </div>
 
   <!-- AM ACTION -->
@@ -734,24 +748,6 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
       <div style="font-size:40px;margin-bottom:12px;">📊</div>
       <p style="font-size:14px;font-weight:700;">AM Detailed Mode</p>
       <p style="font-size:12px;">Run an analysis to see per-check research with full Jedify explanations.</p>
-    </div>
-  </div>
-
-  <!-- DATA ANALYST -->
-  <div class="persona-content" id="persona-analyst">
-    <div style="text-align:center;padding:60px 20px;color:#94A3B8;">
-      <div style="font-size:40px;margin-bottom:12px;">🔬</div>
-      <p style="font-size:14px;font-weight:700;">Data Analyst Report</p>
-      <p style="font-size:12px;">Run an analysis to see full raw data, SQL queries, and Word export.</p>
-    </div>
-  </div>
-
-  <!-- CUSTOMER QBR -->
-  <div class="persona-content visible" id="persona-chief">
-    <div style="text-align:center;padding:60px 20px;color:#94A3B8;">
-      <div style="font-size:40px;margin-bottom:12px;">👔</div>
-      <p style="font-size:14px;font-weight:700;">Customer QBR Summary</p>
-      <p style="font-size:12px;">Run an analysis to see the executive summary with positive framing for QBR meetings.</p>
     </div>
   </div>
 </div>
@@ -2228,86 +2224,70 @@ async function submitLogin() {
 })();
 
 async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
-  // Admin mode: fire all 4 personas in parallel, render each as it completes
-  if (_selectedPersona === 'admin') {
-    const personas = ['qbr_customer', 'am_actions', 'am_detailed', 'data_analyst'];
-    // Show placeholder in all persona panes immediately
-    personas.forEach(p => {
-      const paneId = PERSONA_PANE_ID[p];
-      const pane = document.getElementById(paneId);
-      if (pane) pane.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ ${PERSONA_TITLE[p]} — researching...</div>`;
-    });
-    // Fire 4 requests in parallel, render each as done
-    const requests = personas.map(persona => {
-      const payload = {
-        ...selection,
-        persona,
-        enabledOptionalCheckIds: _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id)
-      };
-      return apiFetch('/api/research', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-        signal: AbortSignal.timeout(1800000)
-      }).then(res => {
-        if (!res.ok) throw new Error('Server returned ' + res.status);
-        if (res.headers.get('content-type')?.includes('text/event-stream')) return readSSEStream(res);
-        return res.json();
-      }).then(data => {
-        if (data && data.report !== undefined) renderResearchReport(data);
-      }).catch(err => {
+  const globalPrompt = document.getElementById('global-prompt-prefix')?.value || '';
+  const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
+
+  // Helper: fire one research request and render on completion
+  function firePersona(persona) {
+    const payload = { ...selection, persona, enabledOptionalCheckIds, globalRules: globalPrompt,
+      ...(customPrompt ? { customPrompt } : {}) };
+    return apiFetch('/api/research', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(1800000)
+    }).then(res => {
+      if (!res.ok) throw new Error('Server returned ' + res.status);
+      if (res.headers.get('content-type')?.includes('text/event-stream')) return readSSEStream(res);
+      return res.json();
+    }).then(data => {
+      if (data && data.report !== undefined) renderResearchReport(data);
+    }).catch(err => {
+      if (persona === 'data_analyst') {
+        const checkResults = document.getElementById('check-results');
+        if (checkResults) checkResults.innerHTML =
+          `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ Full analysis failed: ${err.message}</div>`;
+      } else {
         const paneId = PERSONA_PANE_ID[persona];
         const pane = document.getElementById(paneId);
-        if (pane) pane.innerHTML = `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ ${PERSONA_TITLE[persona]} failed: ${err.message}</div>`;
-      });
+        if (pane) pane.innerHTML =
+          `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ ${PERSONA_TITLE[persona]} failed: ${err.message}</div>`;
+      }
     });
-    // Show QBR Customer tab while all run
-    const firstPane = document.getElementById('persona-chief');
-    if (firstPane) {
-      document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
-      firstPane.classList.add('visible');
-    }
-    await Promise.all(requests);
+  }
+
+  // Admin mode: fire QBR + AM Actions + AM Detailed + Data Analyst all in parallel
+  if (_selectedPersona === 'admin') {
+    const personas = ['qbr_customer', 'am_actions', 'am_detailed'];
+    // Show placeholders
+    personas.forEach(p => {
+      const pane = document.getElementById(PERSONA_PANE_ID[p]);
+      if (pane) pane.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ ${PERSONA_TITLE[p]} — researching...</div>`;
+    });
+    const checkResults = document.getElementById('check-results');
+    if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis — researching...</div>`;
+
+    await Promise.all([...personas.map(firePersona), firePersona('data_analyst')]);
     return { report: 'admin_done' };
   }
 
-  // Use /api/research for Jedify Research Mode, fallback to /api/analyze for legacy
-  const useResearch = selection.useResearchMode !== false;
-  const endpoint = API_BASE + (useResearch ? '/api/research' : '/api/analyze');
+  // Single persona mode — fire selected persona + data_analyst in parallel
   try {
-    // Add global prompt and persona prompts from Research Config
-    const globalPrompt = document.getElementById('global-prompt-prefix')?.value || '';
-    const personaPrompts = typeof getPersonaPrompts === 'function' ? getPersonaPrompts() : {};
-    const customPersonaPrompts = getCustomPersonaPrompts();
-    const enabledOptionalCheckIds = _checks
-      .filter(c => c.type === 'optional' && c.enabled)
-      .map(c => c.id);
-    const payload = {
-      ...selection,
-      persona: _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona,
-      enabledOptionalCheckIds,
-      globalRules: globalPrompt,
-      ...(customPrompt ? { customPrompt } : {})
-    };
+    const selectedPersona = _selectedPersona;
+    // Show placeholder in Analysis Results immediately
+    const checkResults = document.getElementById('check-results');
+    if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis — researching...</div>`;
 
-    // Combine timeout + optional abort signal
-    const timeoutSignal = AbortSignal.timeout(1800000);
-    const combinedSignal = abortSignal
-      ? AbortSignal.any([timeoutSignal, abortSignal])
-      : timeoutSignal;
+    // Always fire data_analyst for Analysis Results
+    const analystPromise = firePersona('data_analyst');
 
-    const endpointPath = endpoint.replace(API_BASE, '');
-    const res = await apiFetch(endpointPath, {
-      method: 'POST',
-      body: JSON.stringify(payload),
-      signal: combinedSignal
-    });
-    if (!res.ok) throw new Error('Server returned ' + res.status);
+    // Fire the selected persona (unless it's somehow data_analyst — safety check)
+    const personaPromise = selectedPersona !== 'data_analyst'
+      ? firePersona(selectedPersona)
+      : Promise.resolve();
 
-    // SSE streaming: read text/event-stream line by line
-    if (res.headers.get('content-type')?.includes('text/event-stream')) {
-      return await readSSEStream(res);
-    }
-    return await res.json();
+    // Wait for both; return the persona result for legacy compatibility
+    const [, personaResult] = await Promise.all([analystPromise, personaPromise]);
+    return personaResult || { report: 'done' };
   } catch (e) {
     console.error('[insight-loop] Fetch failed:', e.message);
     const errMsg = e.name === 'TimeoutError' ? 'Request timed out. The analysis took too long.' : e.message;
@@ -2452,51 +2432,82 @@ function buildReportHtml(data) {
 }
 
 function renderResearchReport(data) {
-  const paneId = PERSONA_PANE_ID[data.persona];
-  if (!paneId) return;
-  const pane = document.getElementById(paneId);
-  if (!pane) return;
-
   const html = buildReportHtml(data);
 
-  // 1. Write into the persona's own tab
-  pane.innerHTML = html;
+  if (data.persona === 'data_analyst') {
+    // Data Analyst → always goes to Analysis Results (#check-results)
+    const checkResults = document.getElementById('check-results');
+    if (checkResults) {
+      const existing = checkResults.querySelector('[data-persona="data_analyst"]');
+      if (existing) existing.remove();
+      const wrapper = document.createElement('div');
+      wrapper.setAttribute('data-persona', 'data_analyst');
+      wrapper.innerHTML = html;
+      checkResults.appendChild(wrapper);
+      const sub = document.getElementById('check-results-sub');
+      if (sub) sub.textContent = '';
+      // Show download buttons
+      const dlBtns = document.getElementById('download-btns');
+      if (dlBtns) dlBtns.style.display = 'flex';
+    }
+    // Navigate to Analysis Results
+    showSection('react', document.querySelector('.nav a[href="#react"]'));
+  } else {
+    // Other personas → their tab only
+    const paneId = PERSONA_PANE_ID[data.persona];
+    if (!paneId) return;
+    const pane = document.getElementById(paneId);
+    if (!pane) return;
+    pane.innerHTML = html;
 
-  // 2. Also write into Analysis Results (#check-results) — accumulate all personas
-  const checkResults = document.getElementById('check-results');
-  if (checkResults) {
-    // Remove old entry for this persona if re-running
-    const existing = checkResults.querySelector(`[data-persona="${data.persona}"]`);
-    if (existing) existing.remove();
-    const wrapper = document.createElement('div');
-    wrapper.setAttribute('data-persona', data.persona);
-    wrapper.innerHTML = html;
-    checkResults.appendChild(wrapper);
-    // Clear the subtitle placeholder once we have results
-    const sub = document.getElementById('check-results-sub');
-    if (sub) sub.textContent = '';
+    // Switch to this persona's tab in Output by Persona
+    const shortId = PERSONA_TAB_ID[data.persona];
+    document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
+    document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
+    pane.classList.add('visible');
+    const tabBtn = document.querySelector(`.ptab[data-persona-id="${shortId}"]`);
+    if (tabBtn) tabBtn.classList.add('active');
+
+    // Navigate to Output by Persona
+    showSection('output', document.querySelector('.nav a[href="#output"]'));
   }
-
-  // 3. Switch to this persona's tab in Output by Persona
-  const shortId = PERSONA_TAB_ID[data.persona];
-  document.querySelectorAll('.persona-content').forEach(p => p.classList.remove('visible'));
-  document.querySelectorAll('.ptab').forEach(t => t.classList.remove('active'));
-  pane.classList.add('visible');
-  const tabBtn = document.querySelector(`.ptab[data-persona-id="${shortId}"]`);
-  if (tabBtn) tabBtn.classList.add('active');
-
-  // 4. Navigate to Analysis Results section so user sees it immediately
-  showSection('react', document.querySelector('.nav a[href="#react"]'));
 }
 
 function downloadReport() {
-  const pane = document.getElementById('persona-analyst');
-  if (!pane) return;
-  const text = pane.innerText;
-  const blob = new Blob([text], { type: 'text/plain' });
+  downloadAnalysisWord();
+}
+
+function downloadAnalysisPDF() {
+  window.print();
+}
+
+function downloadAnalysisWord() {
+  const checkResults = document.getElementById('check-results');
+  if (!checkResults || !checkResults.innerText.trim()) {
+    showToast('No analysis results to download yet.', true);
+    return;
+  }
+  // Word can open HTML saved as .doc
+  const html = `
+    <html xmlns:o="urn:schemas-microsoft-com:office:office"
+          xmlns:w="urn:schemas-microsoft-com:office:word"
+          xmlns="http://www.w3.org/TR/REC-html40">
+    <head><meta charset="utf-8">
+    <style>
+      body { font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.6; margin: 2cm; }
+      h3 { color: #1E2761; font-size: 14pt; margin-top: 24pt; }
+      strong { font-weight: bold; }
+      p { margin: 6pt 0; }
+    </style>
+    </head><body>
+    ${checkResults.innerHTML}
+    </body></html>`;
+  const blob = new Blob([html], { type: 'application/msword' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'jedify-research-report.txt';
+  const entity = checkResults.querySelector('span')?.textContent?.split('·')[0]?.trim() || 'Analysis';
+  const date = new Date().toISOString().slice(0, 10);
+  a.download = `${entity}_Analysis_${date}.doc`;
   a.click();
 }
 
