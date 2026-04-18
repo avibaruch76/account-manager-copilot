@@ -477,14 +477,6 @@ const DEFAULT_MODES = [
       { id: 'pipeline_coverage', name: 'Pipeline Coverage',  description: 'How many brands in the portfolio are growing vs declining? Portfolio health summary.', type: 'mandatory', enabled: true, builtin: true, order: 3 },
     ], optional: [] }
   },
-  { id: 'churn_watch', groupId: 'finance', name: 'Churn Watch', icon: '⚠️', pinned: false, order: 1,
-    outputPrompt: 'Focus entirely on churn and retention risk. Identify the top 5 brands at highest churn risk. For each: what is the signal, how long has the trend been negative, what action could reverse it.',
-    checks: { mandatory: [
-      { id: 'player_retention', name: 'Player Retention',  description: 'Active player count trend over 3 months. Flag declining brands.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
-      { id: 'vip_behaviour',    name: 'VIP Behaviour',     description: 'Are high-value players (top 10% by GGR) reducing activity?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
-      { id: 'revenue_leakage',  name: 'Revenue Leakage',   description: 'Brands where GGR is flat/up but GGR/player is declining — margin erosion signal.', type: 'mandatory', enabled: true, builtin: true, order: 2 },
-    ], optional: [] }
-  },
   // Operations
   { id: 'rtp_audit', groupId: 'operations', name: 'RTP Audit', icon: '🔧', pinned: true, order: 0,
     outputPrompt: 'Generate an RTP audit report. List every game with an RTP deviation >2% from expected. For each: game name, expected RTP, actual RTP, delta, and recommended action.',
@@ -704,7 +696,7 @@ function renderModePills() {
 }
 
 function getDefaultScopeHint(modeId) {
-  if (['cfo_review','churn_watch','rtp_audit','downtime_impact'].includes(modeId)) return 'company-wide';
+  if (['cfo_review','rtp_audit','downtime_impact'].includes(modeId)) return 'company-wide';
   return 'operator / brand';
 }
 
@@ -717,7 +709,7 @@ function toggleMoreModes(e) {
 function selectMode(modeId) {
   _selectedModeId = modeId;
   // Auto-suggest company scope for Finance/Operations modes
-  const financeOpsIds = ['cfo_review','churn_watch','rtp_audit','downtime_impact'];
+  const financeOpsIds = ['cfo_review','rtp_audit','downtime_impact'];
   if (financeOpsIds.includes(modeId) && currentScope !== 'company') {
     setScope('company', document.querySelector('.scope-btn[data-scope="company"]'));
   }
