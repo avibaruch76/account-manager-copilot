@@ -21,23 +21,73 @@ const PORT = process.env.PORT || 3001;
 // Locally it's disabled (no env var = open access).
 const APP_PASSWORD = process.env.APP_PASSWORD || null;
 
-// Deterministic token: HMAC of the password — no session store needed.
-// If password changes on Render, all old tokens instantly invalid.
+// Allowed origin for CORS — set APP_URL env var on Render (e.g. https://account-manager-copilot.onrender.com)
+// Falls back to * only when running locally without APP_PASSWORD.
+const APP_URL = process.env.APP_URL || null;
+
+// ── Token: signed expiring token (no session store) ──────────────────────────
+// Format: "<expiresAt>.<hmac(password+expiresAt)>"
+// Default lifetime: 24 hours. Change TOKEN_TTL_MS to adjust.
+const TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
 function makeAuthToken(password) {
-  return crypto.createHmac('sha256', password).update('jedify-crm-v1').digest('hex');
+  const expiresAt = Date.now() + TOKEN_TTL_MS;
+  const sig = crypto.createHmac('sha256', password).update('jedify-crm-v1:' + expiresAt).digest('hex');
+  return expiresAt + '.' + sig;
+}
+
+function verifyAuthToken(password, token) {
+  const dot = token.indexOf('.');
+  if (dot === -1) return false;
+  const expiresAt = parseInt(token.slice(0, dot), 10);
+  if (isNaN(expiresAt) || Date.now() > expiresAt) return false; // expired
+  const expected = crypto.createHmac('sha256', password).update('jedify-crm-v1:' + expiresAt).digest('hex');
+  const actual = token.slice(dot + 1);
+  // Constant-time compare to prevent timing attacks
+  if (expected.length !== actual.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(actual));
 }
 
 function isAuthenticated(req) {
-  if (!APP_PASSWORD) return true; // no password set → open (local dev)
+  if (!APP_PASSWORD) return true;
   const header = req.headers['authorization'] || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  return token === makeAuthToken(APP_PASSWORD);
+  try { return verifyAuthToken(APP_PASSWORD, token); } catch { return false; }
 }
 
 function rejectUnauth(res) {
   res.writeHead(401, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Unauthorized' }));
 }
+
+// ── Rate limiter for /api/auth (brute-force protection) ──────────────────────
+// Max 5 failed attempts per IP per 15 minutes.
+const _authAttempts = new Map(); // ip → { count, resetAt }
+const AUTH_MAX_ATTEMPTS = 5;
+const AUTH_WINDOW_MS = 15 * 60 * 1000;
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let entry = _authAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    entry = { count: 0, resetAt: now + AUTH_WINDOW_MS };
+    _authAttempts.set(ip, entry);
+  }
+  entry.count++;
+  return entry.count <= AUTH_MAX_ATTEMPTS;
+}
+
+function recordAuthSuccess(ip) {
+  _authAttempts.delete(ip); // reset on success
+}
+
+// Clean up old entries every 30 min to avoid memory leak
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, entry] of _authAttempts) {
+    if (now > entry.resetAt) _authAttempts.delete(ip);
+  }
+}, 30 * 60 * 1000);
 
 // ── MCP connection (via jedify-direct.js) ─────────────────────────────────
 
@@ -1073,9 +1123,11 @@ async function runResearch(reqBody, onProgress) {
 // ── HTTP server ─────────────────────────────────────────────────────────────
 
 const server = http.createServer(async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  // CORS — restrict to known origin in production, open locally
+  const allowedOrigin = APP_URL || (APP_PASSWORD ? null : '*');
+  if (allowedOrigin) res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
@@ -1088,23 +1140,34 @@ const server = http.createServer(async (req, res) => {
 
   // Auth endpoint — public (needed to log in)
   if (req.method === 'POST' && req.url === '/api/auth') {
+    const ip = req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress || 'unknown';
     let body = '';
-    req.on('data', c => body += c);
+    req.on('data', c => { if (body.length < 1024) body += c; }); // max 1KB body
     req.on('end', () => {
       try {
-        const { password } = JSON.parse(body);
         if (!APP_PASSWORD) {
-          // No password set — return a no-op token
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ token: 'no-auth' }));
           return;
         }
+        // Rate limit check
+        if (!checkRateLimit(ip)) {
+          console.warn(`[auth] Rate limit hit for IP ${ip}`);
+          res.writeHead(429, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Too many attempts — try again in 15 minutes.' }));
+          return;
+        }
+        const { password } = JSON.parse(body);
         if (password === APP_PASSWORD) {
+          recordAuthSuccess(ip);
+          const token = makeAuthToken(APP_PASSWORD);
+          console.log(`[auth] Login success from ${ip}`);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ token: makeAuthToken(APP_PASSWORD) }));
+          res.end(JSON.stringify({ token, expiresIn: TOKEN_TTL_MS }));
         } else {
+          console.warn(`[auth] Failed login attempt from ${ip}`);
           res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Wrong password' }));
+          res.end(JSON.stringify({ error: 'Wrong password.' }));
         }
       } catch (e) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
