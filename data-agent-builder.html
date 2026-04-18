@@ -93,6 +93,13 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:#F0F4F8;color:#2C3E50}
 .mode-info{margin-top:10px;padding:10px 14px;background:#EEF2FF;border-radius:8px;font-size:12px;color:#1E2761;display:none}
 .mode-info.visible{display:block}
 
+/* PERSONA PILLS */
+.persona-pills-row{margin-top:10px;padding-top:10px;border-top:1px dashed #E0E8F0}
+.persona-pills-label{font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.persona-pill{padding:6px 14px;border-radius:20px;border:1.5px solid #D8B4FE;background:white;font-size:12px;font-weight:600;color:#7C3AED;cursor:pointer;transition:all .2s;white-space:nowrap}
+.persona-pill:hover{border-color:#7C3AED;background:#FAF5FF}
+.persona-pill.active{background:#4A235A;color:white;border-color:#4A235A}
+
 /* CONFIG SCREEN */
 .config-card{background:white;border-radius:14px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .config-card h3{font-size:13px;font-weight:800;color:#1E2761;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
@@ -443,6 +450,11 @@ const DEFAULT_MODES = [
   // Commercial
   { id: 'qbr_prep', groupId: 'commercial', name: 'QBR Prep', icon: '📊', pinned: true, order: 0,
     outputPrompt: 'Generate an executive QBR summary. Use positive framing. Highlight growth, top games, and opportunities. Format as numbered insight cards.',
+    personas: [
+      { id: 'qbr_am',    name: 'AM Actions',         icon: '📋', pinned: true,  order: 0, outputPrompt: 'You are an Account Manager preparing for a QBR. Generate a concise, action-oriented briefing. Lead with 3-5 specific action items the AM should take THIS WEEK. For each action: what to do, why (data signal), expected outcome. Then list top 3 games to promote and top 3 games to investigate.' },
+      { id: 'qbr_dir',   name: 'Commercial Director', icon: '📊', pinned: true,  order: 1, outputPrompt: 'You are a Commercial Director reviewing portfolio performance. Generate a strategic summary. Focus on growth trends, concentration risk, commercial opportunities and competitive gaps. Use business language, not technical language.' },
+      { id: 'qbr_exec',  name: 'Executive Summary',   icon: '⭐', pinned: false, order: 2, outputPrompt: 'You are writing a one-page executive summary for a C-suite reader. Structure: 3 headline numbers, 3 key insights (one sentence each), 1 strategic recommendation. Keep it concise — no tables, no bullet overload.' },
+    ],
     checks: { mandatory: [
       { id: 'ggr_trend',       name: 'GGR 6-Month Trend',      description: 'Monthly GGR, active players, and GGR/player trend over 6 months.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
       { id: 'concentration',   name: 'Game Concentration Risk', description: 'Top games by GGR share. Flag if any game >40% of total.', type: 'mandatory', enabled: true, builtin: true, order: 1 },
@@ -454,6 +466,9 @@ const DEFAULT_MODES = [
   },
   { id: 'am_weekly', groupId: 'commercial', name: 'AM Weekly', icon: '⚡', pinned: true, order: 1,
     outputPrompt: 'Generate a concise weekly AM briefing. 3-5 bullet action items only. What needs attention this week?',
+    personas: [
+      { id: 'amw_am', name: 'AM Actions', icon: '⚡', pinned: true, order: 0, outputPrompt: 'You are an Account Manager. List exactly 3-5 action items for this week. For each: bold action title, one-line rationale, expected outcome. No fluff — actionable only.' },
+    ],
     checks: { mandatory: [
       { id: 'ggr_trend_lite', name: 'GGR Trend (Lightweight)', description: 'Last 4 weeks GGR vs same period last month. Simple up/down signal.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
       { id: 'top_game_move',  name: 'Top Game Movement',       description: 'Did the #1 or #2 game change this week? Any surprise entrants?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
@@ -461,6 +476,9 @@ const DEFAULT_MODES = [
   },
   { id: 'product_launch', groupId: 'commercial', name: 'Product Launch', icon: '🎯', pinned: false, order: 2,
     outputPrompt: 'Analyse new game launch performance. Compare adoption rate vs global average. Identify which brands are early adopters vs laggards.',
+    personas: [
+      { id: 'pl_review', name: 'Launch Review', icon: '🎯', pinned: true, order: 0, outputPrompt: 'Generate a product launch performance report. For each new game: adoption rate vs global average, which brands are leading vs lagging, recommended next actions for the commercial team.' },
+    ],
     checks: { mandatory: [
       { id: 'new_game_adoption', name: 'New Game Adoption',      description: 'How quickly is this brand adopting our latest releases vs global average?', type: 'mandatory', enabled: true, builtin: true, order: 0 },
       { id: 'benchmark_gap2',   name: 'Benchmark Gap',           description: 'Is this brand missing any of the global top 5 games?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
@@ -470,6 +488,10 @@ const DEFAULT_MODES = [
   // Finance
   { id: 'cfo_review', groupId: 'finance', name: 'CFO Review', icon: '💰', pinned: true, order: 0,
     outputPrompt: 'Generate a CFO-level revenue summary. Lead with headline numbers. Include forecast vs actual, margin quality signal, and top 3 risks. No game-level details — stay at portfolio level.',
+    personas: [
+      { id: 'cfo_cfo',   name: 'CFO Report',   icon: '💰', pinned: true,  order: 0, outputPrompt: 'You are writing for the CFO. Lead with headline GGR vs forecast (% delta). Include: revenue quality signal (GGR/player trend), top 3 risks, 2 growth opportunities. Stay at portfolio level — no game-level detail.' },
+      { id: 'cfo_board', name: 'Board Update',  icon: '📑', pinned: false, order: 1, outputPrompt: 'You are preparing a board-level update. Maximum one page. Structure: 3 headline metrics with RAG status, 2 strategic risks with mitigation notes, 1 decision or ask from the board. Executive language only.' },
+    ],
     checks: { mandatory: [
       { id: 'revenue_forecast',  name: 'Revenue Forecast',   description: 'GGR forecast vs actual for current and next month. Flag >10% deviation.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
       { id: 'margin_trend',      name: 'Margin Trend',       description: 'GGR/player trend as a proxy for revenue quality. Is it improving or declining?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
@@ -480,6 +502,9 @@ const DEFAULT_MODES = [
   // Operations
   { id: 'rtp_audit', groupId: 'operations', name: 'RTP Audit', icon: '🔧', pinned: true, order: 0,
     outputPrompt: 'Generate an RTP audit report. List every game with an RTP deviation >2% from expected. For each: game name, expected RTP, actual RTP, delta, and recommended action.',
+    personas: [
+      { id: 'rtp_ops', name: 'Ops Report', icon: '🔧', pinned: true, order: 0, outputPrompt: 'Generate an RTP audit report for the operations team. For every anomaly found: game name, expected RTP, actual RTP, delta %, severity (critical/warning/ok), recommended action. Sort by severity descending.' },
+    ],
     checks: { mandatory: [
       { id: 'rtp_outlier', name: 'RTP Outlier Detection', description: 'Check if any game has RTP deviating >2% from its expected value.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
       { id: 'game_config', name: 'Game Config Check',     description: 'Are all active games correctly configured (volatility, max bet, feature flags)?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
@@ -487,6 +512,9 @@ const DEFAULT_MODES = [
   },
   { id: 'downtime_impact', groupId: 'operations', name: 'Downtime Impact', icon: '📉', pinned: false, order: 1,
     outputPrompt: 'Analyse the revenue impact of downtime events. Correlate availability gaps with GGR dips. Estimate lost revenue per incident.',
+    personas: [
+      { id: 'dt_impact', name: 'Impact Report', icon: '📉', pinned: true, order: 0, outputPrompt: 'Generate a downtime impact report. For each incident: duration, affected games/brands, estimated GGR impact (€), root cause if identifiable, prevention recommendation. Summarise total estimated revenue impact at the top.' },
+    ],
     checks: { mandatory: [
       { id: 'availability_ggr', name: 'Availability vs GGR', description: 'Correlate any availability drops with GGR dips. Estimate revenue impact.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
     ], optional: [] }
@@ -503,7 +531,24 @@ function loadData() {
   const savedGroups = localStorage.getItem(DAB_GROUPS_KEY);
   const savedModes  = localStorage.getItem(DAB_MODES_KEY);
   _groups = savedGroups ? JSON.parse(savedGroups) : DEFAULT_GROUPS.map(g => ({...g}));
-  _modes  = savedModes  ? JSON.parse(savedModes)  : DEFAULT_MODES.map(m => ({...m, checks: { mandatory: m.checks.mandatory.map(c=>({...c})), optional: [] }}));
+  const rawModes = savedModes ? JSON.parse(savedModes) : null;
+  if (rawModes) {
+    _modes = rawModes.map(m => {
+      // Backfill personas from defaults if missing
+      if (!m.personas || m.personas.length === 0) {
+        const def = DEFAULT_MODES.find(d => d.id === m.id);
+        if (def && def.personas) m.personas = def.personas.map(p => ({...p}));
+        else m.personas = [];
+      }
+      return m;
+    });
+  } else {
+    _modes = DEFAULT_MODES.map(m => ({
+      ...m,
+      checks: { mandatory: m.checks.mandatory.map(c=>({...c})), optional: [] },
+      personas: (m.personas || []).map(p => ({...p}))
+    }));
+  }
   _globalRules = localStorage.getItem(DAB_GLOBAL_KEY) || 'Never recommend a branded or bespoke game that was built for a different customer to this customer. Always check if any of our latest 3 released games are relevant for this operator.';
 }
 
@@ -628,6 +673,7 @@ function getDateFilters() {
 // ─── RUN SCREEN — GROUP + MODE SELECTOR ──────────────────────────────────────
 let _selectedGroupId = null;
 let _selectedModeId  = null;
+let _selectedPersonaId = null;
 
 function renderGroupTabs() {
   const container = document.getElementById('group-tabs-run');
@@ -661,6 +707,13 @@ function selectGroup(groupId) {
   _selectedGroupId = groupId;
   const firstMode = getPinnedModes(groupId)[0] || getModesForGroup(groupId)[0];
   _selectedModeId = firstMode ? firstMode.id : null;
+  // Auto-select first persona of first mode
+  if (firstMode && firstMode.personas && firstMode.personas.length > 0) {
+    const fp = firstMode.personas.find(p => p.pinned) || firstMode.personas[0];
+    _selectedPersonaId = fp ? fp.id : null;
+  } else {
+    _selectedPersonaId = null;
+  }
   renderGroupTabs();
   renderModePills();
 }
@@ -693,6 +746,55 @@ function renderModePills() {
     html += `<div class="mode-info visible">${mode.icon} <strong>${mode.name}</strong> — ${count} checks · default scope: <em>${getDefaultScopeHint(mode.id)}</em></div>`;
   }
   container.innerHTML = html;
+  renderPersonaPills();
+}
+
+function renderPersonaPills() {
+  // Remove existing persona row if any
+  const existing = document.getElementById('persona-pills-run');
+  if (existing) existing.remove();
+
+  const mode = _selectedModeId ? getModeById(_selectedModeId) : null;
+  if (!mode || !mode.personas || mode.personas.length === 0) return;
+
+  const container = document.getElementById('mode-pills-run');
+  if (!container) return;
+
+  const pinned   = mode.personas.filter(p => p.pinned).slice(0, 4);
+  const overflow = [...mode.personas.filter(p => p.pinned).slice(4), ...mode.personas.filter(p => !p.pinned)];
+
+  const row = document.createElement('div');
+  row.id = 'persona-pills-run';
+  row.className = 'persona-pills-row';
+  row.innerHTML = '<div class="persona-pills-label">🎭 Persona — output format</div>';
+
+  let pillsHtml = '<div class="mode-pills">';
+  pinned.forEach(p => {
+    const active = p.id === _selectedPersonaId ? ' active' : '';
+    pillsHtml += `<div class="persona-pill${active}" onclick="selectPersona('${p.id}')">${p.icon} ${p.name}</div>`;
+  });
+  if (overflow.length) {
+    pillsHtml += `<div class="persona-pill" style="border-style:dashed;position:relative" onclick="toggleMorePersonas(event)">More ▾
+      <div class="more-dropdown" id="persona-more-dd" style="top:110%;left:0;right:auto">
+        ${overflow.map(p=>`<div class="more-dropdown-item" onclick="selectPersona('${p.id}')">${p.icon} ${p.name}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  pillsHtml += '</div>';
+  row.innerHTML += pillsHtml;
+
+  container.appendChild(row);
+}
+
+function toggleMorePersonas(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('persona-more-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+function selectPersona(personaId) {
+  _selectedPersonaId = personaId;
+  renderPersonaPills();
 }
 
 function getDefaultScopeHint(modeId) {
@@ -708,6 +810,10 @@ function toggleMoreModes(e) {
 
 function selectMode(modeId) {
   _selectedModeId = modeId;
+  // Auto-select first persona
+  const mode = getModeById(modeId);
+  const firstPersona = mode && mode.personas ? (mode.personas.find(p => p.pinned) || mode.personas[0]) : null;
+  _selectedPersonaId = firstPersona ? firstPersona.id : null;
   // Auto-suggest company scope for Finance/Operations modes
   const financeOpsIds = ['cfo_review','rtp_audit','downtime_impact'];
   if (financeOpsIds.includes(modeId) && currentScope !== 'company') {
@@ -901,6 +1007,22 @@ function renderModeConfigBody() {
       </div>
     </div>
 
+    <!-- Personas section -->
+    <div style="margin-top:20px">
+      <h4 style="font-size:12px;font-weight:800;color:#4A235A;margin:0 0 10px;display:flex;align-items:center;gap:8px">🎭 Personas <span style="font-size:10px;color:#64748B;font-weight:400">— output format for each audience</span></h4>
+      <div id="personas-list"></div>
+      <div class="add-check-panel" style="background:#EEF2FF;border-color:#C7D2FE;margin-top:8px">
+        <h4 style="color:#3730A3">➕ Add Persona</h4>
+        <p style="color:#4338CA">Define a new output format for a specific audience (e.g. CFO, Board, AM).</p>
+        <div class="form-row"><label>Name</label><input type="text" id="new-persona-name" placeholder="e.g. Board Update"></div>
+        <div class="form-row"><label>Icon</label><input type="text" id="new-persona-icon" placeholder="e.g. 📑" style="max-width:80px"></div>
+        <div class="form-row"><label>Output Prompt</label><textarea id="new-persona-prompt" placeholder="Describe how Jedify should format results for this persona..."></textarea></div>
+        <div style="display:flex;gap:8px;margin-top:4px">
+          <button class="save-btn" style="background:#3730A3" onclick="addPersonaToMode()">Add Persona</button>
+        </div>
+      </div>
+    </div>
+
     <div class="output-prompt-area">
       <label>🎯 Output Prompt — how should Jedify present results for ${mode.icon} ${mode.name}?</label>
       <textarea class="form-textarea" id="output-prompt-input" rows="3">${mode.outputPrompt || ''}</textarea>
@@ -912,6 +1034,7 @@ function renderModeConfigBody() {
   </div>`;
 
   container.innerHTML = html;
+  renderPersonasList();
 }
 
 function renderCheckItemHTML(check, type) {
@@ -1003,6 +1126,12 @@ function buildPayload(mode, group) {
     dateContext = `over the last ${monthsBack} months`;
   }
 
+  // Determine output instruction — persona overrides mode default
+  const persona = _selectedPersonaId && mode.personas
+    ? mode.personas.find(p => p.id === _selectedPersonaId)
+    : null;
+  const outputInstruction = (persona ? persona.outputPrompt : null) || mode.outputPrompt || 'Summarise your findings clearly.';
+
   // Build full customPrompt: rules + scope + checks + output instruction
   const ruleSection = combinedRules.trim()
     ? `Analysis rules (apply throughout):\n${combinedRules.trim()}\n\n`
@@ -1017,7 +1146,7 @@ function buildPayload(mode, group) {
     '',
     `Investigate the following:\n${checkBullets}`,
     '',
-    mode.outputPrompt || 'Summarise your findings clearly.',
+    outputInstruction,
   ].join('\n');
 
   return {
@@ -1054,15 +1183,17 @@ async function runAnalysis() {
   cancelBtn.style.display = 'inline-block';
   runStatus.textContent = '⏳ Running ' + mode.name + '...';
 
+  const persona = _selectedPersonaId && mode.personas ? mode.personas.find(p => p.id === _selectedPersonaId) : null;
+
   showSection('output', document.querySelector('.nav a[href="#output"]'));
-  prepareOutputTab(mode);
+  prepareOutputTab(mode, persona);
 
   try {
     const payload = buildPayload(mode, group);
-    await fireForeground(payload, mode, _currentAbortController.signal);
+    await fireForeground(payload, mode, persona, _currentAbortController.signal);
   } catch (e) {
     if (e.name !== 'AbortError') showToast('❌ ' + e.message, true);
-    setOutputTabError(mode, e.message);
+    setOutputTabError(mode, persona, e.message);
   } finally {
     runBtn.disabled = false;
     cancelBtn.style.display = 'none';
@@ -1071,7 +1202,7 @@ async function runAnalysis() {
   }
 }
 
-async function fireForeground(payload, mode, abortSignal) {
+async function fireForeground(payload, mode, persona, abortSignal) {
   const res = await apiFetch('/api/research', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1079,14 +1210,14 @@ async function fireForeground(payload, mode, abortSignal) {
   });
   if (!res.ok) throw new Error('Server returned ' + res.status);
   if (res.headers.get('content-type')?.includes('text/event-stream')) {
-    return readSSEStream(res, mode);
+    return readSSEStream(res, mode, persona);
   }
   const data = await res.json();
-  renderModeOutput(mode, data);
+  renderModeOutput(mode, persona, data);
   return data;
 }
 
-async function readSSEStream(res, mode) {
+async function readSSEStream(res, mode, persona) {
   const reader  = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -1098,15 +1229,15 @@ async function readSSEStream(res, mode) {
     buffer = lines.pop();
     for (const line of lines) {
       if (!line.startsWith('data: ')) continue;
-      try { handleSSEEvent(JSON.parse(line.slice(6)), mode); } catch {}
+      try { handleSSEEvent(JSON.parse(line.slice(6)), mode, persona); } catch {}
     }
   }
 }
 
-function handleSSEEvent(event, mode) {
-  if (event.type === 'stage')  updateOutputTabStage(mode, event.stage);
-  else if (event.type === 'result') renderModeOutput(mode, event.data);
-  else if (event.type === 'error')  setOutputTabError(mode, event.message);
+function handleSSEEvent(event, mode, persona) {
+  if (event.type === 'stage')       updateOutputTabStage(mode, persona, event.stage || event.label);
+  else if (event.type === 'result') renderModeOutput(mode, persona, event.data);
+  else if (event.type === 'error')  setOutputTabError(mode, persona, event.message || event.error);
 }
 
 function cancelRun() {
@@ -1138,15 +1269,17 @@ function switchOutputTab(paneId, tabEl) {
   if (tabEl) tabEl.classList.add('active');
 }
 
-function prepareOutputTab(mode) {
-  const paneId = 'pane-mode-' + mode.id;
-  const tabId  = 'tab-mode-'  + mode.id;
+function prepareOutputTab(mode, persona) {
+  const runId  = mode.id + '_' + (persona ? persona.id : 'default');
+  const paneId = 'pane-run-' + runId;
+  const tabId  = 'tab-run-'  + runId;
+  const tabLabel = persona ? `${persona.icon} ${persona.name}` : `${mode.icon} ${mode.name}`;
   if (!document.getElementById(tabId)) {
     const tab = document.createElement('div');
     tab.className = 'output-tab';
     tab.id = tabId;
-    tab.innerHTML = `${mode.icon} ${mode.name} <span class="output-tab-badge tab-loading" id="badge-${mode.id}">⏳</span>`;
-    tab.onclick = function() { switchOutputTab('mode-' + mode.id, this); };
+    tab.innerHTML = `${tabLabel} <span class="output-tab-badge tab-loading" id="badge-${runId}">⏳</span>`;
+    tab.onclick = function() { switchOutputTab('run-' + runId, this); };
     document.getElementById('output-tabs').appendChild(tab);
   }
   if (!document.getElementById(paneId)) {
@@ -1155,58 +1288,118 @@ function prepareOutputTab(mode) {
     pane.id = paneId;
     document.getElementById('output-panes').appendChild(pane);
   }
-  document.getElementById(paneId).innerHTML = `<div class="stage-indicator">⏳ Initialising ${mode.name} analysis...</div>`;
-  switchOutputTab('mode-' + mode.id, document.getElementById(tabId));
+  document.getElementById(paneId).innerHTML = `<div class="stage-indicator">⏳ Initialising ${tabLabel} analysis...</div>`;
+  switchOutputTab('run-' + runId, document.getElementById(tabId));
 }
 
-function updateOutputTabStage(mode, stage) {
-  const pane = document.getElementById('pane-mode-' + mode.id);
+function updateOutputTabStage(mode, persona, stage) {
+  const runId = mode.id + '_' + (persona ? persona.id : 'default');
+  const pane = document.getElementById('pane-run-' + runId);
   if (pane) pane.innerHTML = `<div class="stage-indicator">⏳ ${stage}</div>`;
 }
 
-function setOutputTabError(mode, msg) {
-  const badge = document.getElementById('badge-' + mode.id);
+function setOutputTabError(mode, persona, msg) {
+  const runId = mode.id + '_' + (persona ? persona.id : 'default');
+  const badge = document.getElementById('badge-' + runId);
   if (badge) { badge.textContent = '❌'; badge.className = 'output-tab-badge tab-error'; }
-  const pane = document.getElementById('pane-mode-' + mode.id);
+  const pane = document.getElementById('pane-run-' + runId);
   if (pane) pane.innerHTML = `<div class="result-card"><p style="color:#DC2626">❌ Analysis failed: ${msg || 'Unknown error'}</p></div>`;
 }
 
-function renderModeOutput(mode, data) {
-  const badge = document.getElementById('badge-' + mode.id);
+function renderModeOutput(mode, persona, data) {
+  const runId = mode.id + '_' + (persona ? persona.id : 'default');
+  const badge = document.getElementById('badge-' + runId);
   if (badge) { badge.textContent = '✅'; badge.className = 'output-tab-badge tab-ready'; }
 
-  const pane = document.getElementById('pane-mode-' + mode.id);
+  const pane = document.getElementById('pane-run-' + runId);
   if (!pane) return;
 
-  renderAnalysisResults(mode, data);
+  renderAnalysisResults(mode, persona, data);
 
   const report = data.report || (data.checks ? summariseChecks(data.checks) : '');
-  const scopeLabel = data.scopeLabel || '';
+  const tabLabel = persona ? `${persona.icon} ${persona.name}` : `${mode.icon} ${mode.name}`;
   pane.innerHTML = `
     <div class="result-card">
-      <h3>${mode.icon} ${mode.name}</h3>
-      <div class="meta">Completed ${new Date().toLocaleTimeString()}${scopeLabel ? ' · ' + scopeLabel : ''} · ${(data.checks||[]).length || '?'} checks</div>
+      <h3>${tabLabel}</h3>
+      <div class="meta">${mode.icon} ${mode.name} · Completed ${new Date().toLocaleTimeString()} · ${(data.checks||[]).length || '?'} checks</div>
       ${renderMarkdown(report)}
     </div>`;
-  showToast('✅ ' + mode.name + ' analysis ready');
+  showToast('✅ ' + tabLabel + ' analysis ready');
 }
 
 function summariseChecks(checks) {
   return checks.map(c => `## ${c.name}\n${c.answer || c.finding || ''}`).join('\n\n');
 }
 
-function renderAnalysisResults(mode, data) {
+function renderAnalysisResults(mode, persona, data) {
   const pane = document.getElementById('pane-analysis');
   if (!pane) return;
   const report = data.report || summariseChecks(data.checks || []);
+  const tabLabel = persona ? `${persona.icon} ${persona.name}` : `${mode.icon} ${mode.name}`;
   const card = document.createElement('div');
   card.className = 'result-card';
-  card.innerHTML = `<h3>${mode.icon} ${mode.name} — Full Results</h3>
-    <div class="meta">${new Date().toLocaleString()}</div>
+  card.innerHTML = `<h3>${tabLabel} — Full Results</h3>
+    <div class="meta">${mode.icon} ${mode.name} · ${new Date().toLocaleString()}</div>
     ${renderMarkdown(report)}`;
   const existing = pane.querySelector('.result-card');
   if (existing) pane.insertBefore(card, existing);
   else { pane.innerHTML = ''; pane.appendChild(card); }
+}
+
+// ─── PERSONA MANAGEMENT ───────────────────────────────────────────────────────
+function renderPersonasList() {
+  const mode = getModeById(_configModeId);
+  const container = document.getElementById('personas-list');
+  if (!mode || !container) return;
+  const personas = mode.personas || [];
+  if (personas.length === 0) {
+    container.innerHTML = '<p style="font-size:12px;color:#94A3B8;padding:8px 0">No personas yet.</p>';
+    return;
+  }
+  container.innerHTML = personas.map(p => `
+    <div class="check-item" style="margin-bottom:8px">
+      <div class="check-item-body">
+        <div class="check-item-name">${p.icon} ${p.name} ${p.pinned ? '<span class="check-badge badge-mandatory">PINNED</span>' : ''}</div>
+        <div class="check-item-desc" style="white-space:pre-wrap">${p.outputPrompt}</div>
+      </div>
+      <div class="check-item-actions">
+        <button class="check-action-btn" onclick="togglePersonaPin('${p.id}')">📌</button>
+        ${!p.builtin ? `<button class="check-action-btn" onclick="deletePersona('${p.id}')">🗑</button>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function addPersonaToMode() {
+  const name   = document.getElementById('new-persona-name').value.trim();
+  const icon   = document.getElementById('new-persona-icon').value.trim() || '🎭';
+  const prompt = document.getElementById('new-persona-prompt').value.trim();
+  if (!name || !prompt) { showToast('⚠️ Name and Output Prompt are required.', true); return; }
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  if (!mode.personas) mode.personas = [];
+  mode.personas.push({ id: 'persona_' + Date.now(), name, icon, outputPrompt: prompt, pinned: true, order: mode.personas.length, builtin: false });
+  saveModes();
+  document.getElementById('new-persona-name').value = '';
+  document.getElementById('new-persona-icon').value = '';
+  document.getElementById('new-persona-prompt').value = '';
+  renderPersonasList();
+  showToast('✅ Persona "' + name + '" added');
+}
+
+function deletePersona(personaId) {
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  mode.personas = (mode.personas || []).filter(p => p.id !== personaId);
+  saveModes();
+  renderPersonasList();
+  showToast('✅ Persona removed');
+}
+
+function togglePersonaPin(personaId) {
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  const p = (mode.personas || []).find(p => p.id === personaId);
+  if (p) { p.pinned = !p.pinned; saveModes(); renderPersonasList(); }
 }
 
 // ─── MARKDOWN RENDERER ────────────────────────────────────────────────────────
