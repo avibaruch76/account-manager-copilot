@@ -981,23 +981,54 @@ function buildPayload(mode, group) {
   const { endMonth, monthsBack } = getDateFilters();
 
   const allChecks = [...mode.checks.mandatory, ...mode.checks.optional];
-  const enabledChecks = allChecks.filter(c => c.enabled !== false).map(c => c.id);
-  const checkDefinitions = {};
-  allChecks.forEach(c => {
-    checkDefinitions[c.id] = { name: c.name, question: c.question || c.description || c.name };
-  });
+  const activeChecks = allChecks.filter(c => c.enabled !== false);
 
+  // Build combined rules
   const combinedRules = [_globalRules, group.groupRules].filter(Boolean).join('\n\n');
+
+  // Build the scope/entity label for the prompt
+  const entityLabel = pop.scope === 'company'
+    ? 'the full company portfolio (all operators and brands)'
+    : `${pop.scope} "${pop.values.join(', ')}"`;
+
+  // Build date context
+  let dateContext = '';
+  if (endMonth) {
+    const [y, m] = endMonth.split('-').map(Number);
+    const end = new Date(y, m - 1, 1);
+    const start = new Date(y, m - monthsBack, 1);
+    const fmt = d => d.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    dateContext = `from ${fmt(start)} to ${fmt(end)}`;
+  } else {
+    dateContext = `over the last ${monthsBack} months`;
+  }
+
+  // Build full customPrompt: rules + scope + checks + output instruction
+  const ruleSection = combinedRules.trim()
+    ? `Analysis rules (apply throughout):\n${combinedRules.trim()}\n\n`
+    : '';
+
+  const checkBullets = activeChecks
+    .map(c => `• ${c.name}: ${c.question || c.description || c.name}`)
+    .join('\n');
+
+  const customPrompt = [
+    ruleSection + `Research ${entityLabel} ${dateContext}.`,
+    '',
+    `Investigate the following:\n${checkBullets}`,
+    '',
+    mode.outputPrompt || 'Summarise your findings clearly.',
+  ].join('\n');
 
   return {
     scope: pop.scope,
     values: pop.values,
+    entity: pop.scope === 'company' ? 'All (Company-wide)' : pop.values.join(', '),
     endMonth,
     monthsBack,
-    enabledChecks,
-    checkDefinitions,
+    enabledChecks: activeChecks.map(c => c.id),
     globalRules: combinedRules,
-    customPrompt: mode.outputPrompt || '',
+    customPrompt,
     persona: mode.id,
   };
 }
@@ -1093,22 +1124,8 @@ function showPromptPreview() {
   const group = _selectedGroupId ? getGroupById(_selectedGroupId) : null;
   if (!mode || !group) { showToast('⚠️ Select a mode first.', true); return; }
   const payload = buildPayload(mode, group);
-  const scopeLine = payload.scope === 'company' ? 'Company-wide (no entity filter)' : `${payload.scope}: ${(payload.values||[]).join(', ')}`;
-  const preview = [
-    '=== Global + Group Rules ===',
-    payload.globalRules,
-    '',
-    '=== Output Prompt ===',
-    payload.customPrompt,
-    '',
-    `=== Checks (${payload.enabledChecks.length}) ===`,
-    payload.enabledChecks.map(id => payload.checkDefinitions[id]?.name || id).join('\n'),
-    '',
-    '=== Scope ===',
-    scopeLine,
-    `End month: ${payload.endMonth || 'current'} · ${payload.monthsBack} months back`,
-  ].join('\n');
-  document.getElementById('prompt-preview-text').textContent = preview;
+  // Show the exact prompt that will be sent to Jedify
+  document.getElementById('prompt-preview-text').textContent = payload.customPrompt;
   document.getElementById('prompt-preview-area').style.display = 'block';
 }
 
