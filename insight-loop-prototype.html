@@ -2237,14 +2237,26 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
   function fireBackground(persona) {
     const checkResults = document.getElementById('check-results');
     if (checkResults) checkResults.innerHTML =
-      `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running in background — will appear when complete...</div>`;
+      `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running...</div>`;
+
+    // Show spinner on the Analysis Results nav link
+    const navLink = document.querySelector('.nav a[href="#react"]');
+    if (navLink) navLink.innerHTML = 'Analysis Results <span id="analysis-spinner" style="font-size:11px;background:#F59E0B;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">⏳</span>';
+
     return apiFetch('/api/research', {
       method: 'POST',
       body: JSON.stringify({ ...makePayload(persona), noSSE: true }),
       signal: AbortSignal.timeout(1800000)
     }).then(res => res.ok ? res.json() : Promise.reject(new Error('Server ' + res.status)))
-    .then(data => { if (data && data.report !== undefined) renderResearchReport(data); })
+    .then(data => {
+      if (data && data.report !== undefined) renderResearchReport(data);
+      // Clear spinner and show toast
+      if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
+      showToast('✅ Full analysis ready — click Analysis Results to view');
+      setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
+    })
     .catch(err => {
+      if (navLink) navLink.textContent = 'Analysis Results';
       if (checkResults) checkResults.innerHTML =
         `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ Full analysis failed: ${err.message}</div>`;
     });
