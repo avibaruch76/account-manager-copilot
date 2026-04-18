@@ -263,7 +263,17 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .persona-btn.selected{background:#4A235A;color:white;border-color:#4A235A}
 .persona-btn.admin-btn.selected{background:#1D6A39;border-color:#1D6A39}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
-@media print{body>*{display:none!important}#react-panel{display:block!important;position:static!important;box-shadow:none!important}#download-btns,#jedify-chat-panel,.nav{display:none!important}}
+@media print{
+  body>*{display:none!important}
+  #react-panel{display:block!important;position:static!important;box-shadow:none!important}
+  #download-btns,#jedify-chat-panel,.nav{display:none!important}
+  /* Tables must fit the printed page — no horizontal scroll in print */
+  table{width:100%!important;table-layout:fixed!important;border-collapse:collapse!important;font-size:11px!important;page-break-inside:auto}
+  th,td{word-break:break-word!important;white-space:normal!important;padding:6px 8px!important;border:1px solid #CBD5E1!important;overflow-wrap:break-word!important}
+  th{background:#1E2761!important;color:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  div[style*="overflow-x:auto"]{overflow:visible!important}
+  tr{page-break-inside:avoid}
+}
 /* ── Login overlay ── */
 #login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1E2761 0%,#4A235A 100%);z-index:9999;display:flex;align-items:center;justify-content:center}
 #login-overlay.hidden{display:none}
@@ -2450,7 +2460,7 @@ function renderMarkdown(raw) {
     if (/^\s*\|/.test(line)) {
       if (!inTable) {
         if (inList) { html += '</ul>'; inList = false; }
-        html += `<div style="overflow-x:auto;margin:14px 0"><table style="width:100%;border-collapse:collapse;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-radius:8px;overflow:hidden">`;
+        html += `<div style="overflow-x:auto;margin:14px 0;max-width:100%"><table style="width:100%;border-collapse:collapse;font-size:13px;table-layout:auto;box-shadow:0 1px 4px rgba(0,0,0,.06);border-radius:8px;overflow:hidden">`;
         inTable = true;
         tableHeaderDone = false;
       }
@@ -2467,9 +2477,12 @@ function renderMarkdown(raw) {
         const isTotal = /total/i.test(cells[0] || '');
         const rowBg = isTotal ? '#F0F4FF' : 'white';
         const rowStyle = isTotal ? 'font-weight:700' : '';
-        const rowHtml = cells.map(c => {
+        const rowHtml = cells.map((c, ci) => {
           const v = c.trim();
-          let style = `padding:9px 14px;border-bottom:1px solid #E2E8F0;white-space:nowrap;${rowStyle}`;
+          // Numeric/short columns: no-wrap. Last column or long text: allow wrap.
+          const isNumeric = /^[€$£\+\-\d]/.test(v) || /^\d/.test(v);
+          const noWrap = (isNumeric || ci < cells.length - 1) ? 'white-space:nowrap;' : 'white-space:normal;word-break:break-word;min-width:120px;';
+          let style = `padding:9px 14px;border-bottom:1px solid #E2E8F0;${noWrap}${rowStyle}`;
           if (/^\+\d/.test(v)) style += ';color:#1D6A39;font-weight:700';
           else if (/^-\d/.test(v) && !/^—/.test(v)) style += ';color:#DC2626;font-weight:700';
           return `<td style="${style}">${v}</td>`;
