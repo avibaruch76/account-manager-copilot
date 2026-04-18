@@ -11,9 +11,33 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const jedify = require('./jedify-direct');
 
 const PORT = process.env.PORT || 3001;
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+// Set APP_PASSWORD env var on Render to enable password protection.
+// Locally it's disabled (no env var = open access).
+const APP_PASSWORD = process.env.APP_PASSWORD || null;
+
+// Deterministic token: HMAC of the password — no session store needed.
+// If password changes on Render, all old tokens instantly invalid.
+function makeAuthToken(password) {
+  return crypto.createHmac('sha256', password).update('jedify-crm-v1').digest('hex');
+}
+
+function isAuthenticated(req) {
+  if (!APP_PASSWORD) return true; // no password set → open (local dev)
+  const header = req.headers['authorization'] || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+  return token === makeAuthToken(APP_PASSWORD);
+}
+
+function rejectUnauth(res) {
+  res.writeHead(401, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Unauthorized' }));
+}
 
 // ── MCP connection (via jedify-direct.js) ─────────────────────────────────
 
@@ -1055,10 +1079,44 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
+  // Health check — always public (Render uses this)
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, mcpReady }));
     return;
+  }
+
+  // Auth endpoint — public (needed to log in)
+  if (req.method === 'POST' && req.url === '/api/auth') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      try {
+        const { password } = JSON.parse(body);
+        if (!APP_PASSWORD) {
+          // No password set — return a no-op token
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ token: 'no-auth' }));
+          return;
+        }
+        if (password === APP_PASSWORD) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ token: makeAuthToken(APP_PASSWORD) }));
+        } else {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Wrong password' }));
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Bad request' }));
+      }
+    });
+    return;
+  }
+
+  // All other /api/* routes require authentication
+  if (req.url.startsWith('/api/') && !isAuthenticated(req)) {
+    return rejectUnauth(res);
   }
 
   if (req.method === 'GET' && req.url === '/api/research-status') {

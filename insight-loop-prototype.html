@@ -263,10 +263,34 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .persona-btn.selected{background:#4A235A;color:white;border-color:#4A235A}
 .persona-btn.admin-btn.selected{background:#1D6A39;border-color:#1D6A39}
 @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+/* ── Login overlay ── */
+#login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1E2761 0%,#4A235A 100%);z-index:9999;display:flex;align-items:center;justify-content:center}
+#login-overlay.hidden{display:none}
+.login-box{background:white;border-radius:16px;padding:40px 48px;width:360px;box-shadow:0 24px 64px rgba(0,0,0,.4);text-align:center}
+.login-box h1{font-size:20px;font-weight:800;color:#1E2761;margin:0 0 6px}
+.login-box p{font-size:13px;color:#64748B;margin:0 0 24px}
+.login-box input{width:100%;padding:12px 14px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;transition:border .2s}
+.login-box input:focus{border-color:#4A235A}
+.login-box button{margin-top:12px;width:100%;padding:12px;background:linear-gradient(135deg,#4A235A,#7D3C98);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
+.login-box button:hover{opacity:.9}
+#login-error{font-size:12px;color:#DC2626;margin-top:8px;min-height:16px}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
+
+<!-- ── Login overlay — hidden once authenticated ── -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div style="font-size:40px;margin-bottom:12px">🤖</div>
+    <h1>Account Manager Copilot</h1>
+    <p>Enter your access password to continue</p>
+    <input type="password" id="login-password" placeholder="Password"
+      onkeydown="if(event.key==='Enter')submitLogin()">
+    <button onclick="submitLogin()">Sign In</button>
+    <div id="login-error"></div>
+  </div>
+</div>
 
 <nav class="nav">
   <div class="nav-logo">🤖 Account Manager Copilot <span>Prototype</span></div>
@@ -886,9 +910,8 @@ async function previewPrompt() {
   document.getElementById('prompt-overlay').classList.add('active');
 
   try {
-    const res = await fetch(API_BASE + '/api/build-prompt', {
+    const res = await apiFetch('/api/build-prompt', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, persona, globalRules })
     });
     const data = await res.json();
@@ -1871,7 +1894,7 @@ async function cancelAnalysis() {
 
   // Tell the server to stop polling + cancel Jedify inquiry
   try {
-    await fetch(API_BASE + '/api/cancel-research', { method: 'POST' });
+    await apiFetch('/api/cancel-research', { method: 'POST' });
   } catch (e) { /* ignore */ }
 
   // Reset UI
@@ -2127,6 +2150,73 @@ const API_BASE = (location.port === '3001' || location.port === '' || location.p
   ? ''
   : 'http://localhost:3001';
 
+// ── Auth helpers ─────────────────────────────────────────────────────────────
+const AUTH_KEY = 'crm_auth_token';
+
+function getAuthToken() { return localStorage.getItem(AUTH_KEY) || ''; }
+
+function authHeaders() {
+  const t = getAuthToken();
+  return t ? { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + t }
+           : { 'Content-Type': 'application/json' };
+}
+
+// Authenticated fetch — auto-injects Bearer token and handles 401
+async function apiFetch(url, options = {}) {
+  const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + url, { ...options, headers });
+  if (res.status === 401) {
+    localStorage.removeItem(AUTH_KEY);
+    document.getElementById('login-overlay').classList.remove('hidden');
+    throw new Error('Session expired — please log in again.');
+  }
+  return res;
+}
+
+async function submitLogin() {
+  const pw = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!pw) { errEl.textContent = 'Please enter the password.'; return; }
+  try {
+    const res = await fetch(API_BASE + '/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) {
+      localStorage.setItem(AUTH_KEY, data.token);
+      document.getElementById('login-overlay').classList.add('hidden');
+    } else {
+      errEl.textContent = data.error || 'Wrong password.';
+      document.getElementById('login-password').value = '';
+    }
+  } catch (e) {
+    errEl.textContent = 'Could not reach server.';
+  }
+}
+
+// Check auth on load — show login overlay if no valid token
+(async function checkAuth() {
+  const token = getAuthToken();
+  if (!token) { return; } // overlay already visible
+  // Verify token is still valid
+  const res = await fetch(API_BASE + '/api/health').catch(() => null);
+  if (!res) return;
+  // Try a quick authenticated ping
+  const ping = await fetch(API_BASE + '/api/research-status', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  }).catch(() => null);
+  if (ping && ping.status === 401) {
+    localStorage.removeItem(AUTH_KEY);
+    return; // stay on login screen
+  }
+  document.getElementById('login-overlay').classList.add('hidden');
+})();
+
 async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
   // Admin mode: fire all 4 personas in parallel, render each as it completes
   if (_selectedPersona === 'admin') {
@@ -2144,9 +2234,8 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
         persona,
         enabledOptionalCheckIds: _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id)
       };
-      return fetch(API_BASE + '/api/research', {
+      return apiFetch('/api/research', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(1800000)
       }).then(res => {
@@ -2196,9 +2285,9 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
       ? AbortSignal.any([timeoutSignal, abortSignal])
       : timeoutSignal;
 
-    const res = await fetch(endpoint, {
+    const endpointPath = endpoint.replace(API_BASE, '');
+    const res = await apiFetch(endpointPath, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
       signal: combinedSignal
     });
@@ -2287,7 +2376,7 @@ async function readSSEStream(response) {
 
   // SSE closed without a result — check if server has a completed result (e.g. after reconnect)
   try {
-    const statusRes = await fetch(API_BASE + '/api/research-status');
+    const statusRes = await apiFetch('/api/research-status');
     if (statusRes.ok) {
       const status = await statusRes.json();
       if (status.report) return status;  // server completed while SSE was broken
@@ -3500,9 +3589,8 @@ async function sendJedifyQuestion() {
   const loadingMsg = addChatMessage('jedify', '<span style="color:#94A3B8;">Asking Jedify...</span>');
 
   try {
-    const res = await fetch(API_BASE + '/api/ask', {
+    const res = await apiFetch('/api/ask', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ question }),
       signal: AbortSignal.timeout(300000)
     });
