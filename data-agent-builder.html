@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Agent Builder</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#F0F4F8;color:#2C3E50}
+
+/* NAV */
+.nav{background:#1E2761;position:sticky;top:0;z-index:100;padding:0 28px;display:flex;align-items:center;border-bottom:3px solid #4A235A}
+.nav-logo{font-size:14px;font-weight:800;color:white;padding:13px 0;margin-right:24px;white-space:nowrap}
+.nav-logo span{color:#D7BDE2}
+.nav a{color:#AED6F1;font-size:12px;font-weight:600;text-decoration:none;padding:15px 12px;border-bottom:3px solid transparent;margin-bottom:-3px;transition:all .2s;white-space:nowrap}
+.nav a:hover,.nav a.active{color:white;border-bottom-color:#D7BDE2}
+
+/* SECTIONS */
+.section{display:none;padding:36px 40px;max-width:1040px;margin:0 auto}
+.section.active{display:block}
+.section-title{font-size:20px;font-weight:800;color:#1E2761;margin-bottom:4px}
+.section-sub{font-size:13px;color:#64748B;margin-bottom:24px}
+
+/* TOAST */
+.toast{position:fixed;top:80px;right:20px;background:#1D6A39;color:white;padding:14px 24px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:200;transform:translateX(400px);transition:transform .3s ease-out}
+.toast.show{transform:translateX(0)}
+
+/* LOGIN */
+#login-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#1E2761 0%,#4A235A 100%);z-index:9999;display:flex;align-items:center;justify-content:center}
+#login-overlay.hidden{display:none}
+.login-box{background:white;border-radius:16px;padding:40px 48px;width:360px;box-shadow:0 24px 64px rgba(0,0,0,.4);text-align:center}
+.login-box h1{font-size:20px;font-weight:800;color:#1E2761;margin:0 0 6px}
+.login-box p{font-size:13px;color:#64748B;margin:0 0 24px}
+.login-box input{width:100%;padding:12px 14px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box;outline:none;transition:border .2s}
+.login-box input:focus{border-color:#4A235A}
+.login-box button{margin-top:12px;width:100%;padding:12px;background:linear-gradient(135deg,#4A235A,#7D3C98);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
+.login-box button:hover{opacity:.9}
+#login-error{font-size:12px;color:#DC2626;margin-top:8px;min-height:16px}
+
+/* RUN SCREEN */
+.run-card{background:white;border-radius:14px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.run-card h3{font-size:13px;font-weight:800;color:#1E2761;margin-bottom:14px;text-transform:uppercase;letter-spacing:.5px}
+.scope-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.scope-row label{font-size:12px;font-weight:700;color:#64748B;min-width:70px}
+.scope-btn{padding:5px 14px;border-radius:16px;border:1.5px solid #E0E8F0;background:white;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;transition:all .15s}
+.scope-btn.active{background:#1E2761;color:white;border-color:#1E2761}
+.cascade-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:10px}
+.cascade-col>label{font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+
+/* Multi-dropdown */
+.multi-dropdown{position:relative}
+.multi-trigger{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border:1.5px solid #E0E8F0;border-radius:8px;cursor:pointer;background:white;font-size:12px;transition:border .15s}
+.multi-trigger:hover{border-color:#4A235A}
+.multi-panel{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1.5px solid #E0E8F0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:50;max-height:260px;overflow-y:auto}
+.multi-dropdown.open .multi-panel{display:block}
+.multi-panel .search{width:100%;padding:8px 10px;border:none;border-bottom:1px solid #E0E8F0;font-size:12px;outline:none}
+.multi-option{display:flex;align-items:center;gap:8px;padding:7px 12px;cursor:pointer;font-size:12px}
+.multi-option:hover{background:#F8FAFC}
+.multi-option input{cursor:pointer}
+.select-actions{display:flex;gap:8px;padding:8px 10px;border-top:1px solid #E0E8F0}
+.select-actions button{flex:1;padding:5px;font-size:11px;border:1px solid #E0E8F0;border-radius:5px;cursor:pointer;background:white}
+.selection-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.chip{padding:4px 10px;background:#EEF2FF;color:#1E2761;border-radius:12px;font-size:11px;font-weight:600}
+
+/* Company scope banner */
+.company-scope-banner{background:#EEF2FF;border:1.5px solid #C7D2FE;border-radius:10px;padding:16px 20px;display:flex;align-items:center;gap:12px;margin-top:10px}
+.company-scope-banner .icon{font-size:28px}
+.company-scope-banner .text strong{font-size:13px;color:#1E2761;display:block}
+.company-scope-banner .text span{font-size:11px;color:#64748B}
+
+/* Run button */
+.run-btn{padding:12px 28px;background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;transition:opacity .2s}
+.run-btn:hover{opacity:.9}
+.run-btn:disabled{opacity:.5;cursor:not-allowed}
+
+/* GROUP TABS */
+.group-tabs{display:flex;gap:0;border-bottom:2px solid #E0E8F0;margin-bottom:14px;flex-wrap:nowrap;overflow:hidden}
+.group-tab{padding:9px 18px;font-size:12px;font-weight:700;color:#64748B;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15s}
+.group-tab:hover{color:#1E2761}
+.group-tab.active{color:#1E2761;border-bottom-color:#1E2761}
+.more-btn{padding:9px 14px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;position:relative}
+.more-btn:hover{color:#1E2761}
+.more-dropdown{position:absolute;top:100%;right:0;background:white;border:1.5px solid #E0E8F0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:60;min-width:160px;display:none}
+.more-dropdown.open{display:block}
+.more-dropdown-item{padding:9px 16px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.more-dropdown-item:hover{background:#F8FAFC;color:#1E2761}
+
+/* MODE PILLS */
+.mode-pills{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.mode-pill{padding:7px 16px;border-radius:20px;border:1.5px solid #E0E8F0;background:white;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;transition:all .2s;white-space:nowrap}
+.mode-pill:hover{border-color:#4A235A;color:#4A235A}
+.mode-pill.active{background:#1E2761;color:white;border-color:#1E2761}
+.mode-info{margin-top:10px;padding:10px 14px;background:#EEF2FF;border-radius:8px;font-size:12px;color:#1E2761;display:none}
+.mode-info.visible{display:block}
+
+/* CONFIG SCREEN */
+.config-card{background:white;border-radius:14px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.config-card h3{font-size:13px;font-weight:800;color:#1E2761;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+.global-rules-box{background:#FFF3E0;border:1.5px solid #FB8C00;border-radius:12px;padding:20px;margin-bottom:20px}
+.global-rules-box h3{color:#E65100;font-size:13px;font-weight:800;margin-bottom:8px}
+.global-rules-box p{font-size:11px;color:#BF360C;margin-bottom:10px}
+.group-config-tabs{display:flex;gap:0;border-bottom:2px solid #E0E8F0;margin-bottom:16px;flex-wrap:nowrap}
+.group-config-tab{padding:9px 18px;font-size:12px;font-weight:700;color:#64748B;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15px}
+.group-config-tab:hover{color:#1E2761}
+.group-config-tab.active{color:#1E2761;border-bottom-color:#1E2761}
+.new-group-tab{padding:9px 14px;font-size:12px;font-weight:700;color:#7C3AED;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px}
+.group-rules-area{background:#F8FAFC;border:1.5px solid #E0E8F0;border-radius:10px;padding:16px;margin-bottom:16px}
+.group-rules-area label{font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.3px}
+.form-textarea{width:100%;padding:10px 12px;border:1.5px solid #E0E8F0;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;min-height:64px;line-height:1.6}
+.form-textarea:focus{outline:none;border-color:#4A235A}
+.save-btn{padding:7px 16px;background:#1E2761;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer}
+.save-btn:hover{opacity:.9}
+.saved-indicator{font-size:11px;color:#1D6A39;margin-left:8px;display:none}
+
+/* CHECK LIST */
+.check-list{list-style:none;margin:0 0 14px 0;padding:0}
+.check-item{display:flex;align-items:flex-start;gap:12px;background:white;border:1.5px solid #E0E8F0;border-radius:10px;padding:12px 16px;margin-bottom:8px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.check-item-body{flex:1}
+.check-item-name{font-size:13px;font-weight:700;color:#1E2761}
+.check-item-desc{font-size:11px;color:#64748B;margin-top:3px;line-height:1.5}
+.check-badge{display:inline-block;padding:2px 7px;border-radius:8px;font-size:9px;font-weight:800;letter-spacing:.5px;margin-left:6px;vertical-align:middle}
+.badge-mandatory{background:#1E2761;color:white}
+.badge-optional{background:#4A235A;color:white}
+.check-item-actions{display:flex;gap:6px;flex-shrink:0}
+.check-action-btn{padding:4px 8px;border:1px solid #E0E8F0;border-radius:6px;background:white;font-size:11px;cursor:pointer;color:#64748B}
+.check-action-btn:hover{background:#F8FAFC;color:#1E2761}
+.add-check-panel{background:#FAF5FF;border:1.5px dashed #D8B4FE;border-radius:12px;padding:20px;margin-top:16px}
+.add-check-panel h4{font-size:13px;font-weight:800;color:#6B21A8;margin-bottom:4px}
+.add-check-panel p{font-size:11px;color:#7E22CE;margin-bottom:14px}
+.form-row{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
+.form-row label{font-size:11px;font-weight:700;color:#64748B;min-width:100px;padding-top:8px;text-align:right}
+.form-row input,.form-row textarea,.form-row select{flex:1;padding:8px 10px;border:1.5px solid #E0E8F0;border-radius:7px;font-size:12px;font-family:inherit}
+.form-row textarea{resize:vertical;min-height:52px}
+.form-row input:focus,.form-row textarea:focus,.form-row select:focus{outline:none;border-color:#4A235A}
+.output-prompt-area{background:#EEF2FF;border:1.5px solid #C7D2FE;border-radius:10px;padding:16px;margin-top:14px}
+.output-prompt-area label{font-size:11px;font-weight:700;color:#3730A3;display:block;margin-bottom:6px}
+
+/* OUTPUT TABS */
+.output-tabs{display:flex;gap:0;border-bottom:2px solid #E0E8F0;margin-bottom:20px;flex-wrap:wrap}
+.output-tab{padding:10px 18px;font-size:12px;font-weight:700;color:#64748B;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15s}
+.output-tab:hover{color:#1E2761}
+.output-tab.active{color:#1E2761;border-bottom-color:#1E2761}
+.output-tab-badge{font-size:9px;padding:2px 6px;border-radius:8px;margin-left:6px;font-weight:700}
+.tab-loading{background:#F59E0B;color:white}
+.tab-ready{background:#1D6A39;color:white}
+.tab-error{background:#DC2626;color:white}
+
+/* OUTPUT PANES */
+.output-pane{display:none}
+.output-pane.active{display:block}
+.result-card{background:white;border-radius:14px;border:1.5px solid #E0E8F0;padding:24px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.result-card h3{font-size:15px;font-weight:800;color:#1E2761;margin-bottom:4px}
+.result-card .meta{font-size:11px;color:#94A3B8;margin-bottom:16px}
+.stage-indicator{padding:12px 16px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:12px;color:#92400E;margin-bottom:12px}
+
+/* MARKDOWN */
+.md-table-wrap{overflow-x:auto;margin:14px 0;max-width:100%}
+.md-table-wrap table{width:100%;border-collapse:collapse;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-radius:8px;overflow:hidden}
+
+@media print{
+  .output-tabs,.nav{display:none!important}
+  .output-pane.active{display:block!important}
+  table{width:100%!important;table-layout:fixed!important;border-collapse:collapse!important;font-size:11px!important}
+  th,td{word-break:break-word!important;white-space:normal!important;padding:6px 8px!important;border:1px solid #CBD5E1!important}
+  th{background:#1E2761!important;color:white!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style>
+</head>
+<body>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay">
+  <div class="login-box">
+    <div style="font-size:40px;margin-bottom:12px">🏗️</div>
+    <h1>Data Agent Builder</h1>
+    <p>Enter your access password to continue</p>
+    <input type="password" id="login-password" placeholder="Password"
+      onkeydown="if(event.key==='Enter')submitLogin()">
+    <button onclick="submitLogin()">Sign In</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- NAV -->
+<nav class="nav">
+  <div class="nav-logo">🏗️ Data Agent Builder <span>Beta</span></div>
+  <a href="#run" class="active" onclick="showSection('run',this)">▶ Run</a>
+  <a href="#config" onclick="showSection('config',this)">⚙️ Config</a>
+  <a href="#output" onclick="showSection('output',this)">📊 Output</a>
+</nav>
+
+<!-- RUN SECTION -->
+<div class="section active" id="section-run">
+  <div class="section-title">▶ Run Analysis</div>
+  <div class="section-sub">Select a research mode and scope, then run.</div>
+
+  <!-- GROUP + MODE SELECTOR -->
+  <div class="run-card" id="mode-selector-card">
+    <h3>Research Mode</h3>
+    <div id="group-tabs-run"></div>
+    <div id="mode-pills-run" style="margin-top:10px"></div>
+  </div>
+
+  <!-- SCOPE SELECTOR -->
+  <div class="run-card">
+    <h3>Scope & Date</h3>
+    <div class="scope-row">
+      <label>Scope:</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="scope-btn active" data-scope="company"  onclick="setScope('company',this)">🌍 Company (All)</button>
+        <button class="scope-btn"        data-scope="operator" onclick="setScope('operator',this)">Operators</button>
+        <button class="scope-btn"        data-scope="brand"    onclick="setScope('brand',this)">Brands</button>
+        <button class="scope-btn"        data-scope="account"  onclick="setScope('account',this)">Accounts</button>
+      </div>
+    </div>
+    <div class="scope-row">
+      <label>End month:</label>
+      <input type="month" id="filter-end-month" style="padding:5px 8px;border:1.5px solid #E0E8F0;border-radius:7px;font-size:12px;font-family:inherit">
+      <label style="margin-left:14px">Months back:</label>
+      <select id="filter-months-back" style="padding:5px 8px;border:1.5px solid #E0E8F0;border-radius:7px;font-size:12px;font-family:inherit">
+        <option value="3">3</option>
+        <option value="6" selected>6</option>
+        <option value="9">9</option>
+        <option value="12">12</option>
+        <option value="18">18</option>
+        <option value="24">24</option>
+      </select>
+    </div>
+
+    <!-- Company scope banner (shown when Company selected) -->
+    <div class="company-scope-banner" id="company-scope-banner">
+      <div class="icon">🌍</div>
+      <div class="text">
+        <strong>Company-wide analysis</strong>
+        <span>Runs across all data — no operator or brand filter applied. Best for portfolio-level and C-suite views.</span>
+      </div>
+    </div>
+
+    <!-- Entity dropdowns (shown for brand/operator/account scopes) -->
+    <div id="entity-dropdowns" style="display:none">
+      <div class="cascade-grid">
+        <div class="cascade-col" id="col-operator">
+          <label>Operator</label>
+          <div class="multi-dropdown" id="dd-operator">
+            <div class="multi-trigger" onclick="toggleDropdown('dd-operator')">
+              <span class="multi-label">Select operators...</span><span>▼</span>
+            </div>
+            <div class="multi-panel">
+              <input class="search" placeholder="Search..." oninput="filterOptions('dd-operator',this.value)">
+              <div class="multi-options" id="opts-operator"></div>
+              <div class="select-actions">
+                <button onclick="selectAll('dd-operator');updateChips()">All</button>
+                <button onclick="clearAll('dd-operator');updateChips()">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cascade-col" id="col-brand">
+          <label>Brand</label>
+          <div class="multi-dropdown" id="dd-brand">
+            <div class="multi-trigger" onclick="toggleDropdown('dd-brand')">
+              <span class="multi-label">Select brands...</span><span>▼</span>
+            </div>
+            <div class="multi-panel">
+              <input class="search" placeholder="Search..." oninput="filterOptions('dd-brand',this.value)">
+              <div class="multi-options" id="opts-brand"></div>
+              <div class="select-actions">
+                <button onclick="selectAll('dd-brand');updateChips()">All</button>
+                <button onclick="clearAll('dd-brand');updateChips()">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="cascade-col" id="col-accounts">
+          <label>Account</label>
+          <div class="multi-dropdown" id="dd-accounts">
+            <div class="multi-trigger" onclick="toggleDropdown('dd-accounts')">
+              <span class="multi-label">Select accounts...</span><span>▼</span>
+            </div>
+            <div class="multi-panel">
+              <input class="search" placeholder="Search..." oninput="filterOptions('dd-accounts',this.value)">
+              <div class="multi-options" id="opts-accounts"></div>
+              <div class="select-actions">
+                <button onclick="selectAll('dd-accounts');updateChips()">All</button>
+                <button onclick="clearAll('dd-accounts');updateChips()">Clear</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="selection-chips" id="selection-chips"></div>
+    </div>
+  </div>
+
+  <!-- Prompt preview -->
+  <div id="prompt-preview-area" style="display:none;margin-bottom:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.5px">📋 Prompt Preview</span>
+      <button onclick="document.getElementById('prompt-preview-area').style.display='none'" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:12px">✕</button>
+    </div>
+    <pre id="prompt-preview-text" style="background:#1E2761;color:#E2E8F0;padding:16px;border-radius:10px;font-size:11px;white-space:pre-wrap;max-height:200px;overflow-y:auto;font-family:'Courier New',monospace"></pre>
+  </div>
+
+  <div style="display:flex;align-items:center;gap:12px;margin-top:4px;flex-wrap:wrap">
+    <button class="run-btn" onclick="runAnalysis()" id="run-btn">▶ Run Analysis</button>
+    <button onclick="showPromptPreview()" style="padding:10px 18px;background:white;border:1.5px solid #E0E8F0;border-radius:10px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer">👁 Preview Prompt</button>
+    <button id="cancel-btn" onclick="cancelRun()" style="display:none;padding:10px 16px;background:#DC2626;color:white;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">✕ Cancel</button>
+    <span id="run-status" style="font-size:12px;color:#64748B"></span>
+  </div>
+</div>
+
+<!-- CONFIG SECTION -->
+<div class="section" id="section-config">
+  <div class="section-title">⚙️ Research Config</div>
+  <div class="section-sub">Define Groups, Modes and Checks. Each group has its own research rules and modes.</div>
+
+  <!-- GLOBAL RULES -->
+  <div class="global-rules-box">
+    <h3>🌍 Global Analysis Rules — apply to every run, every group</h3>
+    <p>These rules are prepended to ALL research runs regardless of group. Use them for company-wide guardrails.</p>
+    <textarea id="global-rules-input" class="form-textarea" rows="3"></textarea>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+      <button class="save-btn" style="background:#E65100" onclick="saveGlobalRulesUI()">Save Rules</button>
+      <span class="saved-indicator" id="global-rules-saved">✅ Saved</span>
+    </div>
+  </div>
+
+  <!-- GROUP TABS -->
+  <div class="config-card">
+    <div id="group-config-tabs-container"></div>
+    <div id="group-config-body"></div>
+  </div>
+</div>
+
+<!-- OUTPUT SECTION -->
+<div class="section" id="section-output">
+  <div class="section-title">📊 Output</div>
+  <div class="section-sub">Results appear here. Each mode run gets its own tab.</div>
+  <div class="output-tabs" id="output-tabs">
+    <div class="output-tab active" onclick="switchOutputTab('analysis',this)">📊 Analysis Results</div>
+  </div>
+  <div id="output-panes">
+    <div class="output-pane active" id="pane-analysis">
+      <div style="padding:40px;text-align:center;color:#94A3B8;font-size:13px">Run an analysis to see full results here.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── NAVIGATION ───────────────────────────────────────────────────────────────
+function showSection(id, link) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
+  document.getElementById('section-' + id).classList.add('active');
+  if (link) link.classList.add('active');
+  if (id === 'config') initConfigScreen();
+}
+
+// ─── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg, isWarning) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isWarning ? '#922B21' : '#1D6A39';
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3500);
+}
+
+// ─── AUTH ─────────────────────────────────────────────────────────────────────
+const API_BASE = (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1')
+  ? '' : 'http://localhost:3001';
+const AUTH_KEY = 'crm_auth_token';
+
+function getAuthToken() { return localStorage.getItem(AUTH_KEY) || ''; }
+
+async function apiFetch(url, options = {}) {
+  const token = getAuthToken();
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  const res = await fetch(API_BASE + url, { ...options, headers });
+  if (res.status === 401) {
+    localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(AUTH_KEY + '_exp');
+    document.getElementById('login-overlay').classList.remove('hidden');
+    throw new Error('Session expired — please log in again.');
+  }
+  return res;
+}
+
+async function submitLogin() {
+  const pw = document.getElementById('login-password').value;
+  const errEl = document.getElementById('login-error');
+  errEl.textContent = '';
+  if (!pw) { errEl.textContent = 'Please enter the password.'; return; }
+  try {
+    const res = await fetch(API_BASE + '/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await res.json();
+    if (res.ok && data.token) {
+      localStorage.setItem(AUTH_KEY, data.token);
+      if (data.expiresIn) localStorage.setItem(AUTH_KEY + '_exp', Date.now() + data.expiresIn);
+      document.getElementById('login-overlay').classList.add('hidden');
+      showToast('✅ Signed in successfully');
+    } else {
+      errEl.textContent = data.error || 'Wrong password.';
+      document.getElementById('login-password').value = '';
+    }
+  } catch (e) {
+    errEl.textContent = 'Could not reach server.';
+  }
+}
+
+(async function checkAuth() {
+  const token = getAuthToken();
+  if (!token) return;
+  const exp = parseInt(localStorage.getItem(AUTH_KEY + '_exp') || '0', 10);
+  if (exp && Date.now() > exp) { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY + '_exp'); return; }
+  const ping = await fetch(API_BASE + '/api/research-status', {
+    headers: { 'Authorization': 'Bearer ' + token }
+  }).catch(() => null);
+  if (ping && ping.status === 401) { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY + '_exp'); return; }
+  document.getElementById('login-overlay').classList.add('hidden');
+})();
+
+// ─── STORAGE KEYS ─────────────────────────────────────────────────────────────
+const DAB_GROUPS_KEY = 'dab_groups';
+const DAB_MODES_KEY  = 'dab_modes';
+const DAB_GLOBAL_KEY = 'dab_global_rules';
+
+// ─── BUILT-IN DEFAULTS ────────────────────────────────────────────────────────
+const DEFAULT_GROUPS = [
+  { id: 'commercial', name: 'Commercial', icon: '🟢', color: '#166534', groupRules: 'Always benchmark against global top 5 games. Prioritise our latest 3 released games if relevant.', pinned: true, order: 0 },
+  { id: 'finance',    name: 'Finance',    icon: '🔵', color: '#1E40AF', groupRules: 'Always focus on revenue quality and forecast accuracy. Flag any metric deviating >10% from forecast.', pinned: true, order: 1 },
+  { id: 'operations', name: 'Operations', icon: '🟣', color: '#6B21A8', groupRules: 'Flag RTP anomalies and configuration issues before anything else.', pinned: true, order: 2 },
+];
+
+const DEFAULT_MODES = [
+  // Commercial
+  { id: 'qbr_prep', groupId: 'commercial', name: 'QBR Prep', icon: '📊', pinned: true, order: 0,
+    outputPrompt: 'Generate an executive QBR summary. Use positive framing. Highlight growth, top games, and opportunities. Format as numbered insight cards.',
+    checks: { mandatory: [
+      { id: 'ggr_trend',       name: 'GGR 6-Month Trend',      description: 'Monthly GGR, active players, and GGR/player trend over 6 months.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'concentration',   name: 'Game Concentration Risk', description: 'Top games by GGR share. Flag if any game >40% of total.', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+      { id: 'hidden_gems',     name: 'Hidden Gem Games',        description: 'Games with above-average GGR/player but below-average player count.', type: 'mandatory', enabled: true, builtin: true, order: 2 },
+      { id: 'benchmark_gap',   name: 'Global Benchmark Gap',    description: 'Compare brand game mix to global top 5. Flag missing global hits.', type: 'mandatory', enabled: true, builtin: true, order: 3 },
+      { id: 'new_launches',    name: 'New Game Launches (90d)', description: 'Performance of recently launched games vs global average.', type: 'mandatory', enabled: true, builtin: true, order: 4 },
+      { id: 'open_scan',       name: 'Open Opportunity Scan',   description: 'Free-hand check: agent explores any pattern, anomaly or opportunity not covered by structured checks.', type: 'mandatory', enabled: true, builtin: true, order: 5 },
+    ], optional: [] }
+  },
+  { id: 'am_weekly', groupId: 'commercial', name: 'AM Weekly', icon: '⚡', pinned: true, order: 1,
+    outputPrompt: 'Generate a concise weekly AM briefing. 3-5 bullet action items only. What needs attention this week?',
+    checks: { mandatory: [
+      { id: 'ggr_trend_lite', name: 'GGR Trend (Lightweight)', description: 'Last 4 weeks GGR vs same period last month. Simple up/down signal.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'top_game_move',  name: 'Top Game Movement',       description: 'Did the #1 or #2 game change this week? Any surprise entrants?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+    ], optional: [] }
+  },
+  { id: 'product_launch', groupId: 'commercial', name: 'Product Launch', icon: '🎯', pinned: false, order: 2,
+    outputPrompt: 'Analyse new game launch performance. Compare adoption rate vs global average. Identify which brands are early adopters vs laggards.',
+    checks: { mandatory: [
+      { id: 'new_game_adoption', name: 'New Game Adoption',      description: 'How quickly is this brand adopting our latest releases vs global average?', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'benchmark_gap2',   name: 'Benchmark Gap',           description: 'Is this brand missing any of the global top 5 games?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+      { id: 'hidden_gems2',     name: 'Hidden Gem Opportunity',  description: 'Which high-GGR/player games are underexposed at this brand?', type: 'mandatory', enabled: true, builtin: true, order: 2 },
+    ], optional: [] }
+  },
+  // Finance
+  { id: 'cfo_review', groupId: 'finance', name: 'CFO Review', icon: '💰', pinned: true, order: 0,
+    outputPrompt: 'Generate a CFO-level revenue summary. Lead with headline numbers. Include forecast vs actual, margin quality signal, and top 3 risks. No game-level details — stay at portfolio level.',
+    checks: { mandatory: [
+      { id: 'revenue_forecast',  name: 'Revenue Forecast',   description: 'GGR forecast vs actual for current and next month. Flag >10% deviation.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'margin_trend',      name: 'Margin Trend',       description: 'GGR/player trend as a proxy for revenue quality. Is it improving or declining?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+      { id: 'churn_risk',        name: 'Churn Risk',         description: 'Are active player counts declining? Flag brands at risk of churn.', type: 'mandatory', enabled: true, builtin: true, order: 2 },
+      { id: 'pipeline_coverage', name: 'Pipeline Coverage',  description: 'How many brands in the portfolio are growing vs declining? Portfolio health summary.', type: 'mandatory', enabled: true, builtin: true, order: 3 },
+    ], optional: [] }
+  },
+  { id: 'churn_watch', groupId: 'finance', name: 'Churn Watch', icon: '⚠️', pinned: false, order: 1,
+    outputPrompt: 'Focus entirely on churn and retention risk. Identify the top 5 brands at highest churn risk. For each: what is the signal, how long has the trend been negative, what action could reverse it.',
+    checks: { mandatory: [
+      { id: 'player_retention', name: 'Player Retention',  description: 'Active player count trend over 3 months. Flag declining brands.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'vip_behaviour',    name: 'VIP Behaviour',     description: 'Are high-value players (top 10% by GGR) reducing activity?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+      { id: 'revenue_leakage',  name: 'Revenue Leakage',   description: 'Brands where GGR is flat/up but GGR/player is declining — margin erosion signal.', type: 'mandatory', enabled: true, builtin: true, order: 2 },
+    ], optional: [] }
+  },
+  // Operations
+  { id: 'rtp_audit', groupId: 'operations', name: 'RTP Audit', icon: '🔧', pinned: true, order: 0,
+    outputPrompt: 'Generate an RTP audit report. List every game with an RTP deviation >2% from expected. For each: game name, expected RTP, actual RTP, delta, and recommended action.',
+    checks: { mandatory: [
+      { id: 'rtp_outlier', name: 'RTP Outlier Detection', description: 'Check if any game has RTP deviating >2% from its expected value.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+      { id: 'game_config', name: 'Game Config Check',     description: 'Are all active games correctly configured (volatility, max bet, feature flags)?', type: 'mandatory', enabled: true, builtin: true, order: 1 },
+    ], optional: [] }
+  },
+  { id: 'downtime_impact', groupId: 'operations', name: 'Downtime Impact', icon: '📉', pinned: false, order: 1,
+    outputPrompt: 'Analyse the revenue impact of downtime events. Correlate availability gaps with GGR dips. Estimate lost revenue per incident.',
+    checks: { mandatory: [
+      { id: 'availability_ggr', name: 'Availability vs GGR', description: 'Correlate any availability drops with GGR dips. Estimate revenue impact.', type: 'mandatory', enabled: true, builtin: true, order: 0 },
+    ], optional: [] }
+  },
+];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let _groups = [];
+let _modes  = [];
+let _globalRules = '';
+
+// ─── LOAD / SAVE ──────────────────────────────────────────────────────────────
+function loadData() {
+  const savedGroups = localStorage.getItem(DAB_GROUPS_KEY);
+  const savedModes  = localStorage.getItem(DAB_MODES_KEY);
+  _groups = savedGroups ? JSON.parse(savedGroups) : DEFAULT_GROUPS.map(g => ({...g}));
+  _modes  = savedModes  ? JSON.parse(savedModes)  : DEFAULT_MODES.map(m => ({...m, checks: { mandatory: m.checks.mandatory.map(c=>({...c})), optional: [] }}));
+  _globalRules = localStorage.getItem(DAB_GLOBAL_KEY) || 'Never recommend a branded or bespoke game that was built for a different customer to this customer. Always check if any of our latest 3 released games are relevant for this operator.';
+}
+
+function saveGroups()      { localStorage.setItem(DAB_GROUPS_KEY, JSON.stringify(_groups)); }
+function saveModes()       { localStorage.setItem(DAB_MODES_KEY,  JSON.stringify(_modes));  }
+function saveGlobalRules() { localStorage.setItem(DAB_GLOBAL_KEY, _globalRules); }
+
+function getGroupById(id)        { return _groups.find(g => g.id === id); }
+function getModeById(id)         { return _modes.find(m => m.id === id);  }
+function getModesForGroup(gId)   { return _modes.filter(m => m.groupId === gId).sort((a,b) => a.order - b.order); }
+function getPinnedGroups()       { return _groups.filter(g => g.pinned).sort((a,b) => a.order - b.order); }
+function getOverflowGroups()     { return _groups.filter(g => !g.pinned).sort((a,b) => a.order - b.order); }
+function getPinnedModes(gId)     { return getModesForGroup(gId).filter(m => m.pinned); }
+function getOverflowModes(gId)   { return getModesForGroup(gId).filter(m => !m.pinned); }
+
+loadData();
+
+// ─── SCOPE & DROPDOWNS ────────────────────────────────────────────────────────
+let currentScope = 'company';
+const MAX_PINNED_GROUPS = 4;
+const MAX_PINNED_MODES  = 4;
+
+function setScope(scope, btn) {
+  currentScope = scope;
+  document.querySelectorAll('.scope-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const isCompany = scope === 'company';
+  document.getElementById('company-scope-banner').style.display = isCompany ? 'flex' : 'none';
+  document.getElementById('entity-dropdowns').style.display     = isCompany ? 'none'  : 'block';
+  // Highlight the relevant column
+  if (!isCompany) {
+    document.getElementById('col-operator').style.opacity = scope === 'operator' ? '1' : '.35';
+    document.getElementById('col-brand').style.opacity    = scope === 'brand'    ? '1' : '.35';
+    document.getElementById('col-accounts').style.opacity = scope === 'account'  ? '1' : '.35';
+  }
+  updateChips();
+}
+
+function toggleDropdown(id) {
+  const dd = document.getElementById(id);
+  const isOpen = dd.classList.contains('open');
+  document.querySelectorAll('.multi-dropdown.open').forEach(d => d.classList.remove('open'));
+  if (!isOpen) dd.classList.add('open');
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('.multi-dropdown') && !e.target.closest('.more-btn'))
+    document.querySelectorAll('.multi-dropdown.open, .more-dropdown.open').forEach(d => d.classList.remove('open'));
+});
+
+function filterOptions(ddId, query) {
+  document.querySelectorAll(`#${ddId} .multi-option`).forEach(opt => {
+    opt.style.display = opt.querySelector('.opt-label').textContent.toLowerCase().includes(query.toLowerCase()) ? '' : 'none';
+  });
+}
+
+function selectAll(ddId) { document.querySelectorAll(`#${ddId} .multi-option input`).forEach(cb => cb.checked = true); }
+function clearAll(ddId)  { document.querySelectorAll(`#${ddId} .multi-option input`).forEach(cb => cb.checked = false); }
+
+function addOption(containerId, value, label) {
+  const div = document.createElement('div');
+  div.className = 'multi-option';
+  div.innerHTML = `<input type="checkbox" value="${value}"><span class="opt-label">${label}</span>`;
+  div.querySelector('input').addEventListener('change', updateChips);
+  document.getElementById(containerId).appendChild(div);
+}
+
+function updateChips() {
+  const chips = document.getElementById('selection-chips');
+  if (!chips) return;
+  chips.innerHTML = '';
+  const activeDD = currentScope === 'brand' ? 'dd-brand' : currentScope === 'operator' ? 'dd-operator' : 'dd-accounts';
+  document.querySelectorAll(`#${activeDD} .multi-option input:checked`).forEach(cb => {
+    const label = cb.closest('.multi-option').querySelector('.opt-label').textContent;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = label;
+    chips.appendChild(chip);
+  });
+}
+
+function getSelectedPopulation() {
+  if (currentScope === 'company') return { scope: 'company', label: 'All (Company)', values: [], count: 1 };
+  const ddId = currentScope === 'operator' ? 'dd-operator' : currentScope === 'account' ? 'dd-accounts' : 'dd-brand';
+  const vals = [];
+  document.querySelectorAll(`#${ddId} .multi-option input:checked`).forEach(cb => {
+    vals.push(cb.closest('.multi-option').querySelector('.opt-label').textContent);
+  });
+  return { scope: currentScope, label: vals.join(', ') || 'None', values: vals, count: vals.length };
+}
+
+function getDateFilters() {
+  return {
+    endMonth: document.getElementById('filter-end-month').value,
+    monthsBack: parseInt(document.getElementById('filter-months-back').value) || 6
+  };
+}
+
+// Default end month = current
+(function setDefaultDate() {
+  const now = new Date();
+  document.getElementById('filter-end-month').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+})();
+
+// Seed sample operators/brands
+(function seedDropdowns() {
+  const operators = [
+    { name: 'Betsson Group',  brands: ['Betsafe','NordicBet','Betsson'] },
+    { name: 'Kindred Group',  brands: ['Unibet','32Red','Maria Casino'] },
+    { name: 'LeoVegas Group', brands: ['LeoVegas','Royal Panda','BetUK'] },
+    { name: 'Entain',         brands: ['bwin','Coral','Ladbrokes','PartyPoker'] },
+    { name: 'Flutter',        brands: ['PokerStars','Paddy Power','Betfair','Sky Betting'] },
+  ];
+  operators.forEach(op => {
+    addOption('opts-operator', op.name, op.name);
+    op.brands.forEach(b => {
+      addOption('opts-brand', b, b);
+      addOption('opts-accounts', b, b);
+    });
+  });
+})();
+
+// ─── RUN SCREEN — GROUP + MODE SELECTOR ──────────────────────────────────────
+let _selectedGroupId = null;
+let _selectedModeId  = null;
+
+function renderGroupTabs() {
+  const container = document.getElementById('group-tabs-run');
+  if (!container) return;
+  const pinned   = getPinnedGroups().slice(0, MAX_PINNED_GROUPS);
+  const overflow = [...getPinnedGroups().slice(MAX_PINNED_GROUPS), ...getOverflowGroups()];
+
+  let html = '<div class="group-tabs">';
+  pinned.forEach(g => {
+    const active = g.id === _selectedGroupId ? ' active' : '';
+    html += `<div class="group-tab${active}" onclick="selectGroup('${g.id}')">${g.icon} ${g.name}</div>`;
+  });
+  if (overflow.length) {
+    html += `<div class="more-btn" onclick="toggleMoreGroups(event)">More ▾
+      <div class="more-dropdown" id="group-more-dd">
+        ${overflow.map(g=>`<div class="more-dropdown-item" onclick="selectGroup('${g.id}')">${g.icon} ${g.name}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function toggleMoreGroups(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('group-more-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+function selectGroup(groupId) {
+  _selectedGroupId = groupId;
+  const firstMode = getPinnedModes(groupId)[0] || getModesForGroup(groupId)[0];
+  _selectedModeId = firstMode ? firstMode.id : null;
+  renderGroupTabs();
+  renderModePills();
+}
+
+function renderModePills() {
+  const container = document.getElementById('mode-pills-run');
+  if (!container) return;
+  if (!_selectedGroupId) { container.innerHTML = ''; return; }
+
+  const pinned   = getPinnedModes(_selectedGroupId).slice(0, MAX_PINNED_MODES);
+  const overflow = [...getPinnedModes(_selectedGroupId).slice(MAX_PINNED_MODES), ...getOverflowModes(_selectedGroupId)];
+
+  let html = '<div class="mode-pills">';
+  pinned.forEach(m => {
+    const active = m.id === _selectedModeId ? ' active' : '';
+    html += `<div class="mode-pill${active}" onclick="selectMode('${m.id}')">${m.icon} ${m.name}</div>`;
+  });
+  if (overflow.length) {
+    html += `<div class="mode-pill" style="border-style:dashed;position:relative" id="mode-more-btn" onclick="toggleMoreModes(event)">More ▾
+      <div class="more-dropdown" id="mode-more-dd" style="top:110%;left:0;right:auto">
+        ${overflow.map(m=>`<div class="more-dropdown-item" onclick="selectMode('${m.id}')">${m.icon} ${m.name}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  html += '</div>';
+
+  const mode = _selectedModeId ? getModeById(_selectedModeId) : null;
+  if (mode) {
+    const count = mode.checks.mandatory.length + mode.checks.optional.length;
+    html += `<div class="mode-info visible">${mode.icon} <strong>${mode.name}</strong> — ${count} checks · default scope: <em>${getDefaultScopeHint(mode.id)}</em></div>`;
+  }
+  container.innerHTML = html;
+}
+
+function getDefaultScopeHint(modeId) {
+  if (['cfo_review','churn_watch','rtp_audit','downtime_impact'].includes(modeId)) return 'company-wide';
+  return 'operator / brand';
+}
+
+function toggleMoreModes(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('mode-more-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+function selectMode(modeId) {
+  _selectedModeId = modeId;
+  // Auto-suggest company scope for Finance/Operations modes
+  const financeOpsIds = ['cfo_review','churn_watch','rtp_audit','downtime_impact'];
+  if (financeOpsIds.includes(modeId) && currentScope !== 'company') {
+    setScope('company', document.querySelector('.scope-btn[data-scope="company"]'));
+  }
+  renderModePills();
+}
+
+// Init on load
+(function initRunSelector() {
+  const first = getPinnedGroups()[0];
+  if (first) selectGroup(first.id);
+})();
+
+// ─── CONFIG SCREEN ────────────────────────────────────────────────────────────
+let _configGroupId = null;
+let _configModeId  = null;
+
+function initConfigScreen() {
+  const el = document.getElementById('global-rules-input');
+  if (el) el.value = _globalRules;
+  const first = _groups[0];
+  if (first) selectConfigGroup(first.id);
+}
+
+function saveGlobalRulesUI() {
+  _globalRules = document.getElementById('global-rules-input').value;
+  saveGlobalRules();
+  const ind = document.getElementById('global-rules-saved');
+  ind.style.display = 'inline';
+  setTimeout(() => ind.style.display = 'none', 2000);
+  showToast('✅ Global rules saved');
+}
+
+function renderGroupConfigTabs() {
+  const pinned   = _groups.filter(g => g.pinned).slice(0, MAX_PINNED_GROUPS);
+  const overflow = [..._groups.filter(g => g.pinned).slice(MAX_PINNED_GROUPS), ..._groups.filter(g => !g.pinned)];
+  let html = '<div class="group-config-tabs">';
+  pinned.forEach(g => {
+    const active = g.id === _configGroupId ? ' active' : '';
+    html += `<div class="group-config-tab${active}" onclick="selectConfigGroup('${g.id}')">${g.icon} ${g.name}</div>`;
+  });
+  if (overflow.length) {
+    html += `<div class="more-btn" onclick="toggleConfigGroupMore(event)" style="padding:9px 14px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;position:relative">More ▾
+      <div class="more-dropdown" id="cfg-group-more-dd">
+        ${overflow.map(g=>`<div class="more-dropdown-item" onclick="selectConfigGroup('${g.id}')">${g.icon} ${g.name}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  html += `<div class="new-group-tab" onclick="addNewGroup()">＋ New Group</div>`;
+  html += '</div>';
+  document.getElementById('group-config-tabs-container').innerHTML = html;
+}
+
+function toggleConfigGroupMore(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('cfg-group-more-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+function selectConfigGroup(groupId) {
+  _configGroupId = groupId;
+  const firstMode = getModesForGroup(groupId)[0];
+  _configModeId = firstMode ? firstMode.id : null;
+  renderGroupConfigTabs();
+  renderGroupConfigBody();
+}
+
+function renderGroupConfigBody() {
+  const group = getGroupById(_configGroupId);
+  if (!group) { document.getElementById('group-config-body').innerHTML = ''; return; }
+  const modes        = getModesForGroup(_configGroupId);
+  const pinnedModes   = modes.filter(m => m.pinned).slice(0, MAX_PINNED_MODES);
+  const overflowModes = [...modes.filter(m => m.pinned).slice(MAX_PINNED_MODES), ...modes.filter(m => !m.pinned)];
+
+  let html = `
+    <div class="group-rules-area">
+      <label>📋 Group Rules — apply to all modes in ${group.icon} ${group.name}</label>
+      <textarea id="group-rules-input" class="form-textarea" rows="2" placeholder="e.g. Always benchmark against global top 5 games...">${group.groupRules || ''}</textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <button class="save-btn" onclick="saveGroupRulesUI()">Save Group Rules</button>
+        <span class="saved-indicator" id="group-rules-saved">✅ Saved</span>
+      </div>
+    </div>
+    <div class="group-config-tabs" style="border-color:#E0E8F0">`;
+
+  pinnedModes.forEach(m => {
+    const active = m.id === _configModeId ? ' active' : '';
+    html += `<div class="group-config-tab${active}" onclick="selectConfigMode('${m.id}')">${m.icon} ${m.name}</div>`;
+  });
+  if (overflowModes.length) {
+    html += `<div class="more-btn" onclick="toggleConfigModeMore(event)" style="padding:9px 14px;font-size:12px;font-weight:600;color:#64748B;cursor:pointer;position:relative">More ▾
+      <div class="more-dropdown" id="cfg-mode-more-dd">
+        ${overflowModes.map(m=>`<div class="more-dropdown-item" onclick="selectConfigMode('${m.id}')">${m.icon} ${m.name}</div>`).join('')}
+      </div>
+    </div>`;
+  }
+  html += `<div class="new-group-tab" onclick="addNewMode('${_configGroupId}')">＋ New Mode</div>`;
+  html += '</div>';
+  html += `<div id="mode-config-body"></div>`;
+  document.getElementById('group-config-body').innerHTML = html;
+  if (_configModeId) renderModeConfigBody();
+}
+
+function toggleConfigModeMore(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('cfg-mode-more-dd');
+  if (dd) dd.classList.toggle('open');
+}
+
+function selectConfigMode(modeId) {
+  _configModeId = modeId;
+  renderGroupConfigBody();
+}
+
+function saveGroupRulesUI() {
+  const group = getGroupById(_configGroupId);
+  if (!group) return;
+  group.groupRules = document.getElementById('group-rules-input').value;
+  saveGroups();
+  const ind = document.getElementById('group-rules-saved');
+  ind.style.display = 'inline';
+  setTimeout(() => ind.style.display = 'none', 2000);
+  showToast('✅ Group rules saved');
+}
+
+function addNewGroup() {
+  const name = prompt('Group name (e.g. Marketing):');
+  if (!name) return;
+  const icon = prompt('Group icon (emoji, e.g. 🟡):') || '📁';
+  const id = 'group_' + Date.now();
+  _groups.push({ id, name, icon, color: '#1E2761', groupRules: '', pinned: true, order: _groups.length });
+  saveGroups();
+  selectConfigGroup(id);
+  showToast('✅ Group "' + name + '" created');
+}
+
+function addNewMode(groupId) {
+  const name = prompt('Mode name (e.g. Weekly Revenue Check):');
+  if (!name) return;
+  const icon = prompt('Mode icon (emoji, e.g. 📈):') || '🔍';
+  const id = 'mode_' + Date.now();
+  const outputPrompt = prompt('Output prompt (how should Jedify format results for this mode?):') || '';
+  _modes.push({ id, groupId, name, icon, pinned: true, order: _modes.filter(m=>m.groupId===groupId).length,
+    outputPrompt, checks: { mandatory: [], optional: [] } });
+  saveModes();
+  _configModeId = id;
+  renderGroupConfigBody();
+  showToast('✅ Mode "' + name + '" created');
+}
+
+// ─── MODE CONFIG BODY ─────────────────────────────────────────────────────────
+function renderModeConfigBody() {
+  const mode = getModeById(_configModeId);
+  const container = document.getElementById('mode-config-body');
+  if (!mode || !container) return;
+
+  let html = `<div style="margin-top:16px">`;
+
+  html += `<h4 style="font-size:12px;font-weight:800;color:#1E2761;margin:0 0 10px;display:flex;align-items:center;gap:8px">🔒 Mandatory Checks <span style="font-size:10px;color:#64748B;font-weight:400">— always run</span></h4>`;
+  html += `<ul class="check-list">`;
+  mode.checks.mandatory.forEach(c => { html += renderCheckItemHTML(c, 'mandatory'); });
+  html += `</ul>`;
+
+  html += `<h4 style="font-size:12px;font-weight:800;color:#4A235A;margin:16px 0 10px;display:flex;align-items:center;gap:8px">🧠 Agent-Decided Checks <span style="font-size:10px;color:#64748B;font-weight:400">— agent picks when relevant</span></h4>`;
+  html += `<ul class="check-list">`;
+  mode.checks.optional.forEach(c => { html += renderCheckItemHTML(c, 'optional'); });
+  if (!mode.checks.optional.length) html += `<li style="font-size:12px;color:#94A3B8;padding:8px 0">None added yet.</li>`;
+  html += `</ul>`;
+
+  html += `
+    <div class="add-check-panel">
+      <h4>➕ Add a Research Check to ${mode.icon} ${mode.name}</h4>
+      <p>Describe in plain English — the agent translates it to Jedify queries.</p>
+      <div class="form-row"><label>Check Name</label><input type="text" id="new-check-name" placeholder="e.g. Revenue Forecast"></div>
+      <div class="form-row"><label>What to Check</label><textarea id="new-check-query" placeholder="Describe what the agent should research..."></textarea></div>
+      <div class="form-row"><label>Why It Matters</label><textarea id="new-check-why" placeholder="Why is this insight important?" style="min-height:36px"></textarea></div>
+      <div class="form-row"><label>Type</label>
+        <select id="new-check-type" onchange="document.getElementById('trigger-row').style.display=this.value==='optional'?'flex':'none'">
+          <option value="mandatory">🔒 Mandatory — always run</option>
+          <option value="optional">🧠 Agent Decides — run when relevant</option>
+        </select>
+      </div>
+      <div class="form-row" id="trigger-row" style="display:none">
+        <label>Trigger Condition</label>
+        <textarea id="new-check-triggers" placeholder="When should agent run this?" style="min-height:36px"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="save-btn" onclick="addCheckToMode()">Add Check</button>
+        <button class="save-btn" style="background:#64748B" onclick="clearCheckForm()">Clear</button>
+      </div>
+    </div>
+
+    <div class="output-prompt-area">
+      <label>🎯 Output Prompt — how should Jedify present results for ${mode.icon} ${mode.name}?</label>
+      <textarea class="form-textarea" id="output-prompt-input" rows="3">${mode.outputPrompt || ''}</textarea>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:8px">
+        <button class="save-btn" style="background:#3730A3" onclick="saveOutputPromptUI()">Save Prompt</button>
+        <span class="saved-indicator" id="output-prompt-saved">✅ Saved</span>
+      </div>
+    </div>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
+function renderCheckItemHTML(check, type) {
+  const badge = type === 'mandatory'
+    ? '<span class="check-badge badge-mandatory">MANDATORY</span>'
+    : '<span class="check-badge badge-optional">AGENT DECIDES</span>';
+  return `<li class="check-item">
+    <div class="check-item-body">
+      <div class="check-item-name">${check.name}${badge}</div>
+      <div class="check-item-desc">${check.description || check.question || ''}</div>
+    </div>
+    <div class="check-item-actions">
+      ${!check.builtin ? `<button class="check-action-btn" onclick="deleteCheck('${check.id}','${type}')">🗑</button>` : '<span title="Built-in" style="font-size:13px;opacity:.5;padding:4px">🔒</span>'}
+    </div>
+  </li>`;
+}
+
+function addCheckToMode() {
+  const name  = document.getElementById('new-check-name').value.trim();
+  const query = document.getElementById('new-check-query').value.trim();
+  const why   = document.getElementById('new-check-why').value.trim();
+  const type  = document.getElementById('new-check-type').value;
+  const triggers = document.getElementById('new-check-triggers')?.value.trim() || '';
+  if (!name || !query) { showToast('⚠️ Name and What to Check are required.', true); return; }
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  const check = { id: 'chk_' + Date.now(), name, description: query, question: query, why, type, enabled: true, builtin: false, triggers, order: mode.checks[type].length };
+  mode.checks[type].push(check);
+  saveModes();
+  clearCheckForm();
+  renderModeConfigBody();
+  showToast('✅ Check "' + name + '" added');
+}
+
+function clearCheckForm() {
+  ['new-check-name','new-check-query','new-check-why','new-check-triggers'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
+function deleteCheck(checkId, type) {
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  mode.checks[type] = mode.checks[type].filter(c => c.id !== checkId);
+  saveModes();
+  renderModeConfigBody();
+  showToast('✅ Check removed');
+}
+
+function saveOutputPromptUI() {
+  const mode = getModeById(_configModeId);
+  if (!mode) return;
+  mode.outputPrompt = document.getElementById('output-prompt-input').value;
+  saveModes();
+  const ind = document.getElementById('output-prompt-saved');
+  ind.style.display = 'inline';
+  setTimeout(() => ind.style.display = 'none', 2000);
+  showToast('✅ Output prompt saved');
+}
+
+// ─── RUN ANALYSIS + SSE ──────────────────────────────────────────────────────
+let _currentAbortController = null;
+
+function buildPayload(mode, group) {
+  const pop = getSelectedPopulation();
+  const { endMonth, monthsBack } = getDateFilters();
+
+  const allChecks = [...mode.checks.mandatory, ...mode.checks.optional];
+  const enabledChecks = allChecks.filter(c => c.enabled !== false).map(c => c.id);
+  const checkDefinitions = {};
+  allChecks.forEach(c => {
+    checkDefinitions[c.id] = { name: c.name, question: c.question || c.description || c.name };
+  });
+
+  const combinedRules = [_globalRules, group.groupRules].filter(Boolean).join('\n\n');
+
+  return {
+    scope: pop.scope,
+    values: pop.values,
+    endMonth,
+    monthsBack,
+    enabledChecks,
+    checkDefinitions,
+    globalRules: combinedRules,
+    customPrompt: mode.outputPrompt || '',
+    persona: mode.id,
+  };
+}
+
+async function runAnalysis() {
+  const mode  = _selectedModeId  ? getModeById(_selectedModeId)   : null;
+  const group = _selectedGroupId ? getGroupById(_selectedGroupId) : null;
+  if (!mode || !group) { showToast('⚠️ Please select a research mode first.', true); return; }
+
+  const pop = getSelectedPopulation();
+  if (pop.scope !== 'company' && pop.count === 0) {
+    showToast('⚠️ Please select at least one brand/operator, or switch to Company scope.', true);
+    return;
+  }
+
+  if (_currentAbortController) _currentAbortController.abort();
+  _currentAbortController = new AbortController();
+
+  const runBtn    = document.getElementById('run-btn');
+  const cancelBtn = document.getElementById('cancel-btn');
+  const runStatus = document.getElementById('run-status');
+  runBtn.disabled = true;
+  cancelBtn.style.display = 'inline-block';
+  runStatus.textContent = '⏳ Running ' + mode.name + '...';
+
+  showSection('output', document.querySelector('.nav a[href="#output"]'));
+  prepareOutputTab(mode);
+
+  try {
+    const payload = buildPayload(mode, group);
+    await fireForeground(payload, mode, _currentAbortController.signal);
+  } catch (e) {
+    if (e.name !== 'AbortError') showToast('❌ ' + e.message, true);
+    setOutputTabError(mode, e.message);
+  } finally {
+    runBtn.disabled = false;
+    cancelBtn.style.display = 'none';
+    runStatus.textContent = '';
+    _currentAbortController = null;
+  }
+}
+
+async function fireForeground(payload, mode, abortSignal) {
+  const res = await apiFetch('/api/research', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    signal: abortSignal
+  });
+  if (!res.ok) throw new Error('Server returned ' + res.status);
+  if (res.headers.get('content-type')?.includes('text/event-stream')) {
+    return readSSEStream(res, mode);
+  }
+  const data = await res.json();
+  renderModeOutput(mode, data);
+  return data;
+}
+
+async function readSSEStream(res, mode) {
+  const reader  = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+    for (const line of lines) {
+      if (!line.startsWith('data: ')) continue;
+      try { handleSSEEvent(JSON.parse(line.slice(6)), mode); } catch {}
+    }
+  }
+}
+
+function handleSSEEvent(event, mode) {
+  if (event.type === 'stage')  updateOutputTabStage(mode, event.stage);
+  else if (event.type === 'result') renderModeOutput(mode, event.data);
+  else if (event.type === 'error')  setOutputTabError(mode, event.message);
+}
+
+function cancelRun() {
+  if (_currentAbortController) { _currentAbortController.abort(); _currentAbortController = null; }
+  apiFetch('/api/cancel-research', { method: 'POST' }).catch(() => {});
+  document.getElementById('run-btn').disabled = false;
+  document.getElementById('cancel-btn').style.display = 'none';
+  document.getElementById('run-status').textContent = '';
+  showToast('⚠️ Analysis cancelled', true);
+}
+
+// ─── PROMPT PREVIEW ──────────────────────────────────────────────────────────
+function showPromptPreview() {
+  const mode  = _selectedModeId  ? getModeById(_selectedModeId)   : null;
+  const group = _selectedGroupId ? getGroupById(_selectedGroupId) : null;
+  if (!mode || !group) { showToast('⚠️ Select a mode first.', true); return; }
+  const payload = buildPayload(mode, group);
+  const scopeLine = payload.scope === 'company' ? 'Company-wide (no entity filter)' : `${payload.scope}: ${(payload.values||[]).join(', ')}`;
+  const preview = [
+    '=== Global + Group Rules ===',
+    payload.globalRules,
+    '',
+    '=== Output Prompt ===',
+    payload.customPrompt,
+    '',
+    `=== Checks (${payload.enabledChecks.length}) ===`,
+    payload.enabledChecks.map(id => payload.checkDefinitions[id]?.name || id).join('\n'),
+    '',
+    '=== Scope ===',
+    scopeLine,
+    `End month: ${payload.endMonth || 'current'} · ${payload.monthsBack} months back`,
+  ].join('\n');
+  document.getElementById('prompt-preview-text').textContent = preview;
+  document.getElementById('prompt-preview-area').style.display = 'block';
+}
+
+// ─── OUTPUT TABS ──────────────────────────────────────────────────────────────
+function switchOutputTab(paneId, tabEl) {
+  document.querySelectorAll('.output-pane').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.output-tab').forEach(t => t.classList.remove('active'));
+  const pane = document.getElementById('pane-' + paneId);
+  if (pane) pane.classList.add('active');
+  if (tabEl) tabEl.classList.add('active');
+}
+
+function prepareOutputTab(mode) {
+  const paneId = 'pane-mode-' + mode.id;
+  const tabId  = 'tab-mode-'  + mode.id;
+  if (!document.getElementById(tabId)) {
+    const tab = document.createElement('div');
+    tab.className = 'output-tab';
+    tab.id = tabId;
+    tab.innerHTML = `${mode.icon} ${mode.name} <span class="output-tab-badge tab-loading" id="badge-${mode.id}">⏳</span>`;
+    tab.onclick = function() { switchOutputTab('mode-' + mode.id, this); };
+    document.getElementById('output-tabs').appendChild(tab);
+  }
+  if (!document.getElementById(paneId)) {
+    const pane = document.createElement('div');
+    pane.className = 'output-pane';
+    pane.id = paneId;
+    document.getElementById('output-panes').appendChild(pane);
+  }
+  document.getElementById(paneId).innerHTML = `<div class="stage-indicator">⏳ Initialising ${mode.name} analysis...</div>`;
+  switchOutputTab('mode-' + mode.id, document.getElementById(tabId));
+}
+
+function updateOutputTabStage(mode, stage) {
+  const pane = document.getElementById('pane-mode-' + mode.id);
+  if (pane) pane.innerHTML = `<div class="stage-indicator">⏳ ${stage}</div>`;
+}
+
+function setOutputTabError(mode, msg) {
+  const badge = document.getElementById('badge-' + mode.id);
+  if (badge) { badge.textContent = '❌'; badge.className = 'output-tab-badge tab-error'; }
+  const pane = document.getElementById('pane-mode-' + mode.id);
+  if (pane) pane.innerHTML = `<div class="result-card"><p style="color:#DC2626">❌ Analysis failed: ${msg || 'Unknown error'}</p></div>`;
+}
+
+function renderModeOutput(mode, data) {
+  const badge = document.getElementById('badge-' + mode.id);
+  if (badge) { badge.textContent = '✅'; badge.className = 'output-tab-badge tab-ready'; }
+
+  const pane = document.getElementById('pane-mode-' + mode.id);
+  if (!pane) return;
+
+  renderAnalysisResults(mode, data);
+
+  const report = data.report || (data.checks ? summariseChecks(data.checks) : '');
+  const scopeLabel = data.scopeLabel || '';
+  pane.innerHTML = `
+    <div class="result-card">
+      <h3>${mode.icon} ${mode.name}</h3>
+      <div class="meta">Completed ${new Date().toLocaleTimeString()}${scopeLabel ? ' · ' + scopeLabel : ''} · ${(data.checks||[]).length || '?'} checks</div>
+      ${renderMarkdown(report)}
+    </div>`;
+  showToast('✅ ' + mode.name + ' analysis ready');
+}
+
+function summariseChecks(checks) {
+  return checks.map(c => `## ${c.name}\n${c.answer || c.finding || ''}`).join('\n\n');
+}
+
+function renderAnalysisResults(mode, data) {
+  const pane = document.getElementById('pane-analysis');
+  if (!pane) return;
+  const report = data.report || summariseChecks(data.checks || []);
+  const card = document.createElement('div');
+  card.className = 'result-card';
+  card.innerHTML = `<h3>${mode.icon} ${mode.name} — Full Results</h3>
+    <div class="meta">${new Date().toLocaleString()}</div>
+    ${renderMarkdown(report)}`;
+  const existing = pane.querySelector('.result-card');
+  if (existing) pane.insertBefore(card, existing);
+  else { pane.innerHTML = ''; pane.appendChild(card); }
+}
+
+// ─── MARKDOWN RENDERER ────────────────────────────────────────────────────────
+function renderMarkdown(raw) {
+  if (!raw) return '<p style="color:#94A3B8;font-style:italic">No content returned.</p>';
+  const lines = raw.split('\n');
+  let html = '', inTable = false, inList = false, tableHeaderDone = false;
+  for (let i = 0; i < lines.length; i++) {
+    let line = lines[i].replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    line = line.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>').replace(/\*(.+?)\*/g,'<em>$1</em>').replace(/`(.+?)`/g,'<code style="background:#F1F5F9;padding:1px 4px;border-radius:3px;font-size:12px">$1</code>');
+    if (/^\s*\|/.test(line)) {
+      if (!inTable) {
+        if (inList) { html += '</ul>'; inList = false; }
+        html += `<div class="md-table-wrap"><table style="width:100%;border-collapse:collapse;font-size:13px;box-shadow:0 1px 4px rgba(0,0,0,.06);border-radius:8px;overflow:hidden">`;
+        inTable = true; tableHeaderDone = false;
+      }
+      const stripped = line.replace(/[\|\-:\s]/g,'');
+      if (stripped === '') { tableHeaderDone = true; continue; }
+      const cells = line.split('|').filter((_,idx,arr)=>idx>0&&idx<arr.length-1);
+      if (!tableHeaderDone) {
+        html += '<thead><tr>' + cells.map(c=>`<th style="padding:10px 14px;background:#1E2761;color:white;text-align:left;font-size:12px;font-weight:700;white-space:nowrap">${c.trim()}</th>`).join('') + '</tr></thead><tbody>';
+      } else {
+        const isTotal = /total/i.test(cells[0]||'');
+        const rowHtml = cells.map((c,ci)=>{
+          const v=c.trim();
+          const isNum=/^[€$£\+\-\d]/.test(v)||/^\d/.test(v);
+          const noWrap=(isNum||ci<cells.length-1)?'white-space:nowrap;':'white-space:normal;word-break:break-word;min-width:120px;';
+          let style=`padding:9px 14px;border-bottom:1px solid #E2E8F0;${noWrap}${isTotal?'font-weight:700':''}`;
+          if(/^\+\d/.test(v))style+=';color:#1D6A39;font-weight:700';
+          else if(/^-\d/.test(v)&&!/^—/.test(v))style+=';color:#DC2626;font-weight:700';
+          return `<td style="${style}">${v}</td>`;
+        }).join('');
+        html += `<tr style="background:${isTotal?'#F0F4FF':'white'}" onmouseover="this.style.background='#F8FAFC'" onmouseout="this.style.background='${isTotal?'#F0F4FF':'white'}'">${rowHtml}</tr>`;
+      }
+      continue;
+    } else if (inTable) { html += '</tbody></table></div>'; inTable = false; tableHeaderDone = false; }
+    if (/^###\s+/.test(line)) { if(inList){html+='</ul>';inList=false;} html+=`<h4 style="font-size:12px;font-weight:800;color:#4A235A;margin:18px 0 5px;text-transform:uppercase;letter-spacing:.5px">${line.replace(/^###\s+/,'')}</h4>`; continue; }
+    if (/^##\s+/.test(line))  { if(inList){html+='</ul>';inList=false;} html+=`<h3 style="font-size:15px;font-weight:800;color:#1E2761;margin:22px 0 8px;padding-bottom:6px;border-bottom:2px solid #E0E8F0">${line.replace(/^##\s+/,'')}</h3>`; continue; }
+    if (/^#\s+/.test(line))   { if(inList){html+='</ul>';inList=false;} html+=`<h2 style="font-size:17px;font-weight:800;color:#1E2761;margin:26px 0 10px">${line.replace(/^#\s+/,'')}</h2>`; continue; }
+    if (/^\d+\.\s+/.test(line)) { if(inList){html+='</ul>';inList=false;} html+=`<div style="display:flex;gap:10px;margin:5px 0;font-size:14px;line-height:1.65"><span style="color:#4A235A;font-weight:700;min-width:22px">${line.match(/^\d+/)[0]}.</span><span>${line.replace(/^\d+\.\s+/,'')}</span></div>`; continue; }
+    if (/^[-•]\s+/.test(line)) { if(!inList){html+='<ul style="margin:8px 0;padding:0;list-style:none">'; inList=true;} html+=`<li style="padding:3px 0;font-size:14px;line-height:1.65;display:flex;gap:8px"><span style="color:#7D3C98;flex-shrink:0;margin-top:3px">▸</span><span>${line.replace(/^[-•]\s+/,'')}</span></li>`; continue; } else if(inList){html+='</ul>';inList=false;}
+    if (/^---+$/.test(line.trim())) { html+='<hr style="border:none;border-top:1px solid #E0E8F0;margin:16px 0">'; continue; }
+    if (line.trim()==='') { html+='<div style="height:6px"></div>'; continue; }
+    if (/^(Trend|Assessment|Summary|Note):?/i.test(line.trim())) { html+=`<div style="background:#F0F4FF;border-left:3px solid #4A235A;padding:10px 14px;border-radius:0 8px 8px 0;margin:10px 0;font-size:13px;color:#1E2761">${line}</div>`; continue; }
+    html+=`<p style="margin:3px 0;font-size:14px;line-height:1.7;color:#334155">${line}</p>`;
+  }
+  if (inTable) html += '</tbody></table></div>';
+  if (inList)  html += '</ul>';
+  return html;
+}
+</script>
+</body>
+</html>

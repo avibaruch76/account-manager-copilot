@@ -1474,6 +1474,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Serve the Data Agent Builder frontend
+  if (req.method === 'GET' && (req.url === '/builder' || req.url === '/builder.html')) {
+    const htmlPath = path.join(__dirname, 'data-agent-builder.html');
+    try {
+      const html = fs.readFileSync(htmlPath, 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(html);
+    } catch (e) {
+      res.writeHead(500); res.end('Failed to load HTML: ' + e.message);
+    }
+    return;
+  }
+
   // Token health check
   if (req.method === 'GET' && req.url === '/api/token-status') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
