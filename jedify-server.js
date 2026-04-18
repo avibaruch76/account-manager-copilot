@@ -1352,6 +1352,15 @@ const server = http.createServer(async (req, res) => {
         const dateRange = { start: startLabel, end: endLabel };
         const enabledOptionalCheckIds = reqBody.enabledOptionalCheckIds || [];
         const persona = reqBody.persona || 'am_actions';
+        const noSSE = !!reqBody.noSSE; // background mode: return plain JSON, no SSE stream
+
+        if (noSSE) {
+          // Plain JSON response — no streaming, no progress events
+          const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(results));
+          return;
+        }
 
         // SSE streaming — send progress events as each check completes
         res.writeHead(200, {

@@ -2227,70 +2227,72 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
   const globalPrompt = document.getElementById('global-prompt-prefix')?.value || '';
   const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
 
-  // Helper: fire one research request and render on completion
-  function firePersona(persona) {
-    const payload = { ...selection, persona, enabledOptionalCheckIds, globalRules: globalPrompt,
+  function makePayload(persona) {
+    return { ...selection, persona, enabledOptionalCheckIds, globalRules: globalPrompt,
       ...(customPrompt ? { customPrompt } : {}) };
+  }
+
+  // Silent background fetch — no SSE, no progress bar, just waits and renders on completion.
+  // Used for data_analyst so it doesn't compete with the main SSE stream.
+  function fireBackground(persona) {
+    const checkResults = document.getElementById('check-results');
+    if (checkResults) checkResults.innerHTML =
+      `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running in background — will appear when complete...</div>`;
     return apiFetch('/api/research', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...makePayload(persona), noSSE: true }),
       signal: AbortSignal.timeout(1800000)
+    }).then(res => res.ok ? res.json() : Promise.reject(new Error('Server ' + res.status)))
+    .then(data => { if (data && data.report !== undefined) renderResearchReport(data); })
+    .catch(err => {
+      if (checkResults) checkResults.innerHTML =
+        `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ Full analysis failed: ${err.message}</div>`;
+    });
+  }
+
+  // SSE foreground fetch — shows progress bar, used for selected persona
+  function fireForeground(persona) {
+    return apiFetch('/api/research', {
+      method: 'POST',
+      body: JSON.stringify(makePayload(persona)),
+      signal: abortSignal ? AbortSignal.any([AbortSignal.timeout(1800000), abortSignal]) : AbortSignal.timeout(1800000)
     }).then(res => {
       if (!res.ok) throw new Error('Server returned ' + res.status);
       if (res.headers.get('content-type')?.includes('text/event-stream')) return readSSEStream(res);
       return res.json();
     }).then(data => {
       if (data && data.report !== undefined) renderResearchReport(data);
-    }).catch(err => {
-      if (persona === 'data_analyst') {
-        const checkResults = document.getElementById('check-results');
-        if (checkResults) checkResults.innerHTML =
-          `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ Full analysis failed: ${err.message}</div>`;
-      } else {
-        const paneId = PERSONA_PANE_ID[persona];
-        const pane = document.getElementById(paneId);
-        if (pane) pane.innerHTML =
-          `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ ${PERSONA_TITLE[persona]} failed: ${err.message}</div>`;
-      }
+      return data;
     });
   }
 
-  // Admin mode: fire QBR + AM Actions + AM Detailed + Data Analyst all in parallel
+  // Admin mode: all 3 persona tabs as background + data_analyst as background
   if (_selectedPersona === 'admin') {
     const personas = ['qbr_customer', 'am_actions', 'am_detailed'];
-    // Show placeholders
     personas.forEach(p => {
       const pane = document.getElementById(PERSONA_PANE_ID[p]);
       if (pane) pane.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ ${PERSONA_TITLE[p]} — researching...</div>`;
     });
     const checkResults = document.getElementById('check-results');
-    if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis — researching...</div>`;
-
-    await Promise.all([...personas.map(firePersona), firePersona('data_analyst')]);
+    if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running...</div>`;
+    // All run as background (no SSE) so no competing streams
+    await Promise.all([...personas.map(fireBackground), fireBackground('data_analyst')]);
     return { report: 'admin_done' };
   }
 
-  // Single persona mode — fire selected persona + data_analyst in parallel
+  // Single persona mode:
+  // - selected persona → SSE foreground (progress bar, single stream)
+  // - data_analyst → silent background (no SSE, no competing stream)
   try {
-    const selectedPersona = _selectedPersona;
-    // Show placeholder in Analysis Results immediately
-    const checkResults = document.getElementById('check-results');
-    if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis — researching...</div>`;
-
-    // Always fire data_analyst for Analysis Results
-    const analystPromise = firePersona('data_analyst');
-
-    // Fire the selected persona (unless it's somehow data_analyst — safety check)
-    const personaPromise = selectedPersona !== 'data_analyst'
-      ? firePersona(selectedPersona)
-      : Promise.resolve();
-
-    // Wait for both; return the persona result for legacy compatibility
-    const [, personaResult] = await Promise.all([analystPromise, personaPromise]);
-    return personaResult || { report: 'done' };
+    // Fire data_analyst silently in background — don't await it
+    fireBackground('data_analyst');
+    // Run selected persona with full SSE progress
+    const result = await fireForeground(_selectedPersona);
+    return result || { report: 'done' };
   } catch (e) {
     console.error('[insight-loop] Fetch failed:', e.message);
-    const errMsg = e.name === 'TimeoutError' ? 'Request timed out. The analysis took too long.' : e.message;
+    const errMsg = e.name === 'AbortError' ? 'Analysis cancelled.' :
+                   e.name === 'TimeoutError' ? 'Request timed out.' : e.message;
     return { error: errMsg };
   }
 }
