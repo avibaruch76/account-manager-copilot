@@ -1323,7 +1323,9 @@ const server = http.createServer(async (req, res) => {
 
   // Jedify Research Pipeline — full analysis via Jedify Research Mode (with SSE streaming)
   if (req.method === 'POST' && req.url === '/api/research') {
+    console.log(`[research-handler] POST /api/research received — mcpReady=${mcpReady}`);
     if (!mcpReady) {
+      console.log(`[research-handler] Rejected: MCP not ready`);
       res.writeHead(503, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'MCP not ready yet. Try again in a few seconds.' }));
       return;
