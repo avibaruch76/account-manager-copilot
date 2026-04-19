@@ -1202,12 +1202,17 @@ async function runAnalysis() {
   }
 }
 
-async function fireForeground(payload, mode, persona, abortSignal) {
+async function fireForeground(payload, mode, persona, abortSignal, attempt = 0) {
   const res = await apiFetch('/api/research', {
     method: 'POST',
     body: JSON.stringify(payload),
     signal: abortSignal
   });
+  if (res.status === 503 && attempt === 0) {
+    console.log('[builder] Server MCP reconnecting — retrying in 7s...');
+    await new Promise(r => setTimeout(r, 7000));
+    return fireForeground(payload, mode, persona, abortSignal, 1);
+  }
   if (!res.ok) throw new Error('Server returned ' + res.status);
   if (res.headers.get('content-type')?.includes('text/event-stream')) {
     return readSSEStream(res, mode, persona);

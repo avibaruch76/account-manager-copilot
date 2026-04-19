@@ -2278,19 +2278,24 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
   }
 
   // SSE foreground fetch — shows progress bar, used for selected persona
-  function fireForeground(persona) {
-    return apiFetch('/api/research', {
+  // Retries once after 7s if server returns 503 (MCP reconnecting)
+  async function fireForeground(persona, attempt = 0) {
+    const res = await apiFetch('/api/research', {
       method: 'POST',
       body: JSON.stringify(makePayload(persona)),
       signal: abortSignal ? AbortSignal.any([AbortSignal.timeout(1800000), abortSignal]) : AbortSignal.timeout(1800000)
-    }).then(res => {
-      if (!res.ok) throw new Error('Server returned ' + res.status);
-      if (res.headers.get('content-type')?.includes('text/event-stream')) return readSSEStream(res);
-      return res.json();
-    }).then(data => {
-      if (data && data.report !== undefined) renderResearchReport(data);
-      return data;
     });
+    if (res.status === 503 && attempt === 0) {
+      console.log('[insight-loop] Server MCP reconnecting — retrying in 7s...');
+      await new Promise(r => setTimeout(r, 7000));
+      return fireForeground(persona, 1);
+    }
+    if (!res.ok) throw new Error('Server returned ' + res.status);
+    const data = res.headers.get('content-type')?.includes('text/event-stream')
+      ? await readSSEStream(res)
+      : await res.json();
+    if (data && data.report !== undefined) renderResearchReport(data);
+    return data;
   }
 
   // Admin mode: all 3 persona tabs as background + data_analyst as background
