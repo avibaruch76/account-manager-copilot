@@ -2249,32 +2249,40 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
 
   // Silent background fetch — no SSE, no progress bar, just waits and renders on completion.
   // Used for data_analyst so it doesn't compete with the main SSE stream.
-  function fireBackground(persona) {
+  // Retries once after 7s on 503 (MCP reconnecting). Fails silently — doesn't show red error.
+  async function fireBackground(persona, attempt = 0) {
     const checkResults = document.getElementById('check-results');
-    if (checkResults) checkResults.innerHTML =
+    if (attempt === 0 && checkResults) checkResults.innerHTML =
       `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running...</div>`;
 
     // Show spinner on the Analysis Results nav link
     const navLink = document.querySelector('.nav a[href="#react"]');
-    if (navLink) navLink.innerHTML = 'Analysis Results <span id="analysis-spinner" style="font-size:11px;background:#F59E0B;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">⏳</span>';
+    if (attempt === 0 && navLink) navLink.innerHTML = 'Analysis Results <span id="analysis-spinner" style="font-size:11px;background:#F59E0B;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">⏳</span>';
 
-    return apiFetch('/api/research', {
-      method: 'POST',
-      body: JSON.stringify({ ...makePayload(persona), noSSE: true }),
-      signal: AbortSignal.timeout(1800000)
-    }).then(res => res.ok ? res.json() : Promise.reject(new Error('Server ' + res.status)))
-    .then(data => {
+    try {
+      const res = await apiFetch('/api/research', {
+        method: 'POST',
+        body: JSON.stringify({ ...makePayload(persona), noSSE: true }),
+        signal: AbortSignal.timeout(1800000)
+      });
+      if (res.status === 503 && attempt === 0) {
+        console.log('[insight-loop] Background MCP reconnecting — retrying in 7s...');
+        await new Promise(r => setTimeout(r, 7000));
+        return fireBackground(persona, 1);
+      }
+      if (!res.ok) throw new Error('Server ' + res.status);
+      const data = await res.json();
       if (data && data.report !== undefined) renderResearchReport(data);
-      // Clear spinner and show toast
       if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
       showToast('✅ Full analysis ready — click Analysis Results to view');
       setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
-    })
-    .catch(err => {
+    } catch (err) {
+      // Fail silently — background run is supplementary, don't alarm the user
+      console.warn('[insight-loop] Background analysis failed:', err.message);
       if (navLink) navLink.textContent = 'Analysis Results';
-      if (checkResults) checkResults.innerHTML =
-        `<div style="padding:20px;color:#E74C3C;font-size:13px">❌ Full analysis failed: ${err.message}</div>`;
-    });
+      if (checkResults && checkResults.innerHTML.includes('⏳'))
+        checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">Full analysis unavailable for this run.</div>`;
+    }
   }
 
   // SSE foreground fetch — shows progress bar, used for selected persona
