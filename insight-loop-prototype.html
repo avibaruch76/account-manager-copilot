@@ -365,9 +365,6 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button class="btn-run" id="run-btn" onclick="previewPrompt()">
         <span>▶</span> Run Analysis
       </button>
-      <button class="btn-cancel" id="cancel-btn" onclick="cancelAnalysis()">
-        <span>✕</span> Cancel
-      </button>
     </div>
     <div style="margin-top:6px;font-size:11px;color:#94A3B8">
       <a href="#" onclick="runAnalysis();return false;" style="color:#94A3B8">Skip preview & run directly</a>
@@ -474,9 +471,6 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="research-timeline" style="text-align:left;margin:16px 0"></div>
     <p id="run-eta" style="font-size:11px;color:#94A3B8;margin-top:8px">Connecting to Jedify...</p>
-    <div style="margin-top:16px;text-align:center">
-      <button onclick="cancelAnalysis()" style="background:linear-gradient(135deg,#7F1D1D,#DC2626);color:white;border:none;padding:9px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✕ Cancel Analysis</button>
-    </div>
   </div>
 </div>
 
@@ -1913,7 +1907,6 @@ async function cancelAnalysis() {
   const btn = document.getElementById('run-btn');
   btn.classList.remove('running');
   btn.innerHTML = '<span>▶</span> Run Analysis';
-  document.getElementById('cancel-btn').classList.remove('visible');
   document.getElementById('run-overlay').classList.remove('active');
   showToast('Analysis cancelled.');
 }
@@ -1943,8 +1936,7 @@ function runAnalysis(customPrompt) {
       const btn = document.getElementById('run-btn');
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
-      document.getElementById('cancel-btn').classList.remove('visible');
-      showToast('Previous analysis stopped.', true);
+          showToast('Previous analysis stopped.', true);
       // Fall through to start new analysis
     } else {
       return;  // User chose to wait
@@ -2037,8 +2029,7 @@ function runAnalysis(customPrompt) {
       overlay.classList.remove('active');
       btn.classList.remove('running');
       btn.innerHTML = '<span>\u25B6</span> Run Analysis';
-      document.getElementById('cancel-btn').classList.remove('visible');
-      _analysisRunning = false;
+          _analysisRunning = false;
 
       if (data && data.error) {
         showToast('❌ Analysis failed: ' + data.error, true);
@@ -3448,8 +3439,7 @@ function confirmAndRun() {
       overlay.classList.remove('active');
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
-      document.getElementById('cancel-btn').classList.remove('visible');
-      _analysisRunning = false;
+          _analysisRunning = false;
 
       if (data && data.error) {
         showToast('Analysis failed: ' + data.error, true);
