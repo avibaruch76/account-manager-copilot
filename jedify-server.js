@@ -91,7 +91,7 @@ setInterval(() => {
 
 // ── MCP connection (via jedify-direct.js) ─────────────────────────────────
 
-const { sendMCP, notifyMCP, initMCP, isMCPReady, setMCPReady, getTokenStatus } = jedify;
+const { sendMCP, notifyMCP, initMCP, isMCPReady, setMCPReady, getSessionVersion, getTokenStatus } = jedify;
 let mcpReady = false;
 
 async function runSQL(query, maxResults = 500) {
@@ -1006,7 +1006,8 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
   if (!inquiryId) throw new Error('No inquiry_id in response: ' + askText.slice(0, 200));
 
   _activeInquiryId = inquiryId;
-  console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, polling...`);
+  const sessionVersionAtStart = getSessionVersion();
+  console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, session=${sessionVersionAtStart}, polling...`);
   if (onStage) onStage(0, RESEARCH_STAGES[0]);
 
   // Poll until done (max 10 min at 5s intervals = 120 polls)
@@ -1022,6 +1023,12 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
       if (cancelToken && cancelToken.cancelled) {
         console.log(`[jedify-research] Cancelled at poll ${i}`);
         throw new Error('cancelled');
+      }
+
+      // Check if MCP session reconnected — inquiry ID belongs to old session, abort fast
+      if (getSessionVersion() !== sessionVersionAtStart) {
+        console.warn(`[jedify-research] MCP session changed during poll ${i} (was ${sessionVersionAtStart}, now ${getSessionVersion()}) — inquiry ${inquiryId} is stale`);
+        throw new Error('MCP session reconnected mid-research — please try again');
       }
 
       // Send heartbeat every poll to keep SSE connection alive through Render's idle timeout

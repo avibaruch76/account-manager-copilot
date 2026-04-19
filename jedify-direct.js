@@ -30,6 +30,7 @@ let refreshErrors = 0;
 
 let mcpReady = false;
 let sessionId = null;
+let _sessionVersion = 0;  // increments every time a new MCP session is established
 let messageEndpoint = null;    // full URL for POST /mcp/message?sessionId=xxx
 let msgId = 1;
 
@@ -497,6 +498,7 @@ async function initMCP() {
   await notifyMCP({ method: 'notifications/initialized' });
 
   mcpReady = true;
+  _sessionVersion++;
   console.log('[jedify-direct] MCP session ready.');
 
   // 5. Set up token auto-refresh every 2 minutes
@@ -524,6 +526,10 @@ function setMCPReady(v) {
   mcpReady = !!v;
 }
 
+function getSessionVersion() {
+  return _sessionVersion;
+}
+
 // ── Exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -532,6 +538,7 @@ module.exports = {
   initMCP,
   isMCPReady,
   setMCPReady,
+  getSessionVersion,
   getTokenStatus,
   ensureToken,
   refreshAccessToken
