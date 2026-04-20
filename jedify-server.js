@@ -1025,10 +1025,10 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
         throw new Error('cancelled');
       }
 
-      // Check if MCP session reconnected — inquiry ID belongs to old session, abort fast
+      // If MCP session reconnected, log it but keep polling — the inquiry lives on Jedify's backend
+      // independent of our MCP transport session, so it survives reconnects.
       if (getSessionVersion() !== sessionVersionAtStart) {
-        console.warn(`[jedify-research] MCP session changed during poll ${i} (was ${sessionVersionAtStart}, now ${getSessionVersion()}) — inquiry ${inquiryId} is stale`);
-        throw new Error('MCP session reconnected mid-research — please try again');
+        console.warn(`[jedify-research] MCP session changed during poll ${i} (was ${sessionVersionAtStart}, now ${getSessionVersion()}) — continuing to poll inquiry ${inquiryId}`);
       }
 
       // Send heartbeat every poll to keep SSE connection alive through Render's idle timeout
