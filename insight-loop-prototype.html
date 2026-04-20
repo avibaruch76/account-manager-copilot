@@ -861,9 +861,11 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 
   <!-- Action Items -->
   <div id="comp-actions-section" style="display:none;">
-    <div style="background:white;border-radius:10px;padding:12px 16px;border:1px solid #E2E8F0;">
-      <div style="font-size:14px;font-weight:700;color:#1E293B;margin-bottom:6px;">🎯 Recommended Actions</div>
-      <div id="comp-actions-content" style="font-size:13px;color:#334155;line-height:1.5;white-space:pre-wrap;max-height:140px;overflow:auto;"></div>
+    <div style="background:white;border-radius:12px;padding:20px 24px;border:1px solid #E2E8F0;">
+      <div style="font-size:15px;font-weight:700;color:#1E293B;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:18px;">🎯</span> Recommended Actions
+      </div>
+      <div id="comp-actions-content"></div>
     </div>
   </div>
 </div>
@@ -4061,8 +4063,92 @@ function renderCompetitiveResults() {
 
   if (_compData.actionItems) {
     document.getElementById('comp-actions-section').style.display = 'block';
-    document.getElementById('comp-actions-content').textContent = _compData.actionItems;
+    document.getElementById('comp-actions-content').innerHTML = renderActionItems(_compData.actionItems);
   }
+}
+
+function renderActionItems(text) {
+  if (!text) return '';
+
+  // Split into individual items — each starts with ⚠, ✓, 💡, or a number
+  const itemPattern = /(?=^[⚠✓💡🎯]|\n[⚠✓💡🎯]|\n\d+[\.\)])/m;
+  const rawItems = text.split(/\n(?=[⚠✓💡🎯]|\d+[\.\)])/);
+
+  const typeMap = {
+    '✓': { bg: '#F0FDF4', border: '#86EFAC', icon: '✓', iconBg: '#16A34A', label: 'Strength' },
+    '⚠': { bg: '#FFFBEB', border: '#FCD34D', icon: '⚠', iconBg: '#D97706', label: 'Watch Out' },
+    '💡': { bg: '#EFF6FF', border: '#93C5FD', icon: '💡', iconBg: '#2563EB', label: 'Opportunity' },
+    '🎯': { bg: '#F5F3FF', border: '#C4B5FD', icon: '🎯', iconBg: '#7C3AED', label: 'Action' },
+  };
+
+  const cards = rawItems.map(raw => {
+    raw = raw.trim();
+    if (!raw) return '';
+
+    // Detect type from leading icon
+    let type = null;
+    for (const icon of Object.keys(typeMap)) {
+      if (raw.startsWith(icon)) { type = icon; raw = raw.slice(icon.length).trim(); break; }
+    }
+    const style = type ? typeMap[type] : { bg: '#F8FAFC', border: '#E2E8F0', icon: '•', iconBg: '#64748B', label: '' };
+
+    // Extract bold title (first <b>…</b> or **…** or first line)
+    let title = '';
+    let body = raw;
+    const boldMatch = raw.match(/^<b>(.*?)<\/b>/i) || raw.match(/^\*\*(.*?)\*\*/);
+    if (boldMatch) {
+      title = boldMatch[1];
+      body = raw.slice(boldMatch[0].length).trim();
+    } else {
+      // First sentence as title
+      const firstDot = raw.indexOf('.');
+      if (firstDot > 10 && firstDot < 120) {
+        title = raw.slice(0, firstDot + 1);
+        body = raw.slice(firstDot + 1).trim();
+      }
+    }
+
+    // Parse body into labelled sections: "Data shows...", "Recommended action:", "Expected impact:"
+    const sections = [];
+    const sectionPattern = /((?:Data shows|Recommended action|Expected impact|Action|Impact)[:\s]*)/gi;
+    const parts = body.split(sectionPattern).filter(s => s.trim());
+    let i = 0;
+    while (i < parts.length) {
+      const label = parts[i].replace(/:?\s*$/, '').trim();
+      const knownLabels = ['Data shows', 'Recommended action', 'Expected impact', 'Action', 'Impact'];
+      if (knownLabels.some(l => label.toLowerCase().startsWith(l.toLowerCase()))) {
+        const content = (parts[i + 1] || '').trim();
+        if (content) sections.push({ label, content });
+        i += 2;
+      } else {
+        if (parts[i].trim()) sections.push({ label: '', content: parts[i].trim() });
+        i++;
+      }
+    }
+
+    const labelColor = { 'Data shows': '#0F766E', 'Recommended action': '#1D4ED8', 'Expected impact': '#7C3AED', 'Action': '#1D4ED8', 'Impact': '#7C3AED' };
+
+    const bodyHtml = sections.length > 0
+      ? sections.map(s => s.label
+          ? `<div style="margin-top:8px;">
+               <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:${labelColor[s.label] || '#64748B'};opacity:.9;">${s.label}</span>
+               <div style="margin-top:2px;font-size:13px;color:#334155;line-height:1.55;">${s.content.replace(/<b>(.*?)<\/b>/gi,'<strong>$1</strong>')}</div>
+             </div>`
+          : `<div style="font-size:13px;color:#475569;line-height:1.55;margin-top:4px;">${s.content.replace(/<b>(.*?)<\/b>/gi,'<strong>$1</strong>')}</div>`
+        ).join('')
+      : `<div style="font-size:13px;color:#475569;line-height:1.55;margin-top:4px;">${body.replace(/<b>(.*?)<\/b>/gi,'<strong>$1</strong>')}</div>`;
+
+    return `
+      <div style="background:${style.bg};border:1px solid ${style.border};border-radius:10px;padding:14px 16px;margin-bottom:12px;display:flex;gap:12px;align-items:flex-start;">
+        <div style="flex-shrink:0;width:28px;height:28px;border-radius:50%;background:${style.iconBg};display:flex;align-items:center;justify-content:center;font-size:13px;color:white;font-weight:700;">${style.icon}</div>
+        <div style="flex:1;min-width:0;">
+          ${title ? `<div style="font-size:13px;font-weight:700;color:#1E293B;line-height:1.4;">${title.replace(/<b>(.*?)<\/b>/gi,'$1')}</div>` : ''}
+          ${bodyHtml}
+        </div>
+      </div>`;
+  }).filter(Boolean);
+
+  return cards.join('') || `<div style="font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap;">${text}</div>`;
 }
 
 function getCompDisplayName(comp) {
