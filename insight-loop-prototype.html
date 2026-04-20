@@ -2207,29 +2207,31 @@ async function submitLogin() {
   }
 }
 
-// Check auth on load — show login overlay if no valid/unexpired token
+// Check auth on load — hide overlay immediately if token looks valid, re-show only on 401
 (async function checkAuth() {
   const token = getAuthToken();
-  if (!token) return; // overlay already visible
+  if (!token) return; // no token — overlay stays visible
 
-  // Check client-side expiry first (fast, no network)
+  // Check client-side expiry (fast, no network)
   const exp = parseInt(localStorage.getItem(AUTH_KEY + '_exp') || '0', 10);
   if (exp && Date.now() > exp) {
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(AUTH_KEY + '_exp');
-    return; // stay on login screen
+    return; // expired — overlay stays visible
   }
 
-  // Verify with server (handles password changes)
+  // Token looks valid — hide overlay immediately (no flash)
+  document.getElementById('login-overlay').classList.add('hidden');
+
+  // Verify with server in background — re-show overlay only if token was revoked
   const ping = await fetch(API_BASE + '/api/research-status', {
     headers: { 'Authorization': 'Bearer ' + token }
   }).catch(() => null);
   if (ping && ping.status === 401) {
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(AUTH_KEY + '_exp');
-    return;
+    document.getElementById('login-overlay').classList.remove('hidden');
   }
-  document.getElementById('login-overlay').classList.add('hidden');
 })();
 
 async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {

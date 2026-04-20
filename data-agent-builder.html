@@ -427,11 +427,17 @@ async function submitLogin() {
   if (!token) return;
   const exp = parseInt(localStorage.getItem(AUTH_KEY + '_exp') || '0', 10);
   if (exp && Date.now() > exp) { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY + '_exp'); return; }
+  // Hide immediately — no flash for returning users
+  document.getElementById('login-overlay').classList.add('hidden');
+  // Verify in background — re-show only if token revoked
   const ping = await fetch(API_BASE + '/api/research-status', {
     headers: { 'Authorization': 'Bearer ' + token }
   }).catch(() => null);
-  if (ping && ping.status === 401) { localStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY + '_exp'); return; }
-  document.getElementById('login-overlay').classList.add('hidden');
+  if (ping && ping.status === 401) {
+    localStorage.removeItem(AUTH_KEY);
+    localStorage.removeItem(AUTH_KEY + '_exp');
+    document.getElementById('login-overlay').classList.remove('hidden');
+  }
 })();
 
 // ─── STORAGE KEYS ─────────────────────────────────────────────────────────────
