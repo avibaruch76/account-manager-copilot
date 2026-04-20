@@ -2579,6 +2579,8 @@ function renderResearchReport(data) {
     if (checkResults) {
       const existing = checkResults.querySelector('[data-persona="data_analyst"]');
       if (existing) existing.remove();
+      // Clear any loading/placeholder messages
+      checkResults.querySelectorAll('div:not([data-persona])').forEach(el => el.remove());
       const wrapper = document.createElement('div');
       wrapper.setAttribute('data-persona', 'data_analyst');
       wrapper.innerHTML = html;
