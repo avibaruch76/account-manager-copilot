@@ -1470,6 +1470,8 @@ function showSection(id, navLink) {
     document.querySelector('hr.div').style.display = 'block';
   } else if (id === 'competitive') {
     document.getElementById('competitive-panel').style.display = 'block';
+    // Lazy-load markets on first visit
+    if (!window._marketsLoaded) { window._marketsLoaded = true; loadMarkets(); }
   }
 
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
@@ -3973,9 +3975,8 @@ async function runCompetitive() {
   document.getElementById('comp-status').style.display = 'none';
 
   try {
-    const resp = await fetch('http://localhost:3001/api/competitive', {
+    const resp = await apiFetch('/api/competitive', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         entity, scope, endMonth, monthsBack: parseInt(monthsBack),
         metric, compareMode: mode, manualCompetitors, market
@@ -4224,11 +4225,19 @@ function refreshCompCharts() {
 
 // Load markets dropdown from Jedify data
 async function loadMarkets() {
+  const sel = document.getElementById('comp-market');
+  if (!sel) return;
+  // Show loading state
+  const loadingOpt = document.createElement('option');
+  loadingOpt.value = '';
+  loadingOpt.textContent = 'Loading markets...';
+  loadingOpt.disabled = true;
+  sel.appendChild(loadingOpt);
   try {
-    const resp = await fetch('http://localhost:3001/api/markets');
-    if (!resp.ok) return;
+    const resp = await apiFetch('/api/markets');
+    if (!resp.ok) { loadingOpt.remove(); return; }
     const { markets } = await resp.json();
-    const sel = document.getElementById('comp-market');
+    loadingOpt.remove();
     markets.forEach(m => {
       const opt = document.createElement('option');
       opt.value = m;
@@ -4237,10 +4246,11 @@ async function loadMarkets() {
     });
     console.log(`[competitive] Loaded ${markets.length} markets`);
   } catch (e) {
+    loadingOpt.remove();
     console.warn('[competitive] Failed to load markets:', e.message);
   }
 }
-loadMarkets();
+// Markets load lazily on first visit to Competitive Intel tab — not on page load
 
 // Populate manual competitor picker based on current scope
 function populateCompManualList() {
