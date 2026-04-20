@@ -801,6 +801,12 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
         <option value="">All Markets</option>
       </select>
     </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;text-transform:uppercase;">Jurisdiction <span style="font-weight:400;color:#94A3B8;">(optional)</span></label>
+      <select id="comp-jurisdiction" style="padding:6px 12px;border:1px solid #CBD5E1;border-radius:6px;font-size:13px;min-width:160px;">
+        <option value="">All Jurisdictions</option>
+      </select>
+    </div>
     <button onclick="runCompetitive()" style="padding:8px 24px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;white-space:nowrap;">▶ Run</button>
   </div>
 
@@ -1470,8 +1476,8 @@ function showSection(id, navLink) {
     document.querySelector('hr.div').style.display = 'block';
   } else if (id === 'competitive') {
     document.getElementById('competitive-panel').style.display = 'block';
-    // Lazy-load markets on first visit
-    if (!window._marketsLoaded) { window._marketsLoaded = true; loadMarkets(); }
+    // Lazy-load markets + jurisdictions on first visit
+    if (!window._marketsLoaded) { window._marketsLoaded = true; loadMarkets(); loadJurisdictions(); }
   }
 
   document.querySelectorAll('.nav a').forEach(a => a.classList.remove('active'));
@@ -3950,6 +3956,7 @@ async function runCompetitive() {
   const { endMonth, monthsBack } = getDateFilters();
   const metric = document.getElementById('comp-metric').value;
   const market = (document.getElementById('comp-market').value || '').trim();
+  const jurisdiction = (document.getElementById('comp-jurisdiction').value || '').trim();
 
   let manualCompetitors = [];
   if (mode === 'manual') {
@@ -3963,6 +3970,7 @@ async function runCompetitive() {
   document.getElementById('comp-selection-info').innerHTML =
     `Comparing <strong>${entity}</strong> (${scopeLabel}) against top 3 ${scopeLabel.toLowerCase()}s by GGR` +
     (market ? ` in <strong>${market}</strong> market` : '') +
+    (jurisdiction ? ` · <strong>${jurisdiction}</strong> jurisdiction` : '') +
     ` | Period: ${endMonth || 'latest'}, ${monthsBack} months back`;
   document.getElementById('comp-selection-info').style.background = '#F0FDF4';
   document.getElementById('comp-selection-info').style.borderColor = '#BBF7D0';
@@ -3981,7 +3989,7 @@ async function runCompetitive() {
       method: 'POST',
       body: JSON.stringify({
         entity, scope, endMonth, monthsBack: parseInt(monthsBack),
-        metric, compareMode: mode, manualCompetitors, market
+        metric, compareMode: mode, manualCompetitors, market, jurisdiction
       })
     });
 
@@ -4252,7 +4260,33 @@ async function loadMarkets() {
     console.warn('[competitive] Failed to load markets:', e.message);
   }
 }
-// Markets load lazily on first visit to Competitive Intel tab — not on page load
+// Markets and jurisdictions load lazily on first visit to Competitive Intel tab — not on page load
+
+async function loadJurisdictions() {
+  const sel = document.getElementById('comp-jurisdiction');
+  if (!sel) return;
+  const loadingOpt = document.createElement('option');
+  loadingOpt.value = '';
+  loadingOpt.textContent = 'Loading...';
+  loadingOpt.disabled = true;
+  sel.appendChild(loadingOpt);
+  try {
+    const resp = await apiFetch('/api/jurisdictions');
+    if (!resp.ok) { loadingOpt.remove(); return; }
+    const { jurisdictions } = await resp.json();
+    loadingOpt.remove();
+    jurisdictions.forEach(j => {
+      const opt = document.createElement('option');
+      opt.value = j;
+      opt.textContent = j;
+      sel.appendChild(opt);
+    });
+    console.log(`[competitive] Loaded ${jurisdictions.length} jurisdictions`);
+  } catch (e) {
+    loadingOpt.remove();
+    console.warn('[competitive] Failed to load jurisdictions:', e.message);
+  }
+}
 
 // Populate manual competitor picker based on current scope
 function populateCompManualList() {

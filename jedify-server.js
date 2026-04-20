@@ -245,10 +245,14 @@ function trendArrow(trend) {
 let _marketsCache = { data: null, fetchedAt: 0 };
 const MARKETS_CACHE_TTL = 3600000; // 1 hour
 
+// ── Jurisdictions cache (for /api/jurisdictions dropdown) ────────────────
+let _jurisdictionsCache = { data: null, fetchedAt: 0 };
+const JURISDICTIONS_CACHE_TTL = 3600000; // 1 hour
+
 // ── Competitive Intelligence pipeline ─────────────────────────────────────
 
 async function runCompetitiveAnalysis(params, onProgress) {
-  const { entity, scope, endMonth, monthsBack, metric, compareMode, manualCompetitors, market } = params;
+  const { entity, scope, endMonth, monthsBack, metric, compareMode, manualCompetitors, market, jurisdiction } = params;
   const emit = onProgress || (() => {});
   const metricCol = metric === 'BETS' ? 'BETS_EUR' : metric === 'PLAYERS' ? 'PLAYER_COUNT' : 'GGR_EUR';
 
@@ -267,9 +271,13 @@ async function runCompetitiveAnalysis(params, onProgress) {
   const scopeLabel = scope === 'brand' ? 'brand' : scope === 'account' ? 'account' : 'operator';
   const entitySafe = escStr(entity);
 
-  // Optional market filter — used in Jedify discovery prompt AND as hard SQL filter
+  // Optional market filter (player country) — used in discovery prompt AND SQL
   const marketContext = market ? ` in the ${market} market` : '';
   const marketFilter = market ? `AND s.COUNTRY = '${escStr(market)}'` : '';
+
+  // Optional jurisdiction filter (operator licence territory) — entity-level filter
+  const jurisdictionContext = jurisdiction ? ` under ${jurisdiction} jurisdiction` : '';
+  const jurisdictionFilter = jurisdiction ? `AND e.JURISDICTION = '${escStr(jurisdiction)}'` : '';
 
   // Step 1: Discover top 3 competitors
   emit({ type: 'step', step: 'discover_competitors', name: 'Finding top competitors', index: 0, total: 5 });
@@ -281,7 +289,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
   } else {
     try {
       const discoveryResult = await askJedifyWithRetry(
-        `List the top 3 ${scopeLabel}s by total GGR (excluding "${entity}")${marketContext} from our data. Return ONLY the ${scopeLabel} names, one per line, nothing else.`,
+        `List the top 3 ${scopeLabel}s by total GGR (excluding "${entity}")${marketContext}${jurisdictionContext} from our data. Return ONLY the ${scopeLabel} names, one per line, nothing else.`,
         {}, 'competitive_discover'
       );
       const raw = discoveryResult.answer || '';
@@ -322,7 +330,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
              ROUND(SUM(s.BETS_EUR), 0) AS BETS_EUR,
              COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
       FROM ${BASE_FROM}
-      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter}
+      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter} ${jurisdictionFilter}
       GROUP BY M ORDER BY M
     `);
     console.log(`[competitive] Operator data: ${operatorMonthly.length} months`);
@@ -344,7 +352,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
              ROUND(SUM(s.BETS_EUR), 0) AS BETS_EUR,
              COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
       FROM ${BASE_FROM}
-      WHERE ${MF} AND e.OPERATOR_NAME IN (${compList}) AND ${dateWhere} ${marketFilter}
+      WHERE ${MF} AND e.OPERATOR_NAME IN (${compList}) AND ${dateWhere} ${marketFilter} ${jurisdictionFilter}
       GROUP BY e.OPERATOR_NAME, M ORDER BY e.OPERATOR_NAME, M
     `);
     console.log(`[competitive] Competitor data: ${competitorMonthly.length} rows`);
@@ -363,7 +371,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
       SELECT g.NAME AS GAME_NAME, ROUND(SUM(s.GGR_EUR), 0) AS TOTAL_GGR
       FROM ${BASE_FROM}
       LEFT JOIN IN_RUBYPLAY.JEDIFY.GAME_INFO_V g ON s.GAME_ID = g.ID
-      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter}
+      WHERE ${MF} AND ${scopeCol} = '${entitySafe}' AND ${dateWhere} ${marketFilter} ${jurisdictionFilter}
         AND g.NAME IS NOT NULL
       GROUP BY g.NAME ORDER BY TOTAL_GGR DESC LIMIT 10
     `);
@@ -381,7 +389,7 @@ async function runCompetitiveAnalysis(params, onProgress) {
                COUNT(DISTINCT s.PLAYER_ID) AS PLAYER_COUNT
         FROM ${BASE_FROM}
         LEFT JOIN IN_RUBYPLAY.JEDIFY.GAME_INFO_V g ON s.GAME_ID = g.ID
-        WHERE ${MF} AND e.OPERATOR_NAME IN (${allOperators}) AND ${dateWhere} ${marketFilter}
+        WHERE ${MF} AND e.OPERATOR_NAME IN (${allOperators}) AND ${dateWhere} ${marketFilter} ${jurisdictionFilter}
           AND g.NAME IN (${gameList})
         GROUP BY e.OPERATOR_NAME, g.NAME, M
         ORDER BY g.NAME, e.OPERATOR_NAME, M
@@ -1298,6 +1306,39 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ markets }));
     } catch (err) {
       console.error('[markets] Error:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err.message }));
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/api/jurisdictions') {
+    if (!mcpReady) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'MCP not ready yet.' }));
+      return;
+    }
+    try {
+      const now = Date.now();
+      if (_jurisdictionsCache.data && (now - _jurisdictionsCache.fetchedAt) < JURISDICTIONS_CACHE_TTL) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jurisdictions: _jurisdictionsCache.data }));
+        return;
+      }
+      console.log('[jurisdictions] Fetching distinct jurisdictions...');
+      const rows = await runSQL(`
+        SELECT DISTINCT e.JURISDICTION
+        FROM IN_RUBYPLAY.JEDIFY.ENTITIES_V e
+        WHERE e.JURISDICTION IS NOT NULL AND e.JURISDICTION != ''
+        ORDER BY e.JURISDICTION
+      `, 200);
+      const jurisdictions = rows.map(r => r.JURISDICTION).filter(Boolean);
+      _jurisdictionsCache = { data: jurisdictions, fetchedAt: Date.now() };
+      console.log(`[jurisdictions] Found ${jurisdictions.length} jurisdictions`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ jurisdictions }));
+    } catch (err) {
+      console.error('[jurisdictions] Error:', err.message);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: err.message }));
     }
