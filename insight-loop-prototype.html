@@ -2357,13 +2357,23 @@ async function submitLogin() {
   }
 })();
 
-async function fetchJedifyAnalysis(selection, abortSignal, customPrompt) {
+async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partialCheckIds) {
   const globalPrompt = document.getElementById('global-prompt-prefix')?.value || '';
   const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
 
+  // In partial-run mode use only the selected check IDs; otherwise use all enabled
+  const _resolvedOptionalIds = partialCheckIds
+    ? partialCheckIds.filter(id => _checks.find(c => c.id === id && c.type === 'optional'))
+    : _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
+  const _resolvedMandatoryIds = partialCheckIds
+    ? partialCheckIds.filter(id => _checks.find(c => c.id === id && c.type === 'mandatory'))
+    : _checks.filter(c => c.type === 'mandatory').map(c => c.id);
+  window._currentRunCheckIds = [..._resolvedMandatoryIds, ..._resolvedOptionalIds];
+
   function makePayload(persona) {
-    return { ...selection, persona, enabledOptionalCheckIds, globalRules: globalPrompt,
-      ...(customPrompt ? { customPrompt } : {}) };
+    return { ...selection, persona, enabledOptionalCheckIds: _resolvedOptionalIds, globalRules: globalPrompt,
+      ...(customPrompt ? { customPrompt } : {}),
+      ...(partialCheckIds ? { partialMandatoryIds: _resolvedMandatoryIds } : {}) };
   }
 
   // Silent background fetch — no SSE, no progress bar, just waits and renders on completion.
@@ -2694,8 +2704,35 @@ function buildReportHtml(data) {
     </div>`;
 }
 
+// Call after each completed run to update _runSession and refresh check badges
+function initOrUpdateSession(data, checkedIds) {
+  const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (!_runSession) {
+    // First run — create session
+    _runSession = {
+      entity: data.entity || '',
+      scope: data.scope || 'operator',
+      persona: data.persona,
+      runs: []
+    };
+  }
+  const runNumber = _runSession.runs.length + 1;
+  _runSession.runs.push({
+    runNumber,
+    timestamp: now,
+    checkIds: checkedIds || [],
+    report: data.report || ''
+  });
+  renderCheckLists();       // refresh badges
+  showPartialRunControls(); // show partial-run controls now that session exists
+}
+
 function renderResearchReport(data) {
   console.log('[renderResearchReport] persona:', data?.persona, '| report length:', data?.report?.length ?? 'N/A');
+  // Update session state (creates session on first call, appends on subsequent)
+  if (data && data.persona !== 'data_analyst') {
+    initOrUpdateSession(data, window._currentRunCheckIds || []);
+  }
   const html = buildReportHtml(data);
 
   if (data.persona === 'data_analyst') {
