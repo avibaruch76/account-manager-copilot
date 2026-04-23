@@ -911,6 +911,8 @@ let _runSession = null;
 //   runs: Array<{ runNumber: number, timestamp: string, checkIds: string[], report: string }>
 // }
 
+let _partialSelectedIds = new Set(); // check IDs ticked for next partial run
+
 async function previewPrompt() {
   const pop = getSelectedPopulation();
   if (!pop || pop.count === 0) {
@@ -1330,9 +1332,13 @@ function createCheckRow(check, isAdmin) {
     descHtml = '<strong>Triggers:</strong> ' + (check.triggers || 'Agent decides based on context') + whyHtml;
   }
 
-  // Toggle
+  // Toggle — in session mode, all checks get a partial-run checkbox instead
   let toggleHtml = '';
-  if (isMandatory) {
+  if (_runSession) {
+    // Partial-run mode: checkbox for selecting checks to re-run
+    const isPartialSelected = _partialSelectedIds.has(check.id);
+    toggleHtml = `<input type="checkbox" class="partial-run-cb" data-check-id="${check.id}" ${isPartialSelected ? 'checked' : ''} style="width:16px;height:16px;accent-color:#2563EB;cursor:pointer;flex-shrink:0;">`;
+  } else if (isMandatory) {
     toggleHtml = '<label class="check-toggle"><input type="checkbox" checked disabled><span class="check-slider"></span></label>';
   } else {
     toggleHtml = '<label class="check-toggle"><input type="checkbox" ' + (check.enabled ? 'checked' : '') + '><span class="check-slider"></span></label>';
@@ -1412,6 +1418,24 @@ function createCheckRow(check, isAdmin) {
         renderCheckLists();
         showToast('"' + check.name + '" promoted to mandatory — will run for every brand, every QBR.');
       });
+    }
+  }
+
+  // Partial-run checkbox listener
+  if (_runSession) {
+    const partialCb = li.querySelector('.partial-run-cb');
+    if (partialCb) {
+      partialCb.addEventListener('change', function() {
+        if (this.checked) {
+          _partialSelectedIds.add(check.id);
+          li.classList.add('partial-selected');
+        } else {
+          _partialSelectedIds.delete(check.id);
+          li.classList.remove('partial-selected');
+        }
+        updatePartialRunButton();
+      });
+      if (_partialSelectedIds.has(check.id)) li.classList.add('partial-selected');
     }
   }
 
@@ -1616,6 +1640,16 @@ function updateCount() {
   if (configSummary) configSummary.innerHTML = '<strong>' + mandatory + '</strong> mandatory + <strong>' + optional + '</strong> optional checks';
   const mCount = document.querySelector('.m-count');
   if (mCount) mCount.textContent = mandatory;
+}
+
+function updatePartialRunButton() {
+  const btn = document.getElementById('partial-run-btn');
+  const countEl = document.getElementById('partial-run-count');
+  if (!btn) return;
+  const n = _partialSelectedIds.size;
+  btn.disabled = n === 0;
+  btn.textContent = n === 0 ? '▶ Run Selected Checks' : `▶ Run ${n} Selected Check${n > 1 ? 's' : ''}`;
+  if (countEl) countEl.textContent = n > 0 ? `${n} selected` : '';
 }
 
 function showToast(msg, isWarning) {
