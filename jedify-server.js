@@ -957,10 +957,13 @@ const PERSONA_INSTRUCTIONS = {
 };
 
 // ── Build the research prompt for ask_a_research_question ─────────────────────
-function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona, globalRules, checkDefinitions) {
+function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona, globalRules, checkDefinitions, partialMandatoryIds) {
   const checks = require('./research-checks');
+  const mandatoryChecks = partialMandatoryIds && partialMandatoryIds.length > 0
+    ? checks.mandatory.filter(c => partialMandatoryIds.includes(c.id))
+    : checks.mandatory;
   const selectedChecks = [
-    ...checks.mandatory,
+    ...mandatoryChecks,
     ...checks.optional.filter(c => enabledOptionalIds.includes(c.id))
   ];
 
@@ -1108,14 +1111,14 @@ let _lastCompletedResult = null;
 const _activeSSeClients = new Set();
 
 async function runResearch(reqBody, onProgress) {
-  const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, persona, customPrompt, globalRules } = reqBody;
+  const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, partialMandatoryIds, persona, customPrompt, globalRules } = reqBody;
   const emit = onProgress || (() => {});
   const scopeLabel = scope || 'operator';
   const activePersona = persona || 'am_actions';
 
   console.log(`[research] Starting research — ${scopeLabel}: "${entity}", persona: ${activePersona}`);
 
-  const prompt = customPrompt || buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona, globalRules || '', checkDefinitions || {});
+  const prompt = customPrompt || buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona, globalRules || '', checkDefinitions || {}, partialMandatoryIds || null);
   console.log(`[research] Prompt ${customPrompt ? '(custom, user-edited)' : '(auto-built)'} (${prompt.length} chars). Submitting to Jedify...`);
 
   const onStage = (idx, label) => {
@@ -1262,7 +1265,7 @@ const server = http.createServer(async (req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, persona, globalRules } = JSON.parse(body);
+        const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, partialMandatoryIds, persona, globalRules } = JSON.parse(body);
         const prompt = buildResearchPrompt(
           entity || 'Unknown',
           scope || 'operator',
@@ -1270,7 +1273,8 @@ const server = http.createServer(async (req, res) => {
           enabledOptionalCheckIds || [],
           persona || 'am_actions',
           globalRules || '',
-          checkDefinitions || {}
+          checkDefinitions || {},
+          partialMandatoryIds || null
         );
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ prompt }));
