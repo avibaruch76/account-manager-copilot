@@ -1690,6 +1690,18 @@ function rerunEverything() {
   runAnalysis();      // fresh Run 1
 }
 
+function runPartialAnalysis() {
+  if (_partialSelectedIds.size === 0) {
+    showToast('⚠️ Select at least one check to run.', true);
+    return;
+  }
+  const selectedIds = Array.from(_partialSelectedIds);
+  _partialSelectedIds.clear();
+  updatePartialRunButton();
+  // Delegate to runAnalysis with the selected IDs
+  runAnalysis(null, selectedIds);
+}
+
 function showToast(msg, isWarning) {
   const toast = document.getElementById('toast');
   toast.textContent = msg;
@@ -2045,7 +2057,7 @@ async function cancelAnalysis() {
 let _analysisRunning = false;
 let _analysisAbortController = null;
 
-function runAnalysis(customPrompt) {
+function runAnalysis(customPrompt, partialCheckIds) {
   const pop = getSelectedPopulation();
 
   if (pop.count === 0) {
@@ -2086,6 +2098,19 @@ function runAnalysis(customPrompt) {
   const selection = buildSelectionPayload(pop);
   const enabledChecks = selection.enabledChecks || [];
 
+  // Invalidate session if entity or date context has changed
+  if (_runSession) {
+    const entityNow = selection.entity || (selection.values && selection.values[0]) || '';
+    const sessionKey = _runSession.entity + '|' + _runSession.scope;
+    const nowKey = entityNow + '|' + (selection.scope || 'operator');
+    if (sessionKey !== nowKey) {
+      _runSession = null;
+      _partialSelectedIds.clear();
+      hidePartialRunControls();
+      renderCheckLists();
+    }
+  }
+
   // Initialize research timeline — pre-render all stages as grey
   const TIMELINE_STAGES = [
     'Submitting research request...',
@@ -2110,8 +2135,11 @@ function runAnalysis(customPrompt) {
     data_analyst: 'Data Analyst',
     admin: 'All Personas'
   }[_selectedPersona] || _selectedPersona;
+  const iterLabel = (partialCheckIds && _runSession)
+    ? ` — Run ${_runSession.runs.length + 1} (${partialCheckIds.length} check${partialCheckIds.length > 1 ? 's' : ''})`
+    : '';
   document.getElementById('run-eta').innerHTML =
-    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}</strong> — Jedify is researching. This takes 5-10 minutes.`;
+    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}${iterLabel}</strong> — Jedify is researching. This takes 5-10 minutes.`;
 
   // Show overlay
   const overlay = document.getElementById('run-overlay');
@@ -2145,7 +2173,7 @@ function runAnalysis(customPrompt) {
     if (currentWidth < 10) fill.style.width = (currentWidth + 1) + '%';
   }, 3000);
 
-  fetchJedifyAnalysis(selection, _analysisAbortController?.signal, customPrompt).then(data => {
+  fetchJedifyAnalysis(selection, _analysisAbortController?.signal, customPrompt, partialCheckIds || null).then(data => {
     clearInterval(progressTimer);
 
     fill.style.width = '100%';
