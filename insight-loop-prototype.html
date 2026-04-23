@@ -1287,6 +1287,21 @@ function renderCheckLists() {
   updateCount();
 }
 
+// Returns run status for a check given current _runSession
+// Returns: { state: 'done'|'never', runNumber: number|null, timestamp: string|null }
+function getCheckRunStatus(checkId) {
+  if (!_runSession || !_runSession.runs || _runSession.runs.length === 0) {
+    return { state: 'never', runNumber: null, timestamp: null };
+  }
+  // Find most recent run that included this check
+  for (let i = _runSession.runs.length - 1; i >= 0; i--) {
+    if (_runSession.runs[i].checkIds.includes(checkId)) {
+      return { state: 'done', runNumber: _runSession.runs[i].runNumber, timestamp: _runSession.runs[i].timestamp };
+    }
+  }
+  return { state: 'never', runNumber: null, timestamp: null };
+}
+
 function createCheckRow(check, isAdmin) {
   const li = document.createElement('li');
   li.className = 'check-row' + (!check.enabled ? ' disabled-check' : '');
@@ -1352,13 +1367,24 @@ function createCheckRow(check, isAdmin) {
     actionsHtml += adminBtns;
   }
 
+  // Build run-status badge (only visible when a session exists)
+  const runStatus = getCheckRunStatus(check.id);
+  let runStatusHtml = '';
+  if (_runSession) {
+    if (runStatus.state === 'done') {
+      runStatusHtml = `<span class="run-status-badge done">✓ Run ${runStatus.runNumber} · ${runStatus.timestamp}</span>`;
+    } else {
+      runStatusHtml = `<span class="run-status-badge never">○ Not run</span>`;
+    }
+  }
+
   li.innerHTML = `
     ${toggleHtml}
     <div class="check-info">
       <div class="check-name">${check.name} ${badgeHtml}</div>
       <div class="check-desc">${descHtml}</div>
     </div>
-    <div class="check-actions" style="display:flex;align-items:center;gap:2px;flex-shrink:0;">${actionsHtml}</div>
+    <div class="check-actions" style="display:flex;align-items:center;gap:2px;flex-shrink:0;">${actionsHtml}${runStatusHtml}</div>
   `;
 
   // Attach toggle listener for optional checks
