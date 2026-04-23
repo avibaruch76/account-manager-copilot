@@ -293,6 +293,10 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .login-box button{margin-top:12px;width:100%;padding:12px;background:linear-gradient(135deg,#4A235A,#7D3C98);color:white;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer}
 .login-box button:hover{opacity:.9}
 #login-error{font-size:12px;color:#DC2626;margin-top:8px;min-height:16px}
+
+/* Partial-run button opacity states */
+#partial-run-btn:not(:disabled) { opacity: 1; }
+#partial-run-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
@@ -531,6 +535,20 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
     🧠 Agent-Decided Checks <span style="font-size:11px;color:#64748B;font-weight:400">— agent picks 1-3 based on context</span>
   </h3>
   <ul class="check-list" id="optional-list"></ul>
+
+  <!-- Iterative run controls — visible only when a session exists -->
+  <div id="partial-run-controls" style="display:none;margin-top:16px;padding-top:14px;border-top:1px solid #F1F5F9;align-items:center;gap:10px;flex-wrap:wrap;">
+    <button id="partial-run-btn" onclick="runPartialAnalysis()" disabled
+      style="padding:8px 20px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:0.5;">
+      ▶ Run Selected Checks
+    </button>
+    <span id="partial-run-count" style="font-size:12px;font-weight:700;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:10px;"></span>
+    <button onclick="rerunEverything()"
+      style="margin-left:auto;padding:8px 18px;background:white;color:#64748B;border:1.5px solid #CBD5E1;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
+      ↺ Re-run Everything
+    </button>
+    <div style="width:100%;font-size:11px;color:#94A3B8;margin-top:4px;">Results will be appended as a new iteration below the existing report.</div>
+  </div>
 
   <!-- ADD NEW CHECK -->
   <div class="add-check-panel" id="add-panel">
@@ -1650,6 +1668,26 @@ function updatePartialRunButton() {
   btn.disabled = n === 0;
   btn.textContent = n === 0 ? '▶ Run Selected Checks' : `▶ Run ${n} Selected Check${n > 1 ? 's' : ''}`;
   if (countEl) countEl.textContent = n > 0 ? `${n} selected` : '';
+}
+
+function showPartialRunControls() {
+  const el = document.getElementById('partial-run-controls');
+  if (el) el.style.display = 'flex';
+  updatePartialRunButton();
+}
+
+function hidePartialRunControls() {
+  const el = document.getElementById('partial-run-controls');
+  if (el) el.style.display = 'none';
+  _partialSelectedIds.clear();
+}
+
+function rerunEverything() {
+  _runSession = null;
+  _partialSelectedIds.clear();
+  hidePartialRunControls();
+  renderCheckLists(); // reset badges
+  runAnalysis();      // fresh Run 1
 }
 
 function showToast(msg, isWarning) {
