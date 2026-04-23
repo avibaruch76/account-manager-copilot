@@ -2460,7 +2460,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
       ? await readSSEStream(res)
       : await res.json();
     console.log('[fireForeground] data keys:', data ? Object.keys(data) : 'null', '| persona:', data?.persona, '| report length:', data?.report?.length ?? 'N/A');
-    if (data && data.report !== undefined) renderResearchReport(data);
+    // NOTE: renderResearchReport is called by runAnalysis's .then() — do NOT call it here too
     return data;
   }
 
@@ -2810,8 +2810,8 @@ function renderResearchReport(data) {
       const dlBtns = document.getElementById('download-btns');
       if (dlBtns) dlBtns.style.display = 'flex';
     }
-    // Navigate to Analysis Results
-    showSection('react', document.querySelector('.nav a[href="#react"]'));
+    // data_analyst is supplementary background — do NOT auto-navigate away from whatever tab the user is on.
+    // A toast + nav-link badge ("✅ Ready") already signals completion.
   } else {
     // Other personas → their tab only
     const paneId = PERSONA_PANE_ID[data.persona];
