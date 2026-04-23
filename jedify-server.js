@@ -957,14 +957,18 @@ const PERSONA_INSTRUCTIONS = {
 };
 
 // ── Build the research prompt for ask_a_research_question ─────────────────────
-function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona, globalRules) {
+function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona, globalRules, checkDefinitions) {
   const checks = require('./research-checks');
   const selectedChecks = [
     ...checks.mandatory,
     ...checks.optional.filter(c => enabledOptionalIds.includes(c.id))
   ];
 
-  const bullets = selectedChecks.map(c => `• ${c.query}`).join('\n');
+  // Use user-edited check text if provided (checkDefinitions overrides research-checks.js)
+  const bullets = selectedChecks.map(c => {
+    const override = checkDefinitions && (checkDefinitions[c.id]?.question || checkDefinitions[c.id]?.query);
+    return `• ${override || c.query}`;
+  }).join('\n');
   const instruction = PERSONA_INSTRUCTIONS[persona] || PERSONA_INSTRUCTIONS.am_actions;
 
   const globalSection = globalRules && globalRules.trim()
@@ -1104,14 +1108,14 @@ let _lastCompletedResult = null;
 const _activeSSeClients = new Set();
 
 async function runResearch(reqBody, onProgress) {
-  const { entity, scope, dateRange, enabledOptionalCheckIds, persona, customPrompt, globalRules } = reqBody;
+  const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, persona, customPrompt, globalRules } = reqBody;
   const emit = onProgress || (() => {});
   const scopeLabel = scope || 'operator';
   const activePersona = persona || 'am_actions';
 
   console.log(`[research] Starting research — ${scopeLabel}: "${entity}", persona: ${activePersona}`);
 
-  const prompt = customPrompt || buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona, globalRules || '');
+  const prompt = customPrompt || buildResearchPrompt(entity, scopeLabel, dateRange, enabledOptionalCheckIds || [], activePersona, globalRules || '', checkDefinitions || {});
   console.log(`[research] Prompt ${customPrompt ? '(custom, user-edited)' : '(auto-built)'} (${prompt.length} chars). Submitting to Jedify...`);
 
   const onStage = (idx, label) => {
@@ -1258,14 +1262,15 @@ const server = http.createServer(async (req, res) => {
     req.on('data', c => body += c);
     req.on('end', () => {
       try {
-        const { entity, scope, dateRange, enabledOptionalCheckIds, persona, globalRules } = JSON.parse(body);
+        const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, persona, globalRules } = JSON.parse(body);
         const prompt = buildResearchPrompt(
           entity || 'Unknown',
           scope || 'operator',
           dateRange || { start: '6 months ago', end: 'current month' },
           enabledOptionalCheckIds || [],
           persona || 'am_actions',
-          globalRules || ''
+          globalRules || '',
+          checkDefinitions || {}
         );
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ prompt }));

@@ -918,6 +918,7 @@ async function previewPrompt() {
     startLabel = monthsBack + ' months ago';
   }
   const enabledOptionalCheckIds = _checks.filter(c => c.type === 'optional' && c.enabled).map(c => c.id);
+  const checkDefinitions = getCheckDefinitions();
   const persona = _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona;
   const globalRules = document.getElementById('global-prompt-prefix')?.value || '';
 
@@ -928,7 +929,7 @@ async function previewPrompt() {
   try {
     const res = await apiFetch('/api/build-prompt', {
       method: 'POST',
-      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, persona, globalRules })
+      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, checkDefinitions, persona, globalRules })
     });
     const data = await res.json();
     textarea.value = data.prompt || data.error || 'Error building prompt';
