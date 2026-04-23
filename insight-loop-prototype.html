@@ -48,6 +48,14 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .badge-agent{background:linear-gradient(135deg,#7D3C98,#4A235A);color:white}
 .badge-new{background:#E8F8F1;color:#1D6A39;border:1px solid #82E0AA}
 
+/* Iterative run-status badges on check rows */
+.run-status-badge{flex-shrink:0;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;white-space:nowrap;margin-left:6px}
+.run-status-badge.done{background:#F0FDF4;color:#16A34A;border:1px solid #BBF7D0}
+.run-status-badge.selected{background:#EFF6FF;color:#2563EB;border:1px solid #BFDBFE}
+.run-status-badge.never{background:#F8FAFC;color:#94A3B8;border:1px solid #E2E8F0}
+/* Check row highlight when selected for partial run */
+.check-row.partial-selected{background:#F0F7FF;border-radius:6px}
+
 /* DATA TABLE */
 .data-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0}
 .data-table th{background:#1E2761;color:white;padding:8px 12px;text-align:left;font-weight:700;font-size:11px;letter-spacing:.5px}
