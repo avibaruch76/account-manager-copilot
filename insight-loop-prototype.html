@@ -895,6 +895,14 @@ function selectPersona(persona, btn) {
 
 let _pendingSelection = null; // holds selection payload while prompt preview is open
 
+// Run session for iterative checks — in-memory only, cleared on entity change or Re-run Everything
+let _runSession = null;
+// {
+//   entity: string, scope: string, endMonth: string, monthsBack: number,
+//   persona: string,
+//   runs: Array<{ runNumber: number, timestamp: string, checkIds: string[], report: string }>
+// }
+
 async function previewPrompt() {
   const pop = getSelectedPopulation();
   if (!pop || pop.count === 0) {
