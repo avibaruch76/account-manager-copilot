@@ -2692,6 +2692,20 @@ function renderMarkdown(raw) {
   return html;
 }
 
+function buildRunSectionHtml(runNumber, timestamp, checkNames, reportHtml) {
+  const isFirst = runNumber === 1;
+  const divider = isFirst ? '' : `<hr style="border:none;border-top:2px dashed #E2E8F0;margin:20px 0;">`;
+  const badge = isFirst
+    ? `<span style="background:#1E293B;color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;">Run 1</span>`
+    : `<span style="background:#2563EB;color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;">Run ${runNumber}</span>`;
+  const meta = `<span style="font-size:11px;color:#94A3B8;margin-left:8px;">${timestamp}${checkNames ? ' · ' + checkNames : ''}</span>`;
+  return `
+    ${divider}
+    <div style="display:flex;align-items:center;margin-bottom:12px;">${badge}${meta}</div>
+    ${reportHtml}
+  `;
+}
+
 function buildReportHtml(data) {
   const formatted = renderMarkdown(data.report || 'No report returned.');
   return `
@@ -2739,14 +2753,29 @@ function renderResearchReport(data) {
     // Data Analyst → always goes to Analysis Results (#check-results)
     const checkResults = document.getElementById('check-results');
     if (checkResults) {
-      const existing = checkResults.querySelector('[data-persona="data_analyst"]');
-      if (existing) existing.remove();
-      // Clear any loading/placeholder messages
-      checkResults.querySelectorAll('div:not([data-persona])').forEach(el => el.remove());
-      const wrapper = document.createElement('div');
-      wrapper.setAttribute('data-persona', 'data_analyst');
-      wrapper.innerHTML = html;
-      checkResults.appendChild(wrapper);
+      // Clear any loading/placeholder messages (non-run-tagged divs)
+      checkResults.querySelectorAll('div:not([data-persona]):not([data-run])').forEach(el => el.remove());
+      if (_runSession && _runSession.runs.length > 1) {
+        const run = _runSession.runs[_runSession.runs.length - 1];
+        const checkNames = run.checkIds
+          .map(id => _checks.find(c => c.id === id)?.name || id)
+          .join(', ');
+        const section = document.createElement('div');
+        section.setAttribute('data-persona', 'data_analyst');
+        section.setAttribute('data-run', run.runNumber);
+        section.innerHTML = buildRunSectionHtml(run.runNumber, run.timestamp, checkNames, html);
+        checkResults.appendChild(section);
+      } else {
+        const wrapper = document.createElement('div');
+        wrapper.setAttribute('data-persona', 'data_analyst');
+        if (_runSession && _runSession.runs.length === 1) {
+          const run = _runSession.runs[0];
+          wrapper.innerHTML = buildRunSectionHtml(1, run.timestamp, null, html);
+        } else {
+          wrapper.innerHTML = html;
+        }
+        checkResults.appendChild(wrapper);
+      }
       const sub = document.getElementById('check-results-sub');
       if (sub) sub.textContent = '';
       // Show download buttons
@@ -2762,7 +2791,26 @@ function renderResearchReport(data) {
     if (!paneId) return;
     const pane = document.getElementById(paneId);
     if (!pane) return;
-    pane.innerHTML = html;
+
+    if (_runSession && _runSession.runs.length > 1) {
+      // Append — wrap in run section header
+      const run = _runSession.runs[_runSession.runs.length - 1];
+      const checkNames = run.checkIds
+        .map(id => _checks.find(c => c.id === id)?.name || id)
+        .join(', ');
+      const section = document.createElement('div');
+      section.setAttribute('data-run', run.runNumber);
+      section.innerHTML = buildRunSectionHtml(run.runNumber, run.timestamp, checkNames, html);
+      pane.appendChild(section);
+    } else {
+      // First run — wrap Run 1 header
+      if (_runSession && _runSession.runs.length === 1) {
+        const run = _runSession.runs[0];
+        pane.innerHTML = `<div data-run="1">${buildRunSectionHtml(1, run.timestamp, null, html)}</div>`;
+      } else {
+        pane.innerHTML = html;
+      }
+    }
 
     // Switch to this persona's tab in Output by Persona
     const shortId = PERSONA_TAB_ID[data.persona];
