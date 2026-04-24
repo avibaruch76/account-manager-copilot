@@ -2482,8 +2482,8 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
   // - selected persona → SSE foreground (progress bar, single stream)
   // - data_analyst → silent background (no SSE, no competing stream)
   try {
-    // Fire data_analyst silently in background — don't await it
-    fireBackground('data_analyst');
+    // Fire data_analyst silently in background — only on full runs (not partial re-runs)
+    if (!partialCheckIds) fireBackground('data_analyst');
     // Run selected persona with full SSE progress
     const result = await fireForeground(_selectedPersona);
     return result || { report: 'done' };
