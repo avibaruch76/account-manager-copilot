@@ -2565,6 +2565,7 @@ async function readSSEStream(response) {
   const decoder = new TextDecoder();
   let buffer = '';
   let finalResult = null;
+  let runId = null; // captured from run_started event — used in polling fallback
 
   const fill = document.getElementById('progress-fill');
   const eta = document.getElementById('run-eta');
@@ -2585,6 +2586,12 @@ async function readSSEStream(response) {
       const jsonStr = chunk.slice(6); // remove "data: "
       try {
         const evt = JSON.parse(jsonStr);
+
+        if (evt.type === 'run_started') {
+          runId = evt.runId;
+          console.log('[SSE] Run started, runId:', runId);
+          continue; // no visual update needed
+        }
 
         if (evt.type === 'stage') {
           // Mark all previous stages as done (green ✅), current as active (⏳)
@@ -2641,12 +2648,14 @@ async function readSSEStream(response) {
   while (Date.now() - pollStart < MAX_WAIT_MS) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     try {
-      const statusRes = await apiFetch('/api/research-status');
+      // Use runId so this client only gets ITS OWN result, not a concurrent run's result
+      const statusUrl = '/api/research-status' + (runId ? '?runId=' + encodeURIComponent(runId) : '');
+      const statusRes = await apiFetch(statusUrl);
       if (!statusRes.ok) continue;
       const status = await statusRes.json();
       if (status.report) {
         // Server finished while SSE was broken — recover the result
-        console.log('[SSE] Recovered result from server after reconnect');
+        console.log('[SSE] Recovered result from server after reconnect, runId:', runId);
         if (fill) fill.style.width = '100%';
         return status;
       }

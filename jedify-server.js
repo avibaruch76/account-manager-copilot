@@ -1028,8 +1028,8 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
   console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, session=${sessionVersionAtStart}, polling...`);
   if (onStage) onStage(0, RESEARCH_STAGES[0]);
 
-  // Poll until done (max 10 min at 5s intervals = 120 polls)
-  const maxPolls = 120;
+  // Poll until done (max 30 min at 5s intervals = 360 polls)
+  const maxPolls = 360;
   const pollInterval = 5000;
   let stageIdx = 0;
 
@@ -1110,6 +1110,9 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
 let _cancelToken = null;
 // Last completed result — kept in memory so browser can recover if SSE dropped
 let _lastCompletedResult = null;
+// Per-runId completed results — keyed by runId so concurrent runs don't overwrite each other
+const _completedResultsByRunId = new Map(); // runId → result
+const _activeRunIds = new Set();             // runIds currently executing
 // All active SSE response objects — so SIGTERM can notify them before shutdown
 const _activeSSeClients = new Set();
 
@@ -1220,14 +1223,30 @@ const server = http.createServer(async (req, res) => {
     return rejectUnauth(res);
   }
 
-  if (req.method === 'GET' && req.url === '/api/research-status') {
-    if (_lastCompletedResult) {
-      // Return last completed result (browser can recover if SSE was interrupted)
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(_lastCompletedResult));
+  if (req.method === 'GET' && req.url.startsWith('/api/research-status')) {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const runId = urlObj.searchParams.get('runId');
+
+    if (runId) {
+      // Per-run lookup: only return the result for this specific SSE request
+      const result = _completedResultsByRunId.get(runId);
+      if (result) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } else {
+        const active = _activeRunIds.has(runId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ active, inquiry_id: active ? _activeInquiryId : null }));
+      }
     } else {
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ active: !!_activeInquiryId, inquiry_id: _activeInquiryId || null }));
+      // Legacy path (no runId) — return last completed result or active status
+      if (_lastCompletedResult) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(_lastCompletedResult));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ active: !!_activeInquiryId, inquiry_id: _activeInquiryId || null }));
+      }
     }
     return;
   }
@@ -1432,21 +1451,40 @@ const server = http.createServer(async (req, res) => {
           'X-Accel-Buffering': 'no'  // disable nginx buffering if behind proxy
         });
 
+        // Generate a unique runId so the polling fallback can find THIS run's result
+        // even when concurrent runs (e.g. data_analyst background) complete first
+        const runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        _activeRunIds.add(runId);
+        // Clear stale _lastCompletedResult so a leftover result from a previous run
+        // isn't returned to a new polling client before this run completes
+        _lastCompletedResult = null;
+
         // Track this client so SIGTERM can notify it
         _activeSSeClients.add(res);
         res.on('close', () => _activeSSeClients.delete(res));
+
+        // Send runId as the very first event so the client can use it when polling
+        res.write(`data: ${JSON.stringify({ type: 'run_started', runId })}\n\n`);
 
         const onProgress = (evt) => {
           res.write(`data: ${JSON.stringify(evt)}\n\n`);
         };
 
         const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona }, onProgress);
+        // Store result keyed by runId BEFORE sending the final SSE event
+        _completedResultsByRunId.set(runId, results);
+        _activeRunIds.delete(runId);
+        // Limit map size — keep at most 20 completed results
+        if (_completedResultsByRunId.size > 20) {
+          _completedResultsByRunId.delete(_completedResultsByRunId.keys().next().value);
+        }
         // Send final result as the last event
         _activeSSeClients.delete(res);
         res.write(`data: ${JSON.stringify({ type: 'result', data: results })}\n\n`);
         res.end();
       } catch (err) {
         console.error('[research] Pipeline error:', err);
+        _activeRunIds.delete(runId);
         _activeSSeClients.delete(res);
         // If headers already sent (SSE mode), send error as event
         if (res.headersSent) {
