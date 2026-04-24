@@ -959,7 +959,10 @@ const PERSONA_INSTRUCTIONS = {
 // ── Build the research prompt for ask_a_research_question ─────────────────────
 function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, persona, globalRules, checkDefinitions, partialMandatoryIds) {
   const checks = require('./research-checks');
-  const mandatoryChecks = partialMandatoryIds && partialMandatoryIds.length > 0
+  // partialMandatoryIds=null → full run, use all mandatory
+  // partialMandatoryIds=[] → partial run with no mandatory selected, use none
+  // partialMandatoryIds=['id1',...] → partial run, use only those
+  const mandatoryChecks = Array.isArray(partialMandatoryIds)
     ? checks.mandatory.filter(c => partialMandatoryIds.includes(c.id))
     : checks.mandatory;
   const selectedChecks = [

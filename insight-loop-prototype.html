@@ -542,6 +542,10 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       style="padding:8px 20px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:0.5;">
       ▶ Run Selected Checks
     </button>
+    <button id="partial-preview-btn" onclick="previewPartialPrompt()" disabled
+      style="padding:8px 14px;background:white;color:#2563EB;border:1.5px solid #BFDBFE;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;opacity:0.5;">
+      👁 Preview Prompt
+    </button>
     <span id="partial-run-count" style="font-size:12px;font-weight:700;color:#2563EB;background:#EFF6FF;padding:3px 10px;border-radius:10px;"></span>
     <button onclick="rerunEverything()"
       style="margin-left:auto;padding:8px 18px;background:white;color:#64748B;border:1.5px solid #CBD5E1;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">
@@ -920,6 +924,7 @@ function selectPersona(persona, btn) {
 }
 
 let _pendingSelection = null; // holds selection payload while prompt preview is open
+let _pendingPartialIds = null; // set when previewing a partial run prompt
 
 // Run session for iterative checks — in-memory only, cleared on entity change or Re-run Everything
 let _runSession = null;
@@ -979,13 +984,70 @@ async function previewPrompt() {
 function closePromptPreview() {
   document.getElementById('prompt-overlay').classList.remove('active');
   _pendingSelection = null;
+  _pendingPartialIds = null;
 }
 
 function confirmAndRunWithPrompt() {
   const customPrompt = document.getElementById('prompt-preview-text').value.trim();
   document.getElementById('prompt-overlay').classList.remove('active');
-  // Run with the (possibly edited) prompt
-  runAnalysis(customPrompt);
+  const partialIds = _pendingPartialIds;
+  _pendingSelection = null;
+  _pendingPartialIds = null;
+  // Run with the (possibly edited) prompt — pass partial IDs if this was a partial preview
+  runAnalysis(customPrompt, partialIds || null);
+}
+
+async function previewPartialPrompt() {
+  if (_partialSelectedIds.size === 0) {
+    showToast('⚠️ Select at least one check first.', true);
+    return;
+  }
+  const pop = getSelectedPopulation();
+  if (!pop || pop.count === 0) {
+    showToast('Please select an operator, brand, or account first.', true);
+    return;
+  }
+  const selection = buildSelectionPayload(pop);
+  const entity = selection.entity || (selection.values && selection.values[0]) || 'Unknown';
+  const scope = selection.scope || 'operator';
+  const endMonth = selection.endMonth || '';
+  const monthsBack = parseInt(selection.monthsBack) || 6;
+  let startLabel = '', endLabel = '';
+  if (endMonth && /^\d{4}-\d{2}$/.test(endMonth)) {
+    const [y, m] = endMonth.split('-').map(Number);
+    const endDate = new Date(y, m - 1, 1);
+    const startDate = new Date(y, m - monthsBack, 1);
+    startLabel = startDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+    endLabel = endDate.toLocaleString('en-GB', { month: 'long', year: 'numeric' });
+  } else {
+    endLabel = 'current month';
+    startLabel = monthsBack + ' months ago';
+  }
+  const selectedIds = Array.from(_partialSelectedIds);
+  const enabledOptionalCheckIds = selectedIds.filter(id => _checks.find(c => c.id === id && c.type === 'optional'));
+  const partialMandatoryIds = selectedIds.filter(id => _checks.find(c => c.id === id && c.type === 'mandatory'));
+  const checkDefinitions = getCheckDefinitions();
+  const persona = _selectedPersona === 'admin' ? 'am_actions' : _selectedPersona;
+  const globalRules = document.getElementById('global-prompt-prefix')?.value || '';
+
+  const textarea = document.getElementById('prompt-preview-text');
+  textarea.value = 'Loading prompt...';
+  document.getElementById('prompt-overlay').classList.add('active');
+
+  // Store partial IDs so confirm button runs partial analysis
+  _pendingPartialIds = selectedIds;
+  _pendingSelection = null;
+
+  try {
+    const res = await apiFetch('/api/build-prompt', {
+      method: 'POST',
+      body: JSON.stringify({ entity, scope, dateRange: { start: startLabel, end: endLabel }, enabledOptionalCheckIds, partialMandatoryIds, checkDefinitions, persona, globalRules })
+    });
+    const data = await res.json();
+    textarea.value = data.prompt || data.error || 'Error building prompt';
+  } catch (e) {
+    textarea.value = 'Error: ' + e.message;
+  }
 }
 let _currentRole = localStorage.getItem('ggr_role') || 'admin'; // 'admin' or 'user'
 
@@ -1662,10 +1724,12 @@ function updateCount() {
 
 function updatePartialRunButton() {
   const btn = document.getElementById('partial-run-btn');
+  const previewBtn = document.getElementById('partial-preview-btn');
   const countEl = document.getElementById('partial-run-count');
   if (!btn) return;
   const n = _partialSelectedIds.size;
   btn.disabled = n === 0;
+  if (previewBtn) previewBtn.disabled = n === 0;
   btn.textContent = n === 0 ? '▶ Run Selected Checks' : `▶ Run ${n} Selected Check${n > 1 ? 's' : ''}`;
   if (countEl) countEl.textContent = n > 0 ? `${n} selected` : '';
 }
