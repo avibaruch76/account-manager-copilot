@@ -970,6 +970,30 @@ function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, perso
     ...checks.optional.filter(c => enabledOptionalIds.includes(c.id))
   ];
 
+  // Append custom checks (not in research-checks.js) that live only in checkDefinitions.
+  // These are user-created checks whose IDs start with 'custom_' or simply aren't builtin.
+  if (checkDefinitions) {
+    const builtinIds = new Set(selectedChecks.map(c => c.id));
+    // Custom optional checks passed via enabledOptionalIds
+    enabledOptionalIds.forEach(id => {
+      if (!builtinIds.has(id) && checkDefinitions[id]) {
+        const def = checkDefinitions[id];
+        selectedChecks.push({ id, query: def.question || def.query || def.name || id });
+        builtinIds.add(id);
+      }
+    });
+    // Custom mandatory checks passed via partialMandatoryIds (partial runs only)
+    if (Array.isArray(partialMandatoryIds)) {
+      partialMandatoryIds.forEach(id => {
+        if (!builtinIds.has(id) && checkDefinitions[id]) {
+          const def = checkDefinitions[id];
+          selectedChecks.push({ id, query: def.question || def.query || def.name || id });
+          builtinIds.add(id);
+        }
+      });
+    }
+  }
+
   // Use user-edited check text if provided (checkDefinitions overrides research-checks.js)
   const bullets = selectedChecks.map(c => {
     const override = checkDefinitions && (checkDefinitions[c.id]?.question || checkDefinitions[c.id]?.query);
