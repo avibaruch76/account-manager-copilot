@@ -2628,17 +2628,41 @@ async function readSSEStream(response) {
   }
   if (finalResult) return finalResult;
 
-  // SSE closed without a result — check if server has a completed result (e.g. after reconnect)
-  try {
-    const statusRes = await apiFetch('/api/research-status');
-    if (statusRes.ok) {
-      const status = await statusRes.json();
-      if (status.report) return status;  // server completed while SSE was broken
-      if (status.active) return { error: 'Connection interrupted — Jedify is still researching. Please wait and try again in a minute.' };
-    }
-  } catch (e) { /* ignore */ }
+  // SSE closed without a result — server may still be running (Render drops connections ~60s)
+  // Poll /api/research-status until we get a result or give up after 30 minutes
+  console.log('[SSE] Stream closed without result — polling status endpoint...');
+  if (eta) eta.innerHTML = '<strong style="color:#7C3AED">🔄 Connection dropped — still waiting for Jedify...</strong> Results will appear when ready.';
+  if (fill) fill.style.width = '75%';
 
-  return { error: 'Connection was interrupted (server may have restarted). Please try again.' };
+  const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes
+  const POLL_INTERVAL_MS = 5000;
+  const pollStart = Date.now();
+
+  while (Date.now() - pollStart < MAX_WAIT_MS) {
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+    try {
+      const statusRes = await apiFetch('/api/research-status');
+      if (!statusRes.ok) continue;
+      const status = await statusRes.json();
+      if (status.report) {
+        // Server finished while SSE was broken — recover the result
+        console.log('[SSE] Recovered result from server after reconnect');
+        if (fill) fill.style.width = '100%';
+        return status;
+      }
+      if (!status.active) {
+        // Server no longer has an active inquiry and no result — it restarted
+        return { error: 'Connection was interrupted and the server restarted. Please run again.' };
+      }
+      // Still active — update overlay with elapsed time
+      const elapsed = Math.round((Date.now() - pollStart) / 1000);
+      if (eta) eta.innerHTML = `<strong style="color:#7C3AED">🔄 Reconnected — Jedify still working...</strong> Waiting ${elapsed}s so far.`;
+    } catch (e) {
+      console.warn('[SSE] Status poll error:', e.message);
+    }
+  }
+
+  return { error: 'Analysis timed out waiting for results. Jedify may still be running — try clicking Run again shortly.' };
 }
 
 function fmt(n) {
