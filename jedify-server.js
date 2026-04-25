@@ -75,9 +75,8 @@ async function persistTemplateToRender(template, apiKey, serviceId) {
   });
 }
 
-async function generateSlidesWithClaude(sections, brief, operator) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
+// Build the prompt for slide generation — shared by streaming and non-streaming paths
+function buildSlidesPrompt(sections, brief, operator) {
   const toneMap = {
     opportunity: 'Frame as an exciting opportunity — highlight upside, growth potential, and what is possible.',
     risk:        'Frame as a risk review — be measured, flag concerns clearly, recommend protective actions.',
@@ -322,17 +321,11 @@ COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12, and any slide with no data
 
 Generate all 18 slides now. Output only the slide delimiters — no other text:`;
 
-  const message = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 16000,
-    messages: [{ role: 'user', content: userPrompt }],
-    system: systemPrompt
-  });
+  return { systemPrompt, userPrompt };
+}
 
-  const raw = message.content[0].text;
-  console.log('[generate-slides] Raw response length:', raw.length);
-
-  // Parse delimiter-based response — no JSON parsing of HTML needed
+// Parse raw Claude text into slide objects
+function parseSlidesFromText(raw) {
   const slides = [];
   const slideRegex = /<SLIDE_START>([\s\S]*?)<SLIDE_END>/g;
   let match;
@@ -347,14 +340,32 @@ Generate all 18 slides now. Output only the slide delimiters — no other text:`
       });
     }
   }
-
-  if (slides.length === 0) {
-    console.error('[generate-slides] No slides parsed. Raw (first 1500):', raw.slice(0, 1500));
-    throw new Error('No slides found in Claude response — check server logs for details.');
-  }
-
-  console.log(`[generate-slides] Parsed ${slides.length} slides successfully`);
   return slides;
+}
+
+// Stream Claude's slide generation directly to an HTTP response.
+// The response is written as plain text chunks — client reads with ReadableStream.
+async function streamSlidesToResponse(sections, brief, operator, res) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const { systemPrompt, userPrompt } = buildSlidesPrompt(sections, brief, operator);
+
+  const stream = await client.messages.create({
+    model:      'claude-sonnet-4-6',
+    max_tokens: 32000,
+    system:     systemPrompt,
+    messages:   [{ role: 'user', content: userPrompt }],
+    stream:     true
+  });
+
+  let totalChars = 0;
+  for await (const chunk of stream) {
+    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+      const text = chunk.delta.text;
+      res.write(text);
+      totalChars += text.length;
+    }
+  }
+  console.log(`[generate-slides] Streamed ${totalChars} chars to client`);
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -1967,25 +1978,49 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === 'POST' && req.url === '/api/generate-slides') {
+    // Validate before starting the stream
+    if (!process.env.ANTHROPIC_API_KEY) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY env var not set on server.' }));
+      return;
+    }
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
+      let parsed;
       try {
-        if (!process.env.ANTHROPIC_API_KEY) {
-          res.writeHead(500, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY env var not set on server.' }));
-          return;
-        }
-        const { sections, brief, operator } = JSON.parse(body);
-        if (!sections || !sections.length) throw new Error('No sections provided');
-        const slides = await generateSlidesWithClaude(sections, brief || {}, operator || 'Operator');
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ slides }));
+        parsed = JSON.parse(body);
       } catch (e) {
-        console.error('[generate-slides] Error:', e.message);
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Invalid JSON in request body' }));
+        return;
       }
+
+      const { sections, brief, operator } = parsed;
+      if (!sections || !sections.length) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'No sections provided' }));
+        return;
+      }
+
+      // Start streaming response immediately — keeps connection alive during long generation
+      res.writeHead(200, {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache',
+        'X-Content-Type-Options': 'nosniff'
+      });
+
+      try {
+        await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res);
+      } catch (e) {
+        console.error('[generate-slides] Stream error:', e.message);
+        // Write an error marker — client will detect it after the stream ends
+        res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
+      }
+      res.end();
     });
     return;
   }

@@ -5250,6 +5250,25 @@ function _pptxShowStep(n) {
   });
 }
 
+// Parse Claude's delimiter-based slide text into [{html, notes}] objects
+function parseSlidesFromStream(raw) {
+  const slides = [];
+  const slideRegex = /<SLIDE_START>([\s\S]*?)<SLIDE_END>/g;
+  let match;
+  while ((match = slideRegex.exec(raw)) !== null) {
+    const block = match[1];
+    const notesMatch = block.match(/<NOTES>([\s\S]*?)<\/NOTES>/);
+    const htmlMatch  = block.match(/<HTML>([\s\S]*?)<\/HTML>/);
+    if (htmlMatch) {
+      slides.push({
+        notes: notesMatch ? notesMatch[1].trim() : '',
+        html:  htmlMatch[1].trim()
+      });
+    }
+  }
+  return slides;
+}
+
 function _pptxEsc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -5375,7 +5394,8 @@ async function _pptxGenerate() {
       <div style="width:48px;height:48px;border:4px solid #FEE2E2;border-top-color:#CC0000;border-radius:50%;animation:spin 1s linear infinite;"></div>
       <div style="text-align:center;">
         <div style="font-size:14px;font-weight:700;color:#1A1A1A;">Building your 18-slide presentation…</div>
-        <div style="font-size:12px;color:#64748B;margin-top:4px;">Claude is reading ${sections.length} analysis sections and generating charts — typically 40–60 seconds</div>
+        <div id="pptx-gen-progress" style="font-size:12px;color:#64748B;margin-top:6px;">Connecting to Claude…</div>
+        <div style="font-size:11px;color:#94A3B8;margin-top:4px;">Generating charts &amp; slides — typically 3–4 minutes</div>
       </div>
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
@@ -5385,26 +5405,71 @@ async function _pptxGenerate() {
   try {
     const entity = document.getElementById('operator-select')?.value ||
                    document.querySelector('[id*="operator"]')?.value || 'Operator';
-    const _pptxAbort = new AbortController();
-    const _pptxTimeout = setTimeout(() => _pptxAbort.abort(), 120000); // 2-minute timeout
-    let res;
-    try {
-      res = await apiFetch('/api/generate-slides', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: _pptxAbort.signal,
-        body: JSON.stringify({
-          sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
-          brief: _pptxBrief,
-          operator: entity
-        })
-      });
-    } finally {
-      clearTimeout(_pptxTimeout);
+
+    // Use streaming fetch — server writes text chunks as Claude generates.
+    // This keeps the connection alive so no proxy/client timeout fires (generation ~3-4 min).
+    const token = getAuthToken();
+    const fetchHeaders = { 'Content-Type': 'application/json' };
+    if (token) fetchHeaders['Authorization'] = 'Bearer ' + token;
+
+    const response = await fetch((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3001' : '') + '/api/generate-slides', {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: JSON.stringify({
+        sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
+        brief: _pptxBrief,
+        operator: entity
+      })
+    });
+
+    if (response.status === 401) {
+      localStorage.removeItem(AUTH_KEY);
+      document.getElementById('login-overlay').classList.remove('hidden');
+      throw new Error('Session expired — please log in again.');
     }
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    _pptxSlides = data.slides;
+    if (!response.ok) {
+      // Non-streaming error response (validation failure, missing API key, etc.)
+      const err = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+      throw new Error(err.error || `HTTP ${response.status}`);
+    }
+
+    // Read the streaming text response
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let raw = '';
+    let lastUpdate = 0;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+
+      // Live progress update every 1.5 seconds
+      const now = Date.now();
+      if (now - lastUpdate > 1500) {
+        lastUpdate = now;
+        const slidesDone = (raw.match(/<SLIDE_END>/g) || []).length;
+        const progressEl = document.getElementById('pptx-gen-progress');
+        if (progressEl) {
+          progressEl.textContent = slidesDone > 0
+            ? `${slidesDone} of 18 slides generated…`
+            : `Generating… (${Math.round(raw.length / 1000)}k chars)`;
+        }
+      }
+    }
+
+    // Check for server-side error marker
+    if (raw.includes('<GENERATION_ERROR>')) {
+      const m = raw.match(/<GENERATION_ERROR>([\s\S]*?)<\/GENERATION_ERROR>/);
+      throw new Error(m ? m[1] : 'Generation failed on server');
+    }
+
+    // Parse slides from accumulated text
+    const slides = parseSlidesFromStream(raw);
+    if (!slides.length) throw new Error('No slides found in response — check server logs');
+
+    _pptxSlides = slides;
     _pptxRenderPreview();
   } catch (e) {
     content.innerHTML = `
