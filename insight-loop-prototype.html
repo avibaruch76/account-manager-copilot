@@ -4775,5 +4775,245 @@ function populateCompManualList() {
 populateCompManualList();
 
 </script>
+
+<script>
+// ════════════════════════════════════════════════════════════════
+// PRESENTATION BUILDER
+// ════════════════════════════════════════════════════════════════
+
+let _pptxTemplate = null;   // brand template from server
+let _pptxSlides   = null;   // generated slide JSON
+let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
+let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '' };
+
+// ── Open / Close ────────────────────────────────────────────────
+async function openPresentationBuilder() {
+  const overlay   = document.getElementById('pptx-overlay');
+  const backdrop  = document.getElementById('pptx-backdrop');
+  overlay.style.display   = 'flex';
+  backdrop.style.display  = 'block';
+  // Trigger CSS transition on next frame
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.classList.add('open');
+      backdrop.classList.add('open');
+    });
+  });
+  // Load template from server
+  try {
+    const res = await apiFetch('/api/get-template');
+    _pptxTemplate = await res.json();
+  } catch (e) {
+    _pptxTemplate = {
+      primary:'#1E2761', accent:'#7C3AED', background:'#FFFFFF',
+      highlight:'#F59E0B', text:'#1E293B', logoBase64:null,
+      fontHeading:'Calibri', fontBody:'Calibri'
+    };
+  }
+  _pptxShowStep(1);
+  _pptxRenderSectionPicker();
+}
+
+function closePresentationBuilder() {
+  const overlay  = document.getElementById('pptx-overlay');
+  const backdrop = document.getElementById('pptx-backdrop');
+  overlay.classList.remove('open');
+  backdrop.classList.remove('open');
+  setTimeout(() => {
+    overlay.style.display  = 'none';
+    backdrop.style.display = 'none';
+  }, 300);
+}
+
+// ── Step indicator ──────────────────────────────────────────────
+function _pptxShowStep(n) {
+  const labels = ['', 'Select sections to include', 'Shape the story angle', 'Review and download'];
+  document.getElementById('pptx-step-label').textContent = labels[n];
+  [1,2,3].forEach(i => {
+    const dot = document.getElementById(`pptx-dot-${i}`);
+    dot.style.color        = i === n ? '#1E2761' : '#94A3B8';
+    dot.style.fontWeight   = i === n ? '700' : '600';
+    dot.style.borderBottom = i === n ? '2px solid #7C3AED' : '2px solid transparent';
+  });
+}
+
+// ── Section Picker ──────────────────────────────────────────────
+function _pptxRenderSectionPicker() {
+  _pptxShowStep(1);
+  const checkIds = window._currentRunCheckIds || [];
+  // Map check IDs to names + content from rendered results
+  const sections = checkIds.map(id => {
+    const check = _checks.find(c => c.id === id);
+    const name  = check ? check.name : id;
+    // Grab rendered text from the check-results DOM card
+    const card = document.querySelector(`[data-check-id="${id}"]`);
+    const content = card ? (card.innerText || card.textContent || '') : '(no content available)';
+    return { checkId: id, checkName: name, content: content.trim().slice(0, 4000), selected: true };
+  });
+
+  const content = document.getElementById('pptx-content');
+  content.innerHTML = `
+    <p style="font-size:12px;color:#64748B;margin-bottom:16px;">Select the check results to include in the presentation. Each ticked section becomes one or more slides.</p>
+    <div id="pptx-section-list">
+      ${sections.length === 0
+        ? '<p style="color:#94A3B8;font-size:12px;">No analysis results available. Run an analysis first.</p>'
+        : sections.map((s, i) => `
+          <div class="pptx-section-card selected" data-idx="${i}" onclick="_pptxToggleSection(this,${i})">
+            <div class="pptx-check-box">✓</div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#1E2761;">${_pptxEsc(s.checkName)}</div>
+              <div style="font-size:11px;color:#64748B;margin-top:2px;">${_pptxEsc(s.content.slice(0,100))}…</div>
+            </div>
+          </div>
+        `).join('')}
+    </div>
+  `;
+  // Store initial state
+  _pptxSections = sections;
+
+  const footer = document.getElementById('pptx-footer');
+  footer.innerHTML = `
+    <div style="flex:1;font-size:11px;color:#64748B;display:flex;align-items:center;">
+      <span id="pptx-selected-count">${sections.length}</span> sections selected
+    </div>
+    <button onclick="_pptxGoToBrief()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+      Next: Story Brief →
+    </button>
+  `;
+}
+
+function _pptxToggleSection(el, idx) {
+  const isSelected = el.classList.toggle('selected');
+  el.querySelector('.pptx-check-box').textContent = isSelected ? '✓' : '';
+  _pptxSections[idx].selected = isSelected;
+  const count = _pptxSections.filter(s => s.selected).length;
+  const countEl = document.getElementById('pptx-selected-count');
+  if (countEl) countEl.textContent = count;
+}
+
+function _pptxEsc(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Story Brief ─────────────────────────────────────────────────
+function _pptxGoToBrief() {
+  const selected = _pptxSections.filter(s => s.selected);
+  if (selected.length === 0) {
+    showToast('⚠️ Select at least one section', true);
+    return;
+  }
+  _pptxRenderBrief();
+}
+
+function _pptxRenderBrief() {
+  _pptxShowStep(2);
+  const content = document.getElementById('pptx-content');
+  const tones = [
+    { id:'opportunity', label:'🚀 Opportunity' },
+    { id:'risk',        label:'⚠️ Risk' },
+    { id:'growth',      label:'📈 Growth Story' },
+    { id:'recovery',    label:'🔄 Recovery' }
+  ];
+  content.innerHTML = `
+    <p style="font-size:12px;color:#64748B;margin-bottom:20px;">
+      Shape the story angle. All fields are optional — but even a brief angle makes the AI's narrative much sharper.
+    </p>
+
+    <div style="margin-bottom:18px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">STORY ANGLE (optional)</label>
+      <textarea id="pptx-angle" rows="3" placeholder="e.g. Strong 14% growth but only 12% of market potential. Competitor PlayAGS is at 31%. Frame as an opportunity — we've proved the model, now we scale." style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;">${_pptxEsc(_pptxBrief.angle)}</textarea>
+    </div>
+
+    <div style="margin-bottom:18px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:8px;">TONE</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${tones.map(t => `
+          <button class="pptx-tone-pill${_pptxBrief.tone===t.id?' active':''}" data-tone="${t.id}" onclick="_pptxSelectTone('${t.id}')">
+            ${t.label}
+          </button>
+        `).join('')}
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">THE ASK — what do you need from this meeting?</label>
+      <input id="pptx-ask" type="text" placeholder="e.g. Approve 3 studio launches this quarter" value="${_pptxEsc(_pptxBrief.ask)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+    </div>
+  `;
+
+  const footer = document.getElementById('pptx-footer');
+  footer.innerHTML = `
+    <button onclick="_pptxRenderSectionPicker()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back</button>
+    <div style="flex:1"></div>
+    <button onclick="_pptxGenerate()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+      ✦ Generate Slides
+    </button>
+  `;
+}
+
+function _pptxSelectTone(toneId) {
+  _pptxBrief.tone = toneId;
+  document.querySelectorAll('.pptx-tone-pill').forEach(el => {
+    el.classList.toggle('active', el.dataset.tone === toneId);
+  });
+}
+
+// ── Generate ─────────────────────────────────────────────────────
+async function _pptxGenerate() {
+  // Save brief state
+  _pptxBrief.angle = (document.getElementById('pptx-angle')?.value || '').trim();
+  _pptxBrief.ask   = (document.getElementById('pptx-ask')?.value || '').trim();
+
+  const selected = _pptxSections.filter(s => s.selected);
+  if (selected.length === 0) {
+    showToast('⚠️ Select at least one section', true);
+    return;
+  }
+
+  // Show spinner
+  _pptxShowStep(3);
+  const content = document.getElementById('pptx-content');
+  content.innerHTML = `
+    <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:20px;">
+      <div style="width:48px;height:48px;border:4px solid #EDE9FE;border-top-color:#7C3AED;border-radius:50%;animation:spin 1s linear infinite;"></div>
+      <div style="text-align:center;">
+        <div style="font-size:14px;font-weight:700;color:#1E2761;">Building your story…</div>
+        <div style="font-size:12px;color:#64748B;margin-top:4px;">Claude is mapping ${selected.length} sections to SCR slides (~5 seconds)</div>
+      </div>
+    </div>
+    <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+  `;
+  document.getElementById('pptx-footer').innerHTML = '';
+
+  try {
+    const entity = document.getElementById('operator-select')?.value ||
+                   document.querySelector('[id*="operator"]')?.value || 'Operator';
+    const res = await apiFetch('/api/generate-slides', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sections: selected.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
+        brief: _pptxBrief,
+        operator: entity
+      })
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _pptxSlides = data.slides;
+    _pptxRenderPreview();
+  } catch (e) {
+    content.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;">
+        <div style="font-size:32px;margin-bottom:12px;">❌</div>
+        <div style="font-size:14px;font-weight:700;color:#DC2626;margin-bottom:8px;">Generation failed</div>
+        <div style="font-size:12px;color:#64748B;margin-bottom:20px;">${_pptxEsc(e.message)}</div>
+      </div>
+    `;
+    document.getElementById('pptx-footer').innerHTML = `
+      <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back to Brief</button>
+    `;
+  }
+}
+</script>
 </body>
 </html>
