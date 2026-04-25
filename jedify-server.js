@@ -17,6 +17,29 @@ const jedify = require('./jedify-direct');
 
 const PORT = process.env.PORT || 3001;
 
+// ── Presentation Builder — Brand Template ────────────────────────────────────
+const DEFAULT_BRAND_TEMPLATE = {
+  primary:    '#1E2761',
+  accent:     '#7C3AED',
+  background: '#FFFFFF',
+  highlight:  '#F59E0B',
+  text:       '#1E293B',
+  logoBase64: null,
+  fontHeading: 'Calibri',
+  fontBody:    'Calibri',
+  uploadedAt:  null
+};
+
+let _brandTemplate = DEFAULT_BRAND_TEMPLATE;
+try {
+  if (process.env.BRAND_TEMPLATE) {
+    _brandTemplate = { ...DEFAULT_BRAND_TEMPLATE, ...JSON.parse(process.env.BRAND_TEMPLATE) };
+    console.log('[brand] Template loaded from env var');
+  }
+} catch (e) {
+  console.warn('[brand] Failed to parse BRAND_TEMPLATE env var:', e.message);
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 // Set APP_PASSWORD env var on Render to enable password protection.
 // Locally it's disabled (no env var = open access).
@@ -1609,6 +1632,13 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       res.writeHead(500); res.end('Failed to load HTML: ' + e.message);
     }
+    return;
+  }
+
+  // Brand template endpoint
+  if (req.method === 'GET' && req.url === '/api/get-template') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(_brandTemplate));
     return;
   }
 
