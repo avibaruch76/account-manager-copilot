@@ -2568,9 +2568,9 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
       ...(partialCheckIds ? { partialMandatoryIds: _resolvedMandatoryIds } : {}) };
   }
 
-  // Silent background fetch — no SSE, no progress bar, just waits and renders on completion.
-  // Used for data_analyst so it doesn't compete with the main SSE stream.
-  // Retries once after 7s on 503 (MCP reconnecting). Fails silently — doesn't show red error.
+  // Background fetch for data_analyst persona — uses fire-and-forget pattern.
+  // Server returns backgroundRunId immediately; client polls /api/research-status?runId=xxx.
+  // This avoids long-held HTTP connections that get killed by Render's proxy timeout.
   async function fireBackground(persona, attempt = 0) {
     const checkResults = document.getElementById('check-results');
     if (attempt === 0 && checkResults) checkResults.innerHTML =
@@ -2581,10 +2581,11 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
     if (attempt === 0 && navLink) navLink.innerHTML = 'Analysis Results <span id="analysis-spinner" style="font-size:11px;background:#F59E0B;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">⏳</span>';
 
     try {
+      // Step 1: POST to kick off background run — server returns backgroundRunId immediately (fast)
       const res = await apiFetch('/api/research', {
         method: 'POST',
         body: JSON.stringify({ ...makePayload(persona), noSSE: true }),
-        signal: AbortSignal.timeout(1800000)
+        signal: AbortSignal.timeout(30000)  // 30s is plenty to receive the runId
       });
       if (res.status === 503 && attempt === 0) {
         console.log('[insight-loop] Background MCP reconnecting — retrying in 7s...');
@@ -2592,11 +2593,44 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
         return fireBackground(persona, 1);
       }
       if (!res.ok) throw new Error('Server ' + res.status);
-      const data = await res.json();
-      if (data && data.report !== undefined) renderResearchReport(data);
-      if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
-      showToast('✅ Full analysis ready — click Analysis Results to view');
-      setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
+      const init = await res.json();
+
+      // Legacy path: server returned full result directly (shouldn't happen with updated server)
+      if (init && init.report !== undefined) {
+        renderResearchReport(init);
+        if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
+        showToast('✅ Full analysis ready — click Analysis Results to view');
+        setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
+        return;
+      }
+
+      // Step 2: Poll /api/research-status?runId=xxx until result is ready
+      const bgRunId = init.backgroundRunId;
+      if (!bgRunId) throw new Error('No backgroundRunId returned');
+
+      console.log('[insight-loop] Background run started:', bgRunId, '— polling for result...');
+      const MAX_WAIT_MS = 30 * 60 * 1000;
+      const POLL_MS = 6000;
+      const pollStart = Date.now();
+      while (Date.now() - pollStart < MAX_WAIT_MS) {
+        await new Promise(r => setTimeout(r, POLL_MS));
+        try {
+          const sr = await apiFetch('/api/research-status?runId=' + bgRunId);
+          if (!sr.ok) continue;
+          const status = await sr.json();
+          if (status && status.report !== undefined) {
+            renderResearchReport(status);
+            if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
+            showToast('✅ Full analysis ready — click Analysis Results to view');
+            setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
+            return;
+          }
+        } catch (pollErr) {
+          console.warn('[insight-loop] Background poll error (continuing):', pollErr.message);
+        }
+      }
+      throw new Error('Background analysis polling timed out after 30 minutes');
+
     } catch (err) {
       // Fail silently — background run is supplementary, don't alarm the user
       console.warn('[insight-loop] Background analysis failed:', err.message);

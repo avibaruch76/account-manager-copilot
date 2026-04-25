@@ -1684,11 +1684,24 @@ const server = http.createServer(async (req, res) => {
         const noSSE = !!reqBody.noSSE; // background mode: return plain JSON, no SSE stream
 
         if (noSSE) {
-          // noSSE path — runId is not assigned here, catch block handles that safely
-          // Plain JSON response — no streaming, no progress events
-          const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona });
+          // Fire-and-forget: return a backgroundRunId immediately so the client can poll.
+          // This avoids holding a long HTTP connection open through Render's proxy timeout.
+          const bgRunId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(results));
+          res.end(JSON.stringify({ backgroundRunId: bgRunId }));
+          // Run async — store result in the same per-runId map used by /api/research-status
+          runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona })
+            .then(results => {
+              _completedResultsByRunId.set(bgRunId, results);
+              _lastCompletedResult = results;
+              if (_completedResultsByRunId.size > 20) {
+                _completedResultsByRunId.delete(_completedResultsByRunId.keys().next().value);
+              }
+              console.log(`[noSSE background] Run ${bgRunId} complete, report: ${results?.report?.length ?? 0} chars`);
+            })
+            .catch(err => {
+              console.error(`[noSSE background] Run ${bgRunId} failed:`, err.message);
+            });
           return;
         }
 
