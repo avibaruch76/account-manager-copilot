@@ -97,6 +97,10 @@ async function generateSlidesWithClaude(sections, brief, operator) {
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
+${brief.exclude ? `IMPORTANT — EXCLUDE these topics/checks completely from the presentation: ${brief.exclude}` : ''}
+
+## SELECTION INSTRUCTIONS
+You have ALL analysis sections below. Automatically select the 4-6 most impactful findings that best serve the story angle and tone above. Prioritise sections with hard numbers, comparisons, and clear business implications. Ignore sections with weak or missing data.
 
 ## ANALYSIS DATA
 ${sectionContent}

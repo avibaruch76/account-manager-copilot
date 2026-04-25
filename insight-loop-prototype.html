@@ -5002,7 +5002,7 @@ populateCompManualList();
 let _pptxTemplate = null;   // brand template from server
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
-let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '' };
+let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', exclude: '' };
 
 // ── Open / Close ────────────────────────────────────────────────
 async function openPresentationBuilder() {
@@ -5028,8 +5028,18 @@ async function openPresentationBuilder() {
       fontHeading:'Calibri', fontBody:'Calibri'
     };
   }
+  // Auto-build all sections from current run — no picker needed
+  const checkIds = window._currentRunCheckIds || [];
+  _pptxSections = checkIds.map(id => {
+    const check = _checks.find(c => c.id === id);
+    const name  = check ? check.name : id;
+    const card  = document.querySelector(`[data-check-id="${id}"]`);
+    const content = card ? (card.innerText || card.textContent || '') : '(no content available)';
+    return { checkId: id, checkName: name, content: content.trim().slice(0, 4000), selected: true };
+  });
+
   _pptxShowStep(1);
-  _pptxRenderSectionPicker();
+  _pptxRenderBrief();
 }
 
 function closePresentationBuilder() {
@@ -5045,7 +5055,7 @@ function closePresentationBuilder() {
 
 // ── Step indicator ──────────────────────────────────────────────
 function _pptxShowStep(n) {
-  const labels = ['', 'Select sections to include', 'Shape the story angle', 'Review and download'];
+  const labels = ['', 'Shape the story angle', 'Review and download', ''];
   document.getElementById('pptx-step-label').textContent = labels[n];
   [1,2,3].forEach(i => {
     const dot = document.getElementById(`pptx-dot-${i}`);
@@ -5055,77 +5065,15 @@ function _pptxShowStep(n) {
   });
 }
 
-// ── Section Picker ──────────────────────────────────────────────
-function _pptxRenderSectionPicker() {
-  _pptxShowStep(1);
-  const checkIds = window._currentRunCheckIds || [];
-  // Map check IDs to names + content from rendered results
-  const sections = checkIds.map(id => {
-    const check = _checks.find(c => c.id === id);
-    const name  = check ? check.name : id;
-    // Grab rendered text from the check-results DOM card
-    const card = document.querySelector(`[data-check-id="${id}"]`);
-    const content = card ? (card.innerText || card.textContent || '') : '(no content available)';
-    return { checkId: id, checkName: name, content: content.trim().slice(0, 4000), selected: true };
-  });
-
-  const content = document.getElementById('pptx-content');
-  content.innerHTML = `
-    <p style="font-size:12px;color:#64748B;margin-bottom:16px;">Select the check results to include in the presentation. Each ticked section becomes one or more slides.</p>
-    <div id="pptx-section-list">
-      ${sections.length === 0
-        ? '<p style="color:#94A3B8;font-size:12px;">No analysis results available. Run an analysis first.</p>'
-        : sections.map((s, i) => `
-          <div class="pptx-section-card selected" data-idx="${i}" onclick="_pptxToggleSection(this,${i})">
-            <div class="pptx-check-box">✓</div>
-            <div>
-              <div style="font-size:13px;font-weight:700;color:#1E2761;">${_pptxEsc(s.checkName)}</div>
-              <div style="font-size:11px;color:#64748B;margin-top:2px;">${_pptxEsc(s.content.slice(0,100))}…</div>
-            </div>
-          </div>
-        `).join('')}
-    </div>
-  `;
-  // Store initial state
-  _pptxSections = sections;
-
-  const footer = document.getElementById('pptx-footer');
-  footer.innerHTML = `
-    <div style="flex:1;font-size:11px;color:#64748B;display:flex;align-items:center;">
-      <span id="pptx-selected-count">${sections.length}</span> sections selected
-    </div>
-    <button onclick="_pptxGoToBrief()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
-      Next: Story Brief →
-    </button>
-  `;
-}
-
-function _pptxToggleSection(el, idx) {
-  const isSelected = el.classList.toggle('selected');
-  el.querySelector('.pptx-check-box').textContent = isSelected ? '✓' : '';
-  _pptxSections[idx].selected = isSelected;
-  const count = _pptxSections.filter(s => s.selected).length;
-  const countEl = document.getElementById('pptx-selected-count');
-  if (countEl) countEl.textContent = count;
-}
-
 function _pptxEsc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Story Brief ─────────────────────────────────────────────────
-function _pptxGoToBrief() {
-  const selected = _pptxSections.filter(s => s.selected);
-  if (selected.length === 0) {
-    showToast('⚠️ Select at least one section', true);
-    return;
-  }
-  _pptxRenderBrief();
-}
-
 function _pptxRenderBrief() {
-  _pptxShowStep(2);
+  _pptxShowStep(1);
   const content = document.getElementById('pptx-content');
+  const sectionCount = _pptxSections.length;
   const tones = [
     { id:'opportunity', label:'🚀 Opportunity' },
     { id:'risk',        label:'⚠️ Risk' },
@@ -5133,9 +5081,10 @@ function _pptxRenderBrief() {
     { id:'recovery',    label:'🔄 Recovery' }
   ];
   content.innerHTML = `
-    <p style="font-size:12px;color:#64748B;margin-bottom:20px;">
-      Shape the story angle. All fields are optional — but even a brief angle makes the AI's narrative much sharper.
+    <p style="font-size:12px;color:#64748B;margin-bottom:4px;">
+      Shape the story angle. Claude will automatically select and prioritise the most impactful findings from <strong style="color:#1E2761;">${sectionCount} analysis section${sectionCount !== 1 ? 's' : ''}</strong>.
     </p>
+    <p style="font-size:11px;color:#94A3B8;margin-bottom:20px;">All fields are optional — but even a brief angle makes the narrative much sharper.</p>
 
     <div style="margin-bottom:18px;">
       <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">STORY ANGLE (optional)</label>
@@ -5153,15 +5102,19 @@ function _pptxRenderBrief() {
       </div>
     </div>
 
-    <div style="margin-bottom:8px;">
+    <div style="margin-bottom:18px;">
       <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">THE ASK — what do you need from this meeting?</label>
       <input id="pptx-ask" type="text" placeholder="e.g. Approve 3 studio launches this quarter" value="${_pptxEsc(_pptxBrief.ask)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+    </div>
+
+    <div style="margin-bottom:8px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">ANYTHING TO EXCLUDE? (optional)</label>
+      <input id="pptx-exclude" type="text" placeholder="e.g. Promo Impact, Device Split — or leave blank to include everything" value="${_pptxEsc(_pptxBrief.exclude)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
     </div>
   `;
 
   const footer = document.getElementById('pptx-footer');
   footer.innerHTML = `
-    <button onclick="_pptxRenderSectionPicker()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back</button>
     <div style="flex:1"></div>
     <button onclick="_pptxGenerate()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
       ✦ Generate Slides
@@ -5179,24 +5132,25 @@ function _pptxSelectTone(toneId) {
 // ── Generate ─────────────────────────────────────────────────────
 async function _pptxGenerate() {
   // Save brief state
-  _pptxBrief.angle = (document.getElementById('pptx-angle')?.value || '').trim();
-  _pptxBrief.ask   = (document.getElementById('pptx-ask')?.value || '').trim();
+  _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
+  _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
+  _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
 
-  const selected = _pptxSections.filter(s => s.selected);
-  if (selected.length === 0) {
-    showToast('⚠️ Select at least one section', true);
+  const sections = _pptxSections; // all sections, Claude decides what to highlight
+  if (sections.length === 0) {
+    showToast('⚠️ No analysis results found. Run an analysis first.', true);
     return;
   }
 
   // Show spinner
-  _pptxShowStep(3);
+  _pptxShowStep(2);
   const content = document.getElementById('pptx-content');
   content.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:20px;">
       <div style="width:48px;height:48px;border:4px solid #EDE9FE;border-top-color:#7C3AED;border-radius:50%;animation:spin 1s linear infinite;"></div>
       <div style="text-align:center;">
         <div style="font-size:14px;font-weight:700;color:#1E2761;">Building your story…</div>
-        <div style="font-size:12px;color:#64748B;margin-top:4px;">Claude is mapping ${selected.length} sections to SCR slides (~5 seconds)</div>
+        <div style="font-size:12px;color:#64748B;margin-top:4px;">Claude is reading all ${sections.length} sections and crafting your narrative (~10 seconds)</div>
       </div>
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
@@ -5210,7 +5164,7 @@ async function _pptxGenerate() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        sections: selected.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
+        sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
         brief: _pptxBrief,
         operator: entity
       })
@@ -5249,7 +5203,7 @@ async function _loadChartJs() {
 }
 
 function _pptxRenderPreview() {
-  _pptxShowStep(3);
+  _pptxShowStep(2);
   if (!_pptxSlides || !_pptxSlides.length) return;
   _pptxActiveSlide = 0;
   _pptxDrawPreview();
