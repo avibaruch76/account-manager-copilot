@@ -5129,7 +5129,7 @@ populateCompManualList();
 let _pptxTemplate = null;   // brand template from server
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
-let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', exclude: '' };
+let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
 
 // ── Open / Close ────────────────────────────────────────────────
 async function openPresentationBuilder() {
@@ -5285,9 +5285,16 @@ function _pptxRenderBrief() {
       <input id="pptx-ask" type="text" placeholder="e.g. Approve 3 studio launches this quarter" value="${_pptxEsc(_pptxBrief.ask)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
     </div>
 
+    <div style="margin-bottom:14px;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">MUST-INCLUDE TOPICS (optional)</label>
+      <input id="pptx-include" type="text" placeholder="e.g. Rounds per player vs peers, Top 5 games, VIP segment, Promo impact" value="${_pptxEsc(_pptxBrief.include)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+      <div style="font-size:10px;color:#94A3B8;margin-top:4px;">Force specific slides — Claude will always include these if data exists</div>
+    </div>
+
     <div style="margin-bottom:8px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">ANYTHING TO EXCLUDE? (optional)</label>
-      <input id="pptx-exclude" type="text" placeholder="e.g. Promo Impact, Device Split — or leave blank to include everything" value="${_pptxEsc(_pptxBrief.exclude)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">EXCLUDE (optional)</label>
+      <input id="pptx-exclude" type="text" placeholder="e.g. Max Bet, Device Split, Promo Impact" value="${_pptxEsc(_pptxBrief.exclude)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+      <div style="font-size:10px;color:#94A3B8;margin-top:4px;">Topics to remove entirely from the presentation</div>
     </div>
   `;
 
@@ -5314,6 +5321,7 @@ async function _pptxGenerate() {
   // Save brief state
   _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
   _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
+  _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
   _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
 
   // Re-build sections if empty or stale (e.g. page reload with cache restored)

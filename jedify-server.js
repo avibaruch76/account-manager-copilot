@@ -111,7 +111,8 @@ STORY BRIEF:
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
-${brief.exclude ? `EXCLUDE these topics entirely: ${brief.exclude}` : ''}
+${brief.include ? `MUST-INCLUDE — always create a dedicated slide for each of these topics (if data exists): ${brief.include}` : ''}
+${brief.exclude ? `EXCLUDE — remove these topics entirely, do not mention them: ${brief.exclude}` : ''}
 
 ══════════════════════════════════════
 ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
