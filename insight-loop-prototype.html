@@ -2045,6 +2045,7 @@ function onAccountToggle() {
 }
 
 function onOperatorToggle() {
+  saveFilters();
   if (currentScope === 'operator') {
     updateSelectionFromOperators();
     return;
@@ -2072,6 +2073,7 @@ function onOperatorToggle() {
 }
 
 function onBrandToggle() {
+  saveFilters();
   updateSelectionFromBrands();
   updateDropdownLabel('dd-brand', 'brands');
 }
@@ -3216,6 +3218,48 @@ function clearAnalysisCache(cacheKey) {
   const banner = document.getElementById('cache-banner');
   if (banner) banner.remove();
   showToast('Cached results cleared. Run Analysis to get fresh data.');
+}
+
+// ── Selection persistence (operator + date filters) ──────────────────────────
+// Saved separately from the analysis cache so the dropdowns refill on reload.
+const FILTERS_KEY = 'qbr_last_filters';
+
+function saveFilters() {
+  try {
+    const operatorVals = getCheckedValues('dd-operator');
+    const brandVals    = getCheckedValues('dd-brand');
+    const endMonth     = document.getElementById('filter-end-month').value;
+    const monthsBack   = document.getElementById('filter-months-back').value;
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({ operatorVals, brandVals, endMonth, monthsBack, scope: currentScope }));
+  } catch (e) { /* ignore */ }
+}
+
+function restoreFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY);
+    if (!raw) return;
+    const f = JSON.parse(raw);
+    if (!f) return;
+    // Restore date filters first
+    if (f.endMonth) document.getElementById('filter-end-month').value = f.endMonth;
+    if (f.monthsBack) document.getElementById('filter-months-back').value = f.monthsBack;
+    // Restore operator checkboxes
+    if (f.operatorVals && f.operatorVals.length > 0) {
+      f.operatorVals.forEach(val => {
+        const cb = document.querySelector('#dd-operator input[value="' + CSS.escape(val) + '"]');
+        if (cb) cb.checked = true;
+      });
+      onOperatorToggle();
+    }
+    // Restore brand checkboxes (if in brand scope)
+    if (f.brandVals && f.brandVals.length > 0) {
+      f.brandVals.forEach(val => {
+        const cb = document.querySelector('#dd-brand input[value="' + CSS.escape(val) + '"]');
+        if (cb) cb.checked = true;
+      });
+      onBrandToggle();
+    }
+  } catch (e) { console.warn('[filters] Restore failed:', e.message); }
 }
 
 function downloadReport() {
@@ -4525,7 +4569,9 @@ const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 document.getElementById('filter-end-month').value = lastMonth.getFullYear() + '-' + String(lastMonth.getMonth() + 1).padStart(2, '0');
 updateCount();
 
-// Auto-restore cached analysis results on page load
+// Auto-restore operator selection + date filters, then the analysis cache
+// restoreFilters() must run first so _getCacheKey() produces the right key
+restoreFilters();
 setTimeout(() => {
   const restored = tryRestoreAnalysisCache();
   if (restored) {
@@ -4537,6 +4583,7 @@ setTimeout(() => {
 
 // Re-check cache when date or months-back filter changes
 document.getElementById('filter-end-month').addEventListener('change', () => {
+  saveFilters();
   clearTimeout(window._cacheCheckTimer);
   window._cacheCheckTimer = setTimeout(() => {
     const banner = document.getElementById('cache-banner');
@@ -4545,6 +4592,7 @@ document.getElementById('filter-end-month').addEventListener('change', () => {
   }, 300);
 });
 document.getElementById('filter-months-back').addEventListener('change', () => {
+  saveFilters();
   clearTimeout(window._cacheCheckTimer);
   window._cacheCheckTimer = setTimeout(() => {
     const banner = document.getElementById('cache-banner');
