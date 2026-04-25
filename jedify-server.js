@@ -119,25 +119,22 @@ ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
 ══════════════════════════════════════
 
-SLIDES TO CREATE (8–14 total) — include ALL of the following that have data:
+SLIDES TO CREATE (8–14 total):
 
-MANDATORY (always include if data exists):
+Structure every presentation with:
 1. TITLE — operator name + exact date/period from the data + sharp assertion headline
-2. VOLUME & PLAYER KPIs — one slide showing ALL key metrics from the data: total GGR, total bets, active players, GGR/player, rounds/player, bet/round, avg session length, retention — whatever is in the data. Layout: 2 rows of metric cards or a comparison table vs peer benchmark
-3. PEER BENCHMARK COMPARISON — how operator KPIs compare to market/peer benchmarks. Must show actual numbers side by side.
-4. PORTFOLIO GAP — games the market plays that this operator doesn't have or underplays. Real game names only.
-5. ACTIONS & NEXT STEPS — concrete recommendations
-6. CLOSING / THE ASK — navy background, white text
+2–N. FINDINGS — as many slides as the story needs, one per major theme
+   Last-1. ACTIONS — concrete recommendations that follow from the findings
+   Last. CLOSING / THE ASK — dark background, white text, call to action
 
-INCLUDE IF DATA IS AVAILABLE (add one slide per topic):
-- Per-player economics breakdown (rounds/player, bet/round, GGR/player vs peers)
-- Top performing games table
-- Concentration risk (if top 2 games dominate)
-- VIP / high-ARPU segment analysis
-- Promo / free-rounds impact
-- Any other major finding from the analysis
+EDITORIAL JUDGMENT — this is your most important instruction:
+For each possible topic in the data (KPIs, per-player metrics, benchmark gaps, game performance, portfolio gaps, concentration risk, VIPs, promos, etc.):
+- Include it ONLY if it materially supports the narrative angle and tone above
+- Skip it if it adds noise, contradicts the story, or the data is too thin to be meaningful
+- A slide that weakens the narrative is worse than no slide at all
+- The best presentations have 8-10 focused slides, not 14 padded ones
 
-Cover EVERY significant finding in the data. Do not skip topics because you've "run out of slides" — go up to 14 if needed.
+Think like an editor: every slide must earn its place by advancing the story toward The Ask.
 
 DESIGN RULES (RubyPlay brand — MANDATORY):
 
