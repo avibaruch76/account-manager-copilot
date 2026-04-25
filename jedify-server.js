@@ -74,6 +74,102 @@ async function persistTemplateToRender(template, apiKey, serviceId) {
   });
 }
 
+async function generateSlidesWithClaude(sections, brief, operator) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+  const toneDescriptions = {
+    opportunity: 'Frame everything as an exciting opportunity with strong upside. Emphasise potential and growth levers.',
+    risk:        'Frame as a risk management conversation. Be measured, flag concerns clearly, recommend protective actions.',
+    growth:      'Celebrate momentum. Lead with positive trends. Frame actions as accelerating what is already working.',
+    recovery:    'Acknowledge current challenges honestly. Focus on recovery plan and green shoots.'
+  };
+  const toneInstruction = toneDescriptions[brief.tone] || toneDescriptions.opportunity;
+
+  const sectionContent = sections.map(s =>
+    `=== ${s.checkName} ===\n${s.content}`
+  ).join('\n\n');
+
+  const systemPrompt = `You are an expert McKinsey-trained business storyteller. You create crisp SCR (Situation-Complication-Resolution) presentations for B2B client meetings.
+
+CRITICAL: Return ONLY a valid JSON array. No markdown, no code fences, no explanation. Just the raw JSON array starting with [ and ending with ].`;
+
+  const userPrompt = `Create a presentation for ${operator} using the SCR narrative structure.
+
+## STORY BRIEF
+${brief.angle ? `Angle: ${brief.angle}` : ''}
+Tone: ${toneInstruction}
+${brief.ask ? `The Ask: ${brief.ask}` : ''}
+
+## ANALYSIS DATA
+${sectionContent}
+
+## REQUIRED OUTPUT FORMAT
+Return a JSON array with exactly this structure (5-8 slides total):
+
+[
+  {
+    "type": "title",
+    "headline": "One powerful 6-8 word headline that captures the whole story",
+    "subtitle": "Operator name and period, e.g. Codere MX — Q1 2026 QBR",
+    "notes": "2-3 sentence talking track for presenter view. Welcome the audience, state the purpose of the meeting."
+  },
+  {
+    "type": "situation",
+    "title": "The Situation — what is the current state?",
+    "bullets": ["Key fact 1", "Key fact 2", "Key fact 3"],
+    "notes": "2-3 sentences. Set the scene. Establish what we know to be true."
+  },
+  {
+    "type": "complication",
+    "title": "The Complication — what is the tension?",
+    "bullets": ["Point 1", "Point 2"],
+    "dataPoint": "One bold stat that crystallises the complication, e.g. '12% market capture vs 31% competitor'",
+    "notes": "2-3 sentences. This is the 'but'. Introduce the tension that demands action."
+  },
+  {
+    "type": "supporting",
+    "title": "Title of this supporting data slide",
+    "bullets": ["Finding 1", "Finding 2", "Finding 3", "Finding 4"],
+    "notes": "2-3 sentences. Explain what this data means and why it matters."
+  },
+  {
+    "type": "resolution",
+    "title": "The Resolution — what are the three moves?",
+    "actions": [
+      {"label": "Action 1 short label", "outcome": "The outcome this action produces"},
+      {"label": "Action 2 short label", "outcome": "The outcome this action produces"},
+      {"label": "Action 3 short label", "outcome": "The outcome this action produces"}
+    ],
+    "notes": "2-3 sentences. Walk through each action. Connect them back to the opportunity."
+  },
+  {
+    "type": "ask",
+    "cta": "${brief.ask || 'Clear, specific call to action for this meeting'}",
+    "next_steps": ["Step 1 with owner and date", "Step 2 with owner and date", "Step 3 with owner and date"],
+    "notes": "2-3 sentences. State the ask clearly. Explain what happens if they say yes today."
+  }
+]
+
+Rules:
+- Insert one "supporting" slide per major check section (between complication and resolution)
+- Bullets: max 12 words each, no bullet symbols, just plain strings
+- Headlines/titles: max 10 words, punchy, active voice
+- All text must be derived from the analysis data provided
+- Do not invent facts not in the data`;
+
+  const message = await client.messages.create({
+    model: 'claude-3-5-haiku-20241022',
+    max_tokens: 4096,
+    messages: [{ role: 'user', content: userPrompt }],
+    system: systemPrompt
+  });
+
+  const raw = message.content[0].text.trim();
+  // Strip any accidental markdown code fences
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  return JSON.parse(cleaned);
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 // Set APP_PASSWORD env var on Render to enable password protection.
 // Locally it's disabled (no env var = open access).
@@ -1666,6 +1762,30 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       res.writeHead(500); res.end('Failed to load HTML: ' + e.message);
     }
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/generate-slides') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        if (!process.env.ANTHROPIC_API_KEY) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY env var not set on server.' }));
+          return;
+        }
+        const { sections, brief, operator } = JSON.parse(body);
+        if (!sections || !sections.length) throw new Error('No sections provided');
+        const slides = await generateSlidesWithClaude(sections, brief || {}, operator || 'Operator');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ slides }));
+      } catch (e) {
+        console.error('[generate-slides] Error:', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
