@@ -387,13 +387,23 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button class="persona-btn" data-persona="am_detailed" onclick="selectPersona('am_detailed',this)">📊 AM Detailed</button>
       <button class="persona-btn admin-btn" data-persona="admin" onclick="selectPersona('admin',this)">👑 All Personas</button>
     </div>
-    <div style="display:flex;align-items:center;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <button class="btn-run" id="run-btn" onclick="previewPrompt()">
         <span>▶</span> Run Analysis
       </button>
+      <!-- Iterative run controls — shown after Run 1 completes -->
+      <button id="toolbar-run-selected-btn" onclick="runPartialAnalysis()" disabled
+        style="display:none;padding:9px 18px;background:linear-gradient(135deg,#2563EB,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;opacity:0.5;">
+        ▶ Run Selected <span id="toolbar-run-count" style="font-size:11px;background:rgba(255,255,255,.25);padding:1px 7px;border-radius:8px;margin-left:4px;"></span>
+      </button>
+      <button id="toolbar-rerun-btn" onclick="rerunEverything()"
+        style="display:none;padding:9px 16px;background:white;color:#64748B;border:1.5px solid #CBD5E1;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">
+        ↺ Re-run All
+      </button>
     </div>
-    <div style="margin-top:6px;font-size:11px;color:#94A3B8">
+    <div style="margin-top:6px;font-size:11px;color:#94A3B8;display:flex;gap:12px;align-items:center;">
       <a href="#" onclick="runAnalysis();return false;" style="color:#94A3B8">Skip preview & run directly</a>
+      <span id="toolbar-select-hint" style="display:none;color:#2563EB;font-weight:600;">← tick checks in <a href="#" onclick="showSection('config',document.querySelector('.nav a[href=\'#config\']'));return false;" style="color:#2563EB;">Research Config</a> to select for Run 2</span>
     </div>
     <div class="run-status" id="run-status">
       <span id="config-summary"></span>
@@ -1823,23 +1833,47 @@ function updatePartialRunButton() {
   const btn = document.getElementById('partial-run-btn');
   const previewBtn = document.getElementById('partial-preview-btn');
   const countEl = document.getElementById('partial-run-count');
-  if (!btn) return;
   const n = _partialSelectedIds.size;
-  btn.disabled = n === 0;
+  if (btn) {
+    btn.disabled = n === 0;
+    btn.textContent = n === 0 ? '▶ Run Selected Checks' : `▶ Run ${n} Selected Check${n > 1 ? 's' : ''}`;
+  }
   if (previewBtn) previewBtn.disabled = n === 0;
-  btn.textContent = n === 0 ? '▶ Run Selected Checks' : `▶ Run ${n} Selected Check${n > 1 ? 's' : ''}`;
   if (countEl) countEl.textContent = n > 0 ? `${n} selected` : '';
+  // Sync toolbar button
+  const tbBtn   = document.getElementById('toolbar-run-selected-btn');
+  const tbCount = document.getElementById('toolbar-run-count');
+  if (tbBtn) {
+    tbBtn.disabled = n === 0;
+    tbBtn.style.opacity = n === 0 ? '0.5' : '1';
+    tbBtn.style.cursor  = n === 0 ? 'not-allowed' : 'pointer';
+  }
+  if (tbCount) tbCount.textContent = n > 0 ? n : '';
 }
 
 function showPartialRunControls() {
   const el = document.getElementById('partial-run-controls');
   if (el) el.style.display = 'flex';
+  // Also show toolbar iterative buttons
+  const tbSel  = document.getElementById('toolbar-run-selected-btn');
+  const tbRerun = document.getElementById('toolbar-rerun-btn');
+  const tbHint  = document.getElementById('toolbar-select-hint');
+  if (tbSel)   tbSel.style.display   = 'inline-flex';
+  if (tbRerun) tbRerun.style.display = 'inline-flex';
+  if (tbHint)  tbHint.style.display  = 'inline';
   updatePartialRunButton();
 }
 
 function hidePartialRunControls() {
   const el = document.getElementById('partial-run-controls');
   if (el) el.style.display = 'none';
+  // Hide toolbar iterative buttons
+  const tbSel  = document.getElementById('toolbar-run-selected-btn');
+  const tbRerun = document.getElementById('toolbar-rerun-btn');
+  const tbHint  = document.getElementById('toolbar-select-hint');
+  if (tbSel)   tbSel.style.display   = 'none';
+  if (tbRerun) tbRerun.style.display = 'none';
+  if (tbHint)  tbHint.style.display  = 'none';
   _partialSelectedIds.clear();
 }
 
@@ -3178,7 +3212,10 @@ function tryRestoreAnalysisCache() {
     });
     // Restore session state
     _runSession = payload.runSession;
-    if (_runSession) renderCheckLists();
+    if (_runSession) {
+      renderCheckLists();       // shows checkboxes instead of toggles
+      showPartialRunControls(); // shows "Run Selected" + "Re-run All" in toolbar
+    }
     // Show download buttons
     if (payload.downloadBtnsVisible) {
       const dlBtns = document.getElementById('download-btns');
