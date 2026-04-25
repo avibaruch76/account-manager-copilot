@@ -5014,6 +5014,340 @@ async function _pptxGenerate() {
     `;
   }
 }
+
+// ── HTML Preview ─────────────────────────────────────────────────
+let _pptxActiveSlide = 0;
+
+function _pptxRenderPreview() {
+  _pptxShowStep(3);
+  if (!_pptxSlides || !_pptxSlides.length) return;
+  _pptxActiveSlide = 0;
+  _pptxDrawPreview();
+}
+
+function _pptxDrawPreview() {
+  const slides = _pptxSlides;
+  const t = _pptxTemplate;
+  const content = document.getElementById('pptx-content');
+
+  // Thumbnail strip
+  const thumbs = slides.map((s, i) => `
+    <div class="pptx-slide-thumb${i===_pptxActiveSlide?' active':''}" onclick="_pptxSetSlide(${i})"
+         style="background:${s.type==='title'||s.type==='ask'?t.primary:'white'};border-color:${i===_pptxActiveSlide?t.accent:'#E2E8F0'};">
+      <div style="padding:6px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2px;">
+        <div style="height:4px;background:${s.type==='title'||s.type==='ask'?'rgba(255,255,255,.6)':t.primary};border-radius:2px;width:75%;"></div>
+        <div style="height:3px;background:${s.type==='title'||s.type==='ask'?'rgba(255,255,255,.3)':'#CBD5E1'};border-radius:2px;width:90%;"></div>
+        <div style="height:3px;background:${s.type==='title'||s.type==='ask'?'rgba(255,255,255,.3)':'#CBD5E1'};border-radius:2px;width:60%;"></div>
+      </div>
+    </div>
+  `).join('');
+
+  const activeSlide = slides[_pptxActiveSlide];
+  const notes = activeSlide.notes || '';
+
+  content.innerHTML = `
+    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:12px;margin-bottom:16px;">
+      ${thumbs}
+    </div>
+    <div class="pptx-slide-full" style="background:${t.background};">
+      ${_pptxRenderSlide(activeSlide, t)}
+    </div>
+    ${notes ? `
+      <div style="margin-top:12px;background:#F8FAFC;border-radius:8px;padding:12px 14px;border-left:3px solid ${t.accent};">
+        <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:4px;">🎤 PRESENTER NOTES</div>
+        <div style="font-size:12px;color:#475569;line-height:1.6;">${_pptxEsc(notes)}</div>
+      </div>
+    ` : ''}
+    <div style="text-align:center;margin-top:8px;font-size:11px;color:#94A3B8;">
+      Slide ${_pptxActiveSlide+1} of ${slides.length}
+    </div>
+  `;
+
+  document.getElementById('pptx-footer').innerHTML = `
+    <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
+    <div style="flex:1"></div>
+    <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#14532D,#16A34A);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
+  `;
+}
+
+function _pptxSetSlide(idx) {
+  _pptxActiveSlide = idx;
+  _pptxDrawPreview();
+}
+
+// ── Slide Renderers (one per type) ───────────────────────────────
+function _pptxRenderSlide(slide, t) {
+  switch (slide.type) {
+    case 'title':        return _pptxSlideTitle(slide, t);
+    case 'situation':    return _pptxSlideSituation(slide, t);
+    case 'complication': return _pptxSlideComplication(slide, t);
+    case 'supporting':   return _pptxSlideSupporting(slide, t);
+    case 'resolution':   return _pptxSlideResolution(slide, t);
+    case 'ask':          return _pptxSlideAsk(slide, t);
+    default:             return `<div style="padding:40px;color:#64748B;">[Unknown slide type: ${_pptxEsc(slide.type)}]</div>`;
+  }
+}
+
+function _pptxSlideTitle(s, t) {
+  const logo = t.logoBase64
+    ? `<img src="${t.logoBase64}" style="height:36px;object-fit:contain;" alt="logo">`
+    : `<div style="font-size:11px;font-weight:800;color:rgba(255,255,255,.7);letter-spacing:2px;">YOUR LOGO</div>`;
+  return `
+    <div style="background:${t.primary};padding:48px 40px;min-height:320px;display:flex;flex-direction:column;justify-content:space-between;">
+      <div>${logo}</div>
+      <div style="text-align:center;">
+        <div style="font-size:22px;font-weight:800;color:white;line-height:1.3;margin-bottom:14px;">${_pptxEsc(s.headline||'')}</div>
+        <div style="font-size:13px;color:rgba(255,255,255,.65);">${_pptxEsc(s.subtitle||'')}</div>
+      </div>
+      <div style="height:3px;background:${t.accent};border-radius:2px;margin-top:12px;"></div>
+    </div>
+  `;
+}
+
+function _pptxSlideSituation(s, t) {
+  return `
+    <div style="background:white;min-height:320px;">
+      <div style="background:${t.primary};padding:14px 24px;">
+        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.6);letter-spacing:1px;margin-bottom:2px;">THE SITUATION</div>
+        <div style="font-size:16px;font-weight:800;color:white;">${_pptxEsc(s.title||'')}</div>
+      </div>
+      <div style="padding:24px;">
+        <ul style="margin:0;padding-left:20px;line-height:1.7;">
+          ${(s.bullets||[]).map(b=>`<li style="margin-bottom:8px;color:${t.text};font-size:13px;">${_pptxEsc(b)}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+function _pptxSlideComplication(s, t) {
+  return `
+    <div style="background:white;min-height:320px;border-left:5px solid ${t.accent};">
+      <div style="padding:20px 24px 12px;">
+        <div style="font-size:11px;font-weight:700;color:${t.accent};letter-spacing:1px;margin-bottom:4px;">THE COMPLICATION</div>
+        <div style="font-size:16px;font-weight:800;color:${t.text};margin-bottom:14px;">${_pptxEsc(s.title||'')}</div>
+        ${s.dataPoint ? `
+          <div style="background:${t.accent};color:white;padding:14px 18px;border-radius:8px;font-size:18px;font-weight:800;text-align:center;margin-bottom:18px;">${_pptxEsc(s.dataPoint)}</div>
+        ` : ''}
+        <ul style="margin:0;padding-left:20px;line-height:1.7;">
+          ${(s.bullets||[]).map(b=>`<li style="margin-bottom:8px;color:${t.text};font-size:12px;">${_pptxEsc(b)}</li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+function _pptxSlideSupporting(s, t) {
+  return `
+    <div style="background:white;min-height:320px;">
+      <div style="background:${t.primary};padding:12px 24px;">
+        <div style="font-size:15px;font-weight:800;color:white;">${_pptxEsc(s.title||'')}</div>
+      </div>
+      <div style="padding:20px 24px;">
+        <ul style="margin:0;padding-left:16px;line-height:1.8;list-style:none;">
+          ${(s.bullets||[]).map(b=>`
+            <li style="margin-bottom:10px;color:${t.text};font-size:12px;display:flex;align-items:flex-start;gap:8px;">
+              <span style="color:${t.accent};font-weight:800;flex-shrink:0;">▸</span>
+              <span>${_pptxEsc(b)}</span>
+            </li>`).join('')}
+        </ul>
+      </div>
+    </div>
+  `;
+}
+
+function _pptxSlideResolution(s, t) {
+  const actions = (s.actions||[]).map(a=>`
+    <div style="display:flex;gap:0;margin-bottom:10px;">
+      <div style="background:${t.primary};color:white;padding:10px 14px;border-radius:6px 0 0 6px;font-size:12px;font-weight:700;min-width:140px;display:flex;align-items:center;">
+        ${_pptxEsc(a.label||'')}
+      </div>
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-left:none;padding:10px 14px;border-radius:0 6px 6px 0;font-size:12px;color:${t.text};flex:1;display:flex;align-items:center;">
+        ${_pptxEsc(a.outcome||'')}
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div style="background:white;min-height:320px;">
+      <div style="background:${t.primary};padding:12px 24px;">
+        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.6);letter-spacing:1px;margin-bottom:2px;">THE RESOLUTION</div>
+        <div style="font-size:15px;font-weight:800;color:white;">${_pptxEsc(s.title||'Three moves to capture the opportunity')}</div>
+      </div>
+      <div style="padding:20px 24px;">${actions}</div>
+    </div>
+  `;
+}
+
+function _pptxSlideAsk(s, t) {
+  const steps = (s.next_steps||[]).map(step=>
+    `<div style="font-size:12px;color:rgba(255,255,255,.85);margin-bottom:6px;padding-left:12px;border-left:2px solid ${t.accent};">${_pptxEsc(step)}</div>`
+  ).join('');
+  return `
+    <div style="background:${t.primary};padding:40px;min-height:320px;display:flex;flex-direction:column;justify-content:center;gap:24px;">
+      <div style="text-align:center;">
+        <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:2px;margin-bottom:10px;">THE ASK</div>
+        <div style="font-size:20px;font-weight:800;color:white;line-height:1.3;">${_pptxEsc(s.cta||'')}</div>
+      </div>
+      ${steps ? `
+        <div>
+          <div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.5);letter-spacing:1px;margin-bottom:10px;">NEXT STEPS</div>
+          ${steps}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+// ── .pptx Download ───────────────────────────────────────────────
+async function _pptxDownload() {
+  if (!_pptxSlides || !_pptxSlides.length) return;
+  const btn = document.querySelector('#pptx-footer button:last-child');
+  if (btn) { btn.textContent = '⏳ Building .pptx…'; btn.disabled = true; }
+
+  // Load PptxGenJS on demand
+  if (!window.PptxGenJS) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load PptxGenJS'));
+      document.head.appendChild(s);
+    });
+  }
+
+  try {
+    const pptx = new window.PptxGenJS();
+    pptx.layout  = 'LAYOUT_WIDE';
+    pptx.author  = 'Account Manager Copilot';
+    pptx.company = 'RubyPlay';
+
+    const t = _pptxTemplate;
+    const entity = document.getElementById('operator-select')?.value || 'Operator';
+
+    for (const slide of _pptxSlides) {
+      _pptxBuildSlide(pptx, slide, t);
+    }
+
+    // Filename: {Entity}_QBR_{MonthYear}.pptx
+    const now = new Date();
+    const monthYear = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '');
+    const safeName = entity.replace(/[^a-zA-Z0-9_]/g, '_');
+    const fileName = `${safeName}_QBR_${monthYear}.pptx`;
+
+    await pptx.writeFile({ fileName });
+    showToast(`📊 ${fileName} downloaded!`);
+  } catch (e) {
+    showToast('❌ .pptx export failed: ' + e.message, true);
+  }
+
+  if (btn) { btn.textContent = '⬇ Download .pptx'; btn.disabled = false; }
+}
+
+function _pptxBuildSlide(pptx, slide, t) {
+  const s = pptx.addSlide();
+  const hex = c => c.replace('#','');
+
+  switch (slide.type) {
+
+    case 'title': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:'100%', fill:{color: hex(t.primary)} });
+      s.addShape(pptx.ShapeType.rect, { x:0, y:6.9, w:'100%', h:0.1, fill:{color: hex(t.accent)} });
+      if (t.logoBase64) {
+        s.addImage({ data: t.logoBase64, x:0.4, y:0.3, h:0.5, w:1.5, sizing:{type:'contain',w:1.5,h:0.5} });
+      } else {
+        s.addText('YOUR LOGO', { x:0.4, y:0.25, w:2, h:0.5, fontSize:9, bold:true, color:'FFFFFF', valign:'middle', align:'left' });
+      }
+      s.addText(slide.headline || '', {
+        x:1, y:2.5, w:11.3, h:1.5, fontSize:28, bold:true, color:'FFFFFF', align:'center', valign:'middle',
+        fontFace: t.fontHeading, wrap:true
+      });
+      s.addText(slide.subtitle || '', {
+        x:1, y:4.2, w:11.3, h:0.5, fontSize:13, color:'AAAACC', align:'center',
+        fontFace: t.fontBody
+      });
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+
+    case 'situation': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:1.1, fill:{color: hex(t.primary)} });
+      s.addText('THE SITUATION', { x:0.4, y:0.08, w:12, h:0.3, fontSize:8, bold:true, color:'AAAACC' });
+      s.addText(slide.title || '', { x:0.4, y:0.35, w:12, h:0.65, fontSize:18, bold:true, color:'FFFFFF', fontFace:t.fontHeading, wrap:true });
+      const bullets = (slide.bullets || []).map(b => ({ text: b, options:{fontSize:13, color:hex(t.text), paraSpaceBefore:4} }));
+      if (bullets.length) {
+        s.addText(bullets, { x:0.6, y:1.3, w:12, h:5.5, bullet:true, fontFace:t.fontBody, valign:'top' });
+      }
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+
+    case 'complication': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:0.1, h:'100%', fill:{color: hex(t.accent)} });
+      s.addText('THE COMPLICATION', { x:0.3, y:0.25, w:12, h:0.3, fontSize:8, bold:true, color:hex(t.accent) });
+      s.addText(slide.title || '', { x:0.3, y:0.55, w:12, h:0.8, fontSize:18, bold:true, color:hex(t.text), fontFace:t.fontHeading, wrap:true });
+      if (slide.dataPoint) {
+        s.addShape(pptx.ShapeType.rect, { x:0.5, y:1.5, w:12.3, h:0.9, fill:{color:hex(t.accent)}, rounding:true });
+        s.addText(slide.dataPoint, { x:0.5, y:1.5, w:12.3, h:0.9, fontSize:18, bold:true, color:'FFFFFF', align:'center', valign:'middle', fontFace:t.fontHeading });
+      }
+      const startY = slide.dataPoint ? 2.55 : 1.5;
+      const bullets = (slide.bullets || []).map(b => ({ text: b, options:{fontSize:12, color:hex(t.text), paraSpaceBefore:4} }));
+      if (bullets.length) {
+        s.addText(bullets, { x:0.6, y:startY, w:12, h:4.5, bullet:true, fontFace:t.fontBody, valign:'top' });
+      }
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+
+    case 'supporting': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:0.9, fill:{color: hex(t.primary)} });
+      s.addText(slide.title || '', { x:0.4, y:0.08, w:12.5, h:0.75, fontSize:16, bold:true, color:'FFFFFF', fontFace:t.fontHeading, valign:'middle' });
+      const bullets = (slide.bullets || []).map(b => ({ text: b, options:{fontSize:12, color:hex(t.text), paraSpaceBefore:6} }));
+      if (bullets.length) {
+        s.addText(bullets, { x:0.6, y:1.1, w:12, h:5.8, bullet:{type:'bullet', code:'25B8', color:hex(t.accent)}, fontFace:t.fontBody, valign:'top' });
+      }
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+
+    case 'resolution': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:0.9, fill:{color: hex(t.primary)} });
+      s.addText('THE RESOLUTION', { x:0.4, y:0.04, w:12, h:0.25, fontSize:8, bold:true, color:'AAAACC' });
+      s.addText(slide.title || 'Three moves to capture the opportunity', {
+        x:0.4, y:0.28, w:12.5, h:0.6, fontSize:15, bold:true, color:'FFFFFF', fontFace:t.fontHeading, valign:'middle'
+      });
+      const actions = slide.actions || [];
+      actions.forEach((a, i) => {
+        const yPos = 1.1 + i * 1.5;
+        s.addShape(pptx.ShapeType.rect, { x:0.4, y:yPos, w:3.5, h:1.3, fill:{color:hex(t.primary)}, rounding:false });
+        s.addShape(pptx.ShapeType.rect, { x:3.9, y:yPos, w:9.5, h:1.3, fill:{color:'F8FAFC'}, line:{color:'E2E8F0',width:1} });
+        s.addText(a.label || '', { x:0.4, y:yPos, w:3.5, h:1.3, fontSize:12, bold:true, color:'FFFFFF', align:'center', valign:'middle', fontFace:t.fontHeading });
+        s.addText(a.outcome || '', { x:4.0, y:yPos, w:9.3, h:1.3, fontSize:12, color:hex(t.text), valign:'middle', fontFace:t.fontBody, wrap:true });
+      });
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+
+    case 'ask': {
+      s.addShape(pptx.ShapeType.rect, { x:0, y:0, w:'100%', h:'100%', fill:{color:hex(t.primary)} });
+      s.addText('THE ASK', { x:1, y:0.6, w:11.3, h:0.4, fontSize:9, bold:true, color:'AAAACC', align:'center' });
+      s.addText(slide.cta || '', {
+        x:0.8, y:1.1, w:11.7, h:2, fontSize:24, bold:true, color:'FFFFFF', align:'center', valign:'middle',
+        fontFace:t.fontHeading, wrap:true
+      });
+      const steps = slide.next_steps || [];
+      if (steps.length) {
+        s.addText('NEXT STEPS', { x:1.5, y:3.4, w:10, h:0.3, fontSize:8, bold:true, color:'AAAACC' });
+        steps.forEach((step, i) => {
+          const yPos = 3.8 + i * 0.7;
+          s.addShape(pptx.ShapeType.rect, { x:1.5, y:yPos, w:0.05, h:0.5, fill:{color:hex(t.accent)} });
+          s.addText(step, { x:1.7, y:yPos, w:10, h:0.5, fontSize:11, color:'DDDDEE', valign:'middle', fontFace:t.fontBody });
+        });
+      }
+      if (slide.notes) s.addNotes(slide.notes);
+      break;
+    }
+  }
+}
 </script>
 </body>
 </html>
