@@ -40,6 +40,40 @@ try {
   console.warn('[brand] Failed to parse BRAND_TEMPLATE env var:', e.message);
 }
 
+async function persistTemplateToRender(template, apiKey, serviceId) {
+  const jsonStr = JSON.stringify(template);
+  const https = require('https');
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify([
+      { key: 'BRAND_TEMPLATE', value: jsonStr }
+    ]);
+    const options = {
+      hostname: 'api.render.com',
+      path: `/v1/services/${serviceId}/env-vars`,
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(data);
+        } else {
+          reject(new Error(`Render API returned ${res.statusCode}: ${data}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.write(payload);
+    req.end();
+  });
+}
+
 // ── Auth ─────────────────────────────────────────────────────────────────────
 // Set APP_PASSWORD env var on Render to enable password protection.
 // Locally it's disabled (no env var = open access).
@@ -1632,6 +1666,47 @@ const server = http.createServer(async (req, res) => {
     } catch (e) {
       res.writeHead(500); res.end('Failed to load HTML: ' + e.message);
     }
+    return;
+  }
+
+  // Upload brand template
+  if (req.method === 'POST' && req.url === '/api/upload-template') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const template = JSON.parse(body);
+        // Validate required fields
+        const required = ['primary','accent','background','highlight','text','fontHeading','fontBody'];
+        for (const f of required) {
+          if (!template[f]) throw new Error(`Missing field: ${f}`);
+        }
+        template.uploadedAt = new Date().toISOString();
+        // Update in-memory immediately
+        _brandTemplate = { ...DEFAULT_BRAND_TEMPLATE, ...template };
+        console.log('[brand] Template updated in memory');
+
+        // Persist to Render env var if configured
+        const renderApiKey = process.env.RENDER_API_KEY;
+        const renderServiceId = process.env.RENDER_SERVICE_ID;
+        if (renderApiKey && renderServiceId) {
+          try {
+            await persistTemplateToRender(template, renderApiKey, renderServiceId);
+            console.log('[brand] Template persisted to Render env var');
+          } catch (e) {
+            console.warn('[brand] Render persist failed (template still updated in memory):', e.message);
+          }
+        } else {
+          console.warn('[brand] RENDER_API_KEY or RENDER_SERVICE_ID not set — template will reset on redeploy');
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, uploadedAt: template.uploadedAt }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
