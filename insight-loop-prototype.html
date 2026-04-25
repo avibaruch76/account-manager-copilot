@@ -5284,6 +5284,8 @@ function _pptxSelectTone(toneId) {
 
 // ── Generate ─────────────────────────────────────────────────────
 async function _pptxGenerate() {
+  console.log('[pptx] _pptxGenerate called, sections:', _pptxSections?.length);
+  try {
   // Save brief state
   _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
   _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
@@ -5351,6 +5353,19 @@ async function _pptxGenerate() {
     document.getElementById('pptx-footer').innerHTML = `
       <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back to Brief</button>
     `;
+  }
+  } catch (fatalErr) {
+    // Catch any unexpected JS error and show it — prevents silent failures
+    console.error('[pptx] Fatal error in _pptxGenerate:', fatalErr);
+    const content = document.getElementById('pptx-content');
+    if (content) content.innerHTML = `
+      <div style="text-align:center;padding:40px 20px;">
+        <div style="font-size:32px;margin-bottom:12px;">❌</div>
+        <div style="font-size:14px;font-weight:700;color:#DC2626;margin-bottom:8px;">Unexpected error</div>
+        <div style="font-size:12px;color:#64748B;">${fatalErr.message}</div>
+      </div>`;
+    const footer = document.getElementById('pptx-footer');
+    if (footer) footer.innerHTML = `<button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back to Brief</button>`;
   }
 }
 
