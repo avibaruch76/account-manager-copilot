@@ -2003,19 +2003,27 @@ const server = http.createServer(async (req, res) => {
         'Content-Type': 'text/plain; charset=utf-8',
         'Transfer-Encoding': 'chunked',
         'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',      // Tell Render/nginx NOT to buffer — critical for streaming
         'X-Content-Type-Options': 'nosniff'
       });
-      // Flush headers to client immediately — Node.js buffers until first write(),
-      // so without this the browser's fetch() stays pending until Claude's first token (TTFT).
-      // A newline is harmless — our parser only looks for <SLIDE_START>/<SLIDE_END> delimiters.
-      res.write('\n');
+      // flushHeaders() sends HTTP headers to the client immediately, before any body data.
+      // This resolves the browser's await fetch() right away so the elapsed timer can start.
+      // Without this, Node.js + Render's nginx both buffer until enough bytes accumulate.
+      res.flushHeaders();
+
+      // Send a newline heartbeat every 15s during TTFT so the connection stays alive.
+      // The parser ignores whitespace — only <SLIDE_START>/<SLIDE_END> delimiters matter.
+      const _heartbeat = setInterval(() => {
+        if (!res.writableEnded) res.write('\n');
+      }, 15000);
 
       try {
         await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res);
       } catch (e) {
         console.error('[generate-slides] Stream error:', e.message);
-        // Write an error marker — client will detect it after the stream ends
         res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
+      } finally {
+        clearInterval(_heartbeat);
       }
       res.end();
     });
