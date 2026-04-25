@@ -164,7 +164,7 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 .btn-secondary{background:#F0F4F8;color:#4A235A;border:1.5px solid #D7BDE2;padding:10px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-left:8px}
 .btn-secondary:hover{background:#F3E8FF}
 
-.success-toast{position:fixed;top:80px;right:20px;background:#1D6A39;color:white;padding:14px 24px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:200;transform:translateX(400px);transition:transform .3s ease-out}
+.success-toast{position:fixed;top:80px;right:20px;background:#1D6A39;color:white;padding:14px 24px;border-radius:10px;font-size:13px;font-weight:700;box-shadow:0 4px 20px rgba(0,0,0,.2);z-index:10000;transform:translateX(400px);transition:transform .3s ease-out}
 .success-toast.show{transform:translateX(0)}
 
 /* EXAMPLE TEMPLATES */
@@ -5155,8 +5155,22 @@ async function openPresentationBuilder() {
       fontHeading:'Calibri', fontBody:'Calibri'
     };
   }
-  // Auto-build all sections from current run — no picker needed
-  const checkIds = window._currentRunCheckIds || [];
+  // Auto-build all sections from current run — no picker needed.
+  // _currentRunCheckIds is set during a live run; after a page reload it's
+  // undefined, so fall back to the last run recorded in _runSession, then
+  // to all enabled checks so the button always works.
+  let checkIds = window._currentRunCheckIds;
+  if (!checkIds || checkIds.length === 0) {
+    // Try to recover from restored session (cache restore path)
+    if (_runSession && _runSession.runs && _runSession.runs.length > 0) {
+      const lastRun = _runSession.runs[_runSession.runs.length - 1];
+      checkIds = lastRun.checkIds || [];
+    }
+  }
+  if (!checkIds || checkIds.length === 0) {
+    // Final fallback: use all enabled checks
+    checkIds = _checks.filter(c => c.enabled !== false).map(c => c.id);
+  }
   _pptxSections = checkIds.map(id => {
     const check = _checks.find(c => c.id === id);
     const name  = check ? check.name : id;
@@ -5275,7 +5289,21 @@ async function _pptxGenerate() {
   _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
   _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
 
-  const sections = _pptxSections; // all sections, Claude decides what to highlight
+  // Re-build sections here in case they were empty when the panel first opened
+  // (e.g. page reload with cache — DOM cards may now exist after cache restore)
+  if (_pptxSections.length === 0 || _pptxSections.every(s => s.content === '(no content available)')) {
+    // Try to pull content from persona pane HTML as a fallback
+    const fallbackContent = [];
+    Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
+      const pane = document.getElementById(paneId);
+      if (pane && pane.innerText && pane.innerText.trim().length > 100) {
+        fallbackContent.push({ checkId: persona, checkName: PERSONA_TITLE[persona] || persona, content: pane.innerText.trim().slice(0, 6000), selected: true });
+      }
+    });
+    if (fallbackContent.length > 0) _pptxSections = fallbackContent;
+  }
+
+  const sections = _pptxSections;
   if (sections.length === 0) {
     showToast('⚠️ No analysis results found. Run an analysis first.', true);
     return;
