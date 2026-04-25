@@ -3178,7 +3178,13 @@ function saveAnalysisCache() {
       if (el && el.innerHTML.trim()) panes[paneId] = el.innerHTML;
     });
     const checkResults = document.getElementById('check-results');
-    if (checkResults && checkResults.innerHTML.trim()) panes['check-results'] = checkResults.innerHTML;
+    // Only save check-results if the background data_analyst run has actually completed
+    // (i.e. not still showing a loading/spinner placeholder)
+    if (checkResults && checkResults.innerHTML.trim()) {
+      const cr = checkResults.innerHTML;
+      const isLoading = cr.includes('Full analysis running') || cr.includes('analysis-spinner') || cr.includes('⏳');
+      if (!isLoading) panes['check-results'] = cr;
+    }
 
     const payload = {
       savedAt: Date.now(),
@@ -3205,10 +3211,12 @@ function tryRestoreAnalysisCache() {
       localStorage.removeItem(key);
       return false;
     }
-    // Restore panes
+    // Restore panes — skip any that were saved mid-load (stale spinner state)
     Object.entries(payload.panes || {}).forEach(([paneId, html]) => {
       const el = document.getElementById(paneId);
-      if (el) el.innerHTML = html;
+      if (!el) return;
+      const isStaleSpinner = html.includes('Full analysis running') || html.includes('analysis-spinner') || html.includes('⏳');
+      if (!isStaleSpinner) el.innerHTML = html;
     });
     // Restore session state
     _runSession = payload.runSession;
