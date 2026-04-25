@@ -11,6 +11,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const Anthropic = require('@anthropic-ai/sdk');
 const crypto = require('crypto');
 const jedify = require('./jedify-direct');
 
