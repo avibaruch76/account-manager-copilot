@@ -76,7 +76,7 @@ async function persistTemplateToRender(template, apiKey, serviceId) {
 }
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
-function buildSlidesPrompt(sections, brief, operator) {
+function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   const toneMap = {
     opportunity: 'Frame as an exciting opportunity — highlight upside, growth potential, and what is possible.',
     risk:        'Frame as a risk review — be measured, flag concerns clearly, recommend protective actions.',
@@ -88,6 +88,155 @@ function buildSlidesPrompt(sections, brief, operator) {
   const sectionContent = sections.map(s =>
     `=== ${s.checkName} ===\n${s.content}`
   ).join('\n\n');
+
+  // Build dynamic slide list based on plan
+  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+  const customSlides = (slidePlan && slidePlan.custom) ? slidePlan.custom : [];
+  const on = id => enabledIds.includes(id);
+
+  const SLIDE_DEFS = {
+    1: `SLIDE {{N}} — TITLE
+  Layout: background #1A1A1A; logo top-left in white/muted; large centred operator name; sub-headline is a sharp assertion about the period; date range bottom-left; "QBR" badge top-right in #CC0000.
+  Headline rule: make it the strongest single statement you can draw from the data (e.g. "GGR +41% — Now Prove It Can Scale").`,
+
+    2: `SLIDE {{N}} — KPI CHARTS (Monthly Trends)
+  Section label: KPI OVERVIEW
+  Headline: write a conclusion drawn from the dominant KPI trend
+  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #F5F5F5; padding:12px)
+  Chart 1 — Total Bets (monthly)
+  Chart 2 — GGR (monthly)
+  Chart 3 — Active Players (monthly)
+  Chart 4 — Rounds per Player (monthly)
+  Each chart: x-axis = months (abbreviated), y-axis = values (use K/M suffix). QBR period bars = #CC0000, prior months = #CBD5E1. Tiny label above each chart.
+  If a metric is not in the data, show its card with muted "No data available" text.`,
+
+    3: `SLIDE {{N}} — STUDIO PERFORMANCE (Monthly)
+  Section label: STUDIO BREAKDOWN
+  Headline: conclusion about which studio is leading or has the best trend
+  Layout: one SVG line chart, full-width, height ~200px
+  Lines: one per studio, colour from palette, dots at each data point; legend below chart
+  x-axis = months, y-axis = Total Bets or GGR (whichever is in the data)
+  If studio monthly data is not available, render placeholder`,
+
+    4: `SLIDE {{N}} — NEW GAMES LAUNCHED
+  Section label: NEW LAUNCHES · [QBR period]
+  Headline: conclusion about new game performance
+  Table columns: Game Name | Studio | RTP | Total Bets (14d) | Players (14d)
+  Sort by Total Bets descending. Highlight top game row with left border: border-left:3px solid #CC0000
+  If no new games in data, show placeholder`,
+
+    5: `SLIDE {{N}} — BETS BY STUDIO (Bar Chart)
+  Section label: STUDIO PERFORMANCE
+  Headline: which studio commands the most action
+  Layout: one horizontal SVG bar chart — one bar per studio showing total bets (all games, full QBR period)
+  Bars coloured using palette (one colour per studio); sorted descending; value label at end of each bar
+  Always render this chart — every analysis has studio-level bet data`,
+
+    6: `SLIDE {{N}} — RETENTION ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Retention Analysis"`,
+
+    7: `SLIDE {{N}} — REGIONAL COMPARISON
+  Section label: MARKET POSITION
+  Headline: conclusion about operator's position vs market/world
+  Layout: 3 side-by-side horizontal bar chart groups:
+    Group A — "This Operator" vs "Market Average" vs "World Benchmark" for Total Bets
+    Group B — same three for GGR
+    Group C — same three for Players
+  If comparison data is not available, show placeholder`,
+
+    8: `SLIDE {{N}} — STUDIO SUMMARY TABLE
+  Section label: PORTFOLIO PERFORMANCE
+  Headline: conclusion about portfolio health
+  Table columns: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game
+  Sort by Total Bets descending. Summary TOTAL row at bottom in bold.
+  Bet Share % in #CC0000 for top studio`,
+
+    9: `SLIDE {{N}} — PLAYER SEGMENTATION
+  ALWAYS render as placeholder. Text: "Coming Soon — Player Segmentation"`,
+
+    10: `SLIDE {{N}} — VIP ANALYSIS
+  Section label: VIP PLAYERS
+  Headline: conclusion about VIP contribution or opportunity
+  Table columns: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€)
+  Sort by VIP Bets descending. If VIP data not available, show placeholder`,
+
+    11: `SLIDE {{N}} — MAX BET ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Max Bet Analysis"`,
+
+    12: `SLIDE {{N}} — PROMOTION ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Promotion Analysis"`,
+
+    13: `SLIDE {{N}} — THE PORTFOLIO GAP
+  Section label: MISSING OPPORTUNITIES
+  Headline: the gap, as a dollar or % number if possible
+  Table columns: Game Name | Key Fact | Market Rank | Market Share % | Signal badge
+  Each row is a game the operator is underperforming or missing. Max 8 rows.
+  Signal badge colours per rules above`,
+
+    14: `SLIDE {{N}} — THE GROWTH LEVERS
+  Section label: GROWTH LEVERS
+  Headline: total opportunity size if possible
+  Table columns: Game Name | Key Fact | Players | GGR/Player | Total GGR | Opportunity | Action
+  Action column: small red pill <span style='background:#CC0000;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>ADD</span> or <span style='background:#1A1A1A;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>EXPAND</span>
+  Sort by Opportunity descending`,
+
+    15: `SLIDE {{N}} — KPI GAPS
+  Section label: PERFORMANCE GAPS
+  Headline: the most important gap in one sentence
+  Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
+  Gap column: red if negative, green if positive. Trend: ↑ ↓ → arrows coloured accordingly`,
+  };
+
+  const ACTIONS_DEF = `SLIDE {{N}} — ACTIONS & PRIORITIES
+  Section label: RECOMMENDED ACTIONS
+  Headline: the decisive call — what must happen this quarter
+  Layout: numbered action cards (1–5 max), each card:
+    - Priority badge (CRITICAL / HIGH / MEDIUM)
+    - Action title (bold, 1 line)
+    - One-line rationale (muted text)
+    - Expected outcome (small text, #16A34A)
+  Cards stacked vertically; alternating #fff / #F5F5F5 background; left border #CC0000`;
+
+  const ASK_DEF = `SLIDE {{N}} — THE ASK / CLOSING
+  Layout: background #1A1A1A; full-bleed dark slide
+  Top: RUBYPLAY × ${operator.toUpperCase()} in white/muted small text
+  Centre: large white headline — the specific ask from the brief (or a powerful close if no ask provided)
+  Below: 3 bullet next steps in #CBD5E1 text
+  Red accent bar: <div style='width:48px;height:4px;background:#CC0000;margin:24px auto 0;'></div>
+  No footer on this slide.`;
+
+  let slideN = 1;
+  const slideLines = [];
+
+  // Standard slides 1-15 (filtered by plan)
+  for (let id = 1; id <= 15; id++) {
+    if (on(id) && SLIDE_DEFS[id]) {
+      slideLines.push(SLIDE_DEFS[id].replace(/\{\{N\}\}/g, String(slideN++)));
+    }
+  }
+
+  // Custom slides (always before Actions)
+  for (const c of customSlides) {
+    const desc = c.description ? c.description : 'Create a relevant slide using data from the analysis that supports the narrative.';
+    slideLines.push(`SLIDE ${slideN++} — ${c.title.toUpperCase()}
+  [CUSTOM SLIDE REQUESTED BY THE ACCOUNT MANAGER]
+  Description: ${desc}
+  Use ONLY real data from the analysis. Follow all design rules. Write a strong editorial headline (conclusion, not topic).`);
+  }
+
+  // Always-on: Actions and The Ask
+  slideLines.push(ACTIONS_DEF.replace(/\{\{N\}\}/g, String(slideN++)));
+  slideLines.push(ASK_DEF.replace(/\{\{N\}\}/g, String(slideN++)));
+
+  const totalSlides = slideN - 1;
+  const slidesText = slideLines.join('\n\n');
+
+  const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12 and any slide with no data available):
+  <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
+    <div style='width:40px;height:40px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
+    <div style='font-size:16px;font-weight:700;color:#1A1A1A;'>[TOPIC] — Coming Soon</div>
+    <div style='font-size:13px;color:#64748B;'>Data will appear here in a future analysis run</div>
+  </div>`;
 
   const systemPrompt = `You are a world-class business presentation designer and storyteller with deep expertise in B2B executive communications.
 
@@ -126,7 +275,7 @@ ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
 ══════════════════════════════════════
 
-FIXED SLIDE TEMPLATE — generate ALL 17 slots in this exact order. Never skip a slot. Each slide must use the DESIGN RULES below.
+FIXED SLIDE TEMPLATE — generate ALL ${totalSlides} slides in order. Each slide must use the DESIGN RULES below.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DESIGN RULES (RubyPlay brand — apply to every slide):
@@ -142,7 +291,7 @@ Brand colours:
   Chart palette (studios/lines): ['#CC0000','#1A1A1A','#2563EB','#D97706','#16A34A','#7C3AED','#0891B2']
 
 Outer div (every slide):
-  style='width:100%;height:100%;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
+  style='width:1280px;height:720px;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
 Logo bar (top of every slide):
   <div style='font-size:11px;color:#64748B;letter-spacing:2px;padding:10px 28px 0;text-transform:uppercase;'>RUBYPLAY × ${operator.toUpperCase()}</div>
@@ -150,7 +299,7 @@ Logo bar (top of every slide):
 Editorial headline block (after logo bar, before body):
   <div style='border-left:3px solid #CC0000;padding-left:12px;margin:8px 28px 0;'>
     <span style='display:block;font-size:10px;color:#CC0000;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;'>[SECTION LABEL]</span>
-    <span style='display:block;font-size:26px;font-weight:800;color:#1A1A1A;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
+    <span style='display:block;font-size:32px–40px;font-weight:800;color:#1A1A1A;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
   </div>
 
 Body area: <div style='padding:10px 28px;flex:1;overflow:hidden;'>
@@ -180,139 +329,15 @@ SVG CHART RULES:
 ATTRIBUTE QUOTES: Use ONLY single quotes for ALL HTML attribute values. No double quotes inside HTML strings.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-NOW GENERATE ALL 18 SLIDES:
+NOW GENERATE ALL ${totalSlides} SLIDES:
 
-SLIDE 1 — TITLE
-  Layout: background #1A1A1A; logo top-left in white/muted; large centred operator name; sub-headline is a sharp assertion about the period; date range bottom-left; "QBR" badge top-right in #CC0000.
-  Headline rule: make it the strongest single statement you can draw from the data (e.g. "GGR +41% — Now Prove It Can Scale").
-
-SLIDE 2 — KPI CHARTS (Monthly Trends)
-  Section label: KPI OVERVIEW
-  Headline: write a conclusion drawn from the dominant KPI trend
-  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #F5F5F5; padding:12px)
-  Chart 1 — Total Bets (monthly)
-  Chart 2 — GGR (monthly)
-  Chart 3 — Active Players (monthly)
-  Chart 4 — Rounds per Player (monthly)
-  Each chart: x-axis = months (abbreviated), y-axis = values (no decimals for large numbers, use K/M suffix). QBR period bars = #CC0000, prior months = #CBD5E1. Include a tiny label above each chart naming the metric.
-  If a metric is not in the data, show its card with: font-size:11px; color:#64748B; text-align:center; padding-top:30px; "No data available"
-
-SLIDE 3 — GAME STUDIO PERFORMANCE (Monthly)
-  Section label: STUDIO BREAKDOWN
-  Headline: conclusion about which studio is leading or has the best trend
-  Layout: one SVG line chart, full-width, height ~200px
-  Lines: one per studio, colour from palette above, dots at each data point
-  Legend below chart: coloured dot + studio name
-  x-axis = months, y-axis = Total Bets or GGR (use whichever is in the data)
-  If studio breakdown by month is not in the data, render a "Coming Soon — Studio monthly data" placeholder (see placeholder spec at end)
-
-SLIDE 4 — NEW GAMES LAUNCHED
-  Section label: NEW LAUNCHES · [QBR period]
-  Headline: conclusion about new game performance
-  Table columns: Game Name | Studio | RTP | Total Bets (14d) | Players (14d)
-  Sort by Total Bets descending
-  Highlight top game row with left border: border-left:3px solid #CC0000
-  If no new games in data, show placeholder: "Coming Soon — New games data"
-
-SLIDE 5 — NEW GAMES: BETS BY STUDIO (Bar Chart)
-  Section label: LAUNCH PERFORMANCE
-  Headline: which studio launched strongest
-  Layout: one horizontal SVG bar chart — one bar per studio showing total bets from new games in the QBR period
-  Bars coloured using palette; sorted descending; value label at end of each bar
-  If data not available, show placeholder
-
-SLIDE 6 — RETENTION ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Retention Analysis"
-  Use the placeholder style defined at end.
-
-SLIDE 7 — REGIONAL COMPARISON
-  Section label: MARKET POSITION
-  Headline: conclusion about operator's position vs market/world
-  Layout: 3 side-by-side horizontal bar chart groups, one per dimension:
-    Group A — "This Operator" vs "Market Average" vs "World Benchmark" for Total Bets
-    Group B — same three for GGR
-    Group C — same three for Players
-  If regional/benchmark comparison data is not available, show placeholder
-
-SLIDE 8 — STUDIO SUMMARY TABLE
-  Section label: PORTFOLIO PERFORMANCE
-  Headline: conclusion about portfolio health
-  Table columns: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game
-  Sort by Total Bets descending
-  Add a summary row at the bottom (TOTAL) in bold
-  Key number: Bet Share % in #CC0000 for top studio
-
-SLIDE 9 — PLAYER SEGMENTATION
-  ALWAYS render as placeholder. Text: "Coming Soon — Player Segmentation"
-
-SLIDE 10 — VIP ANALYSIS
-  Section label: VIP PLAYERS
-  Headline: conclusion about VIP contribution or opportunity
-  Table columns: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€)
-  Sort by VIP Bets descending
-  If VIP data not available, show placeholder
-
-SLIDE 11 — MAX BET ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Max Bet Analysis"
-
-SLIDE 12 — PROMOTION ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Promotion Analysis"
-
-SLIDE 13 — THE PORTFOLIO GAP
-  Section label: MISSING OPPORTUNITIES
-  Headline: the gap, as a dollar or % number if possible
-  Table columns: Game Name | Key Fact | Market Rank | Market Share % | Signal badge
-  Each row is a game the operator is underperforming or missing
-  Signal badge colours per rules above
-  Show maximum 8 rows; if more exist, add footer "… and N more"
-
-SLIDE 14 — THE GROWTH LEVERS
-  Section label: GROWTH LEVERS
-  Headline: total opportunity size if possible
-  Table columns: Game Name | Key Fact | Players | GGR/Player | Total GGR | Opportunity | Action
-  Action column: small red pill button — <span style='background:#CC0000;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>ADD</span> or <span style='background:#1A1A1A;…'>EXPAND</span>
-  Sort by Opportunity descending
-
-SLIDE 15 — KPI GAPS
-  Section label: PERFORMANCE GAPS
-  Headline: the most important gap in one sentence
-  Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
-  Gap column: colour red if negative, green if positive
-  Trend column: ↑ ↓ → arrows coloured accordingly
-
-[AFTER SLIDE 15, INSERT ANY EXTRA NARRATIVE SLIDES HERE]
-  If the brief angle or the data warrants additional analysis slides (competitive intelligence, concentration risk, player lifetime value, etc.), insert them here — BEFORE the Actions slide.
-  Each extra slide must follow the same design rules and have a section label + editorial headline.
-  If no extra slides are needed, simply proceed to slide 16.
-
-SLIDE 16 — ACTIONS & PRIORITIES
-  Section label: RECOMMENDED ACTIONS
-  Headline: the decisive call — what must happen this quarter
-  Layout: numbered action cards (1–5 max), each card has:
-    - Priority badge (CRITICAL / HIGH / MEDIUM)
-    - Action title (bold, 1 line)
-    - One-line rationale (muted text)
-    - Expected outcome (small text, #16A34A)
-  Cards stacked vertically; each card background alternates #fff / #F5F5F5 with left border #CC0000
-
-SLIDE 17 — THE ASK / CLOSING
-  Layout: background #1A1A1A; full-bleed dark slide
-  Top: RUBYPLAY × ${operator.toUpperCase()} in white/muted small text
-  Centre: large white headline — the specific ask from the brief (or a powerful close if no ask provided)
-  Below: 3 bullet next steps in #CBD5E1 text
-  Red accent bar: <div style='width:48px;height:4px;background:#CC0000;margin:24px auto 0;'></div>
-  No footer on this slide.
+${slidesText}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12, and any slide with no data):
-  <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
-    <div style='width:40px;height:40px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
-    <div style='font-size:13px;font-weight:700;color:#1A1A1A;'>[TOPIC] — Coming Soon</div>
-    <div style='font-size:11px;color:#64748B;'>Data will appear here in a future analysis run</div>
-  </div>
+${PLACEHOLDER_DEF}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate all 17 slides now. Output only the slide delimiters — no other text:`;
+Generate all ${totalSlides} slides now. Output only the slide delimiters — no other text:`;
 
   return { systemPrompt, userPrompt };
 }
@@ -338,9 +363,9 @@ function parseSlidesFromText(raw) {
 
 // Stream Claude's slide generation directly to an HTTP response.
 // The response is written as plain text chunks — client reads with ReadableStream.
-async function streamSlidesToResponse(sections, brief, operator, res) {
+async function streamSlidesToResponse(sections, brief, operator, res, slidePlan) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const { systemPrompt, userPrompt } = buildSlidesPrompt(sections, brief, operator);
+  const { systemPrompt, userPrompt } = buildSlidesPrompt(sections, brief, operator, slidePlan);
 
   const stream = await client.messages.create({
     model:      'claude-sonnet-4-6',
@@ -1991,7 +2016,7 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const { sections, brief, operator } = parsed;
+      const { sections, brief, operator, slidePlan } = parsed;
       if (!sections || !sections.length) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'No sections provided' }));
@@ -2018,7 +2043,7 @@ const server = http.createServer(async (req, res) => {
       }, 15000);
 
       try {
-        await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res);
+        await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res, slidePlan || null);
       } catch (e) {
         console.error('[generate-slides] Stream error:', e.message);
         res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);

@@ -993,8 +993,8 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
   <!-- Step indicator -->
   <div style="display:flex;background:#F8FAFC;border-bottom:1px solid #E2E8F0;flex-shrink:0;">
     <div class="pptx-step-dot" id="pptx-dot-1" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:#1E2761;border-bottom:2px solid #7C3AED;">1 STORY BRIEF</div>
-    <div class="pptx-step-dot" id="pptx-dot-2" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">2 PREVIEW</div>
-    <div class="pptx-step-dot" id="pptx-dot-3" style="display:none;"></div>
+    <div class="pptx-step-dot" id="pptx-dot-2" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">2 SLIDE PLAN</div>
+    <div class="pptx-step-dot" id="pptx-dot-3" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">3 PREVIEW</div>
   </div>
 
   <!-- Scrollable content area -->
@@ -5131,6 +5131,29 @@ let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
 let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
 
+// Slide plan state — which standard slides to include + custom additions
+const _PPTX_STANDARD_SLIDES = [
+  { id:1,  name:'Title',                  desc:'Operator name, period, sharp headline',        alwaysOn:true,  comingSoon:false },
+  { id:2,  name:'KPI Trends',             desc:'4 monthly bar charts: Bets, GGR, Players, R/P', alwaysOn:false, comingSoon:false },
+  { id:3,  name:'Studio Performance',     desc:'Monthly trend line chart by studio',            alwaysOn:false, comingSoon:false },
+  { id:4,  name:'New Games Table',        desc:'New launches: RTP, Bets 14d, Players 14d',      alwaysOn:false, comingSoon:false },
+  { id:5,  name:'Studio Bets Chart',      desc:'Total bets by studio — horizontal bar chart',   alwaysOn:false, comingSoon:false },
+  { id:6,  name:'Retention',              desc:'Player retention analysis',                     alwaysOn:false, comingSoon:true  },
+  { id:7,  name:'Regional Comparison',    desc:'Operator vs market average vs world benchmark', alwaysOn:false, comingSoon:false },
+  { id:8,  name:'Studio Summary',         desc:'Studio table: Games, Bets, Share%, GGR',        alwaysOn:false, comingSoon:false },
+  { id:9,  name:'Player Segmentation',    desc:'Player segments breakdown',                     alwaysOn:false, comingSoon:true  },
+  { id:10, name:'VIP Analysis',           desc:'VIP players: count, bets, GGR',                 alwaysOn:false, comingSoon:false },
+  { id:11, name:'Max Bet Analysis',       desc:'Max bet behaviour and patterns',                alwaysOn:false, comingSoon:true  },
+  { id:12, name:'Promotion Analysis',     desc:'Promotion performance and ROI',                 alwaysOn:false, comingSoon:true  },
+  { id:13, name:'Portfolio Gap',          desc:'Missing/underperforming games vs market',       alwaysOn:false, comingSoon:false },
+  { id:14, name:'Growth Levers',          desc:'Opportunity games with ADD/EXPAND actions',     alwaysOn:false, comingSoon:false },
+  { id:15, name:'KPI Gaps',              desc:'Our KPIs vs peer benchmarks — gap table',       alwaysOn:false, comingSoon:false },
+  { id:16, name:'Actions & Priorities',   desc:'Numbered recommendations with outcomes',        alwaysOn:true,  comingSoon:false },
+  { id:17, name:'The Ask / Closing',      desc:'Dark closing slide with the ask and next steps',alwaysOn:true,  comingSoon:false },
+];
+let _pptxEnabledSlides = _PPTX_STANDARD_SLIDES.map(s => s.id); // all on by default
+let _pptxCustomSlides  = []; // [{title, description}]
+
 // ── Open / Close ────────────────────────────────────────────────
 async function openPresentationBuilder() {
   const overlay   = document.getElementById('pptx-overlay');
@@ -5240,7 +5263,7 @@ document.addEventListener('keydown', e => {
 
 // ── Step indicator ──────────────────────────────────────────────
 function _pptxShowStep(n) {
-  const labels = ['', 'Shape the story angle', 'Review and download', ''];
+  const labels = ['', 'Shape the story angle', 'Select & customise slides', 'Review and download'];
   document.getElementById('pptx-step-label').textContent = labels[n];
   [1,2,3].forEach(i => {
     const dot = document.getElementById(`pptx-dot-${i}`);
@@ -5328,8 +5351,8 @@ function _pptxRenderBrief() {
   const footer = document.getElementById('pptx-footer');
   footer.innerHTML = `
     <div style="flex:1"></div>
-    <button onclick="_pptxGenerate()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
-      ✦ Generate Slides
+    <button onclick="_pptxSaveBriefAndShowPlan()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+      Next: Slide Plan →
     </button>
   `;
 }
@@ -5339,6 +5362,121 @@ function _pptxSelectTone(toneId) {
   document.querySelectorAll('.pptx-tone-pill').forEach(el => {
     el.classList.toggle('active', el.dataset.tone === toneId);
   });
+}
+
+function _pptxSaveBriefAndShowPlan() {
+  // Save brief inputs before navigating away
+  _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
+  _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
+  _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
+  _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
+  _pptxRenderPlan();
+}
+
+function _pptxToggleSlide(id) {
+  const s = _PPTX_STANDARD_SLIDES.find(x => x.id === id);
+  if (s && s.alwaysOn) return; // can't toggle required slides
+  if (_pptxEnabledSlides.includes(id)) {
+    _pptxEnabledSlides = _pptxEnabledSlides.filter(x => x !== id);
+  } else {
+    _pptxEnabledSlides.push(id);
+  }
+  _pptxRenderPlan();
+}
+
+function _pptxRemoveCustomSlide(idx) {
+  _pptxCustomSlides.splice(idx, 1);
+  _pptxRenderPlan();
+}
+
+function _pptxRenderPlan() {
+  _pptxShowStep(2);
+  const content = document.getElementById('pptx-content');
+
+  const enabledCount = _pptxEnabledSlides.length + _pptxCustomSlides.length + 2; // +2 for always-on Actions/Ask
+
+  const standardRows = _PPTX_STANDARD_SLIDES.map(s => {
+    const enabled  = _pptxEnabledSlides.includes(s.id);
+    const locked   = s.alwaysOn;
+    const coming   = s.comingSoon;
+    const rowBg    = enabled ? '#FFFFFF' : '#F8FAFC';
+    const opacity  = coming ? '0.55' : '1';
+    return `
+      <div onclick="${locked || coming ? '' : `_pptxToggleSlide(${s.id})`}" style="
+        display:flex;align-items:center;gap:12px;padding:9px 14px;
+        background:${rowBg};border-bottom:1px solid #F1F5F9;cursor:${locked||coming?'default':'pointer'};
+        opacity:${opacity};transition:background 0.1s;
+      ">
+        <div style="
+          width:18px;height:18px;border-radius:4px;flex-shrink:0;
+          border:2px solid ${enabled&&!coming?'#CC0000':'#CBD5E1'};
+          background:${enabled&&!coming?'#CC0000':'#fff'};
+          display:flex;align-items:center;justify-content:center;
+        ">${enabled&&!coming?'<svg width=10 height=8 viewBox=\'0 0 10 8\'><polyline points=\'1,4 4,7 9,1\' stroke=\'#fff\' stroke-width=\'2\' fill=\'none\'/></svg>':''}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:700;color:#1A1A1A;display:flex;align-items:center;gap:6px;">
+            ${s.name}
+            ${coming ? '<span style="font-size:9px;background:#F1F5F9;color:#64748B;padding:1px 6px;border-radius:10px;">COMING SOON</span>' : ''}
+            ${locked ? '<span style="font-size:9px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:10px;">REQUIRED</span>' : ''}
+          </div>
+          <div style="font-size:10px;color:#94A3B8;margin-top:1px;">${s.desc}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  const customRows = _pptxCustomSlides.map((c, i) => `
+    <div style="display:flex;align-items:center;gap:12px;padding:9px 14px;background:#FFF5F5;border-bottom:1px solid #FEE2E2;">
+      <div style="width:18px;height:18px;border-radius:4px;flex-shrink:0;border:2px solid #CC0000;background:#CC0000;display:flex;align-items:center;justify-content:center;">
+        <svg width=10 height=8 viewBox='0 0 10 8'><polyline points='1,4 4,7 9,1' stroke='#fff' stroke-width='2' fill='none'/></svg>
+      </div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12px;font-weight:700;color:#CC0000;">${_pptxEsc(c.title)}</div>
+        <div style="font-size:10px;color:#94A3B8;margin-top:1px;">${_pptxEsc(c.description || 'Custom slide')}</div>
+      </div>
+      <button onclick="event.stopPropagation();_pptxRemoveCustomSlide(${i})" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:16px;padding:2px 6px;" title="Remove">×</button>
+    </div>`).join('');
+
+  content.innerHTML = `
+    <div style="font-size:11px;color:#64748B;margin-bottom:12px;">
+      <strong style="color:#1A1A1A;">${enabledCount} slides</strong> selected — uncheck any you don't need. The 4 Coming Soon slides generate placeholder pages.
+    </div>
+    <div style="border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;max-height:380px;overflow-y:auto;margin-bottom:12px;">
+      ${standardRows}
+      ${customRows}
+    </div>
+    <div id="pptx-add-slide-form" style="display:none;background:#FFF5F5;border:1.5px solid #CC0000;border-radius:8px;padding:14px;margin-bottom:10px;">
+      <div style="font-size:11px;font-weight:700;color:#CC0000;margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;">New Custom Slide</div>
+      <div style="margin-bottom:8px;">
+        <label style="font-size:10px;font-weight:700;color:#64748B;display:block;margin-bottom:4px;">SLIDE TITLE</label>
+        <input id="pptx-custom-title" type="text" placeholder="e.g. Device Split, Jackpot Performance" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #E2E8F0;border-radius:6px;font-size:12px;font-family:inherit;">
+      </div>
+      <div style="margin-bottom:10px;">
+        <label style="font-size:10px;font-weight:700;color:#64748B;display:block;margin-bottom:4px;">DESCRIBE WHAT SHOULD BE ON IT</label>
+        <textarea id="pptx-custom-desc" rows="2" placeholder="e.g. Show a table of bets split by mobile vs desktop, with % change vs last quarter." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #E2E8F0;border-radius:6px;font-size:12px;font-family:inherit;resize:vertical;"></textarea>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;">
+        <button onclick="document.getElementById('pptx-add-slide-form').style.display='none'" style="padding:7px 14px;background:#F1F5F9;color:#475569;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Cancel</button>
+        <button onclick="_pptxConfirmAddCustomSlide()" style="padding:7px 14px;background:#CC0000;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Add Slide</button>
+      </div>
+    </div>
+    <button onclick="document.getElementById('pptx-add-slide-form').style.display='block';document.getElementById('pptx-custom-title').focus()" style="width:100%;padding:9px;border:1.5px dashed #CBD5E1;border-radius:8px;background:none;color:#64748B;font-size:12px;font-weight:600;cursor:pointer;">+ Add Custom Slide</button>
+  `;
+
+  document.getElementById('pptx-footer').innerHTML = `
+    <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
+    <div style="flex:1"></div>
+    <button onclick="_pptxGenerate()" style="padding:9px 20px;background:linear-gradient(135deg,#CC0000,#991111);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">
+      ✦ Generate ${enabledCount} Slides
+    </button>
+  `;
+}
+
+function _pptxConfirmAddCustomSlide() {
+  const title = (document.getElementById('pptx-custom-title')?.value || '').trim();
+  const desc  = (document.getElementById('pptx-custom-desc')?.value  || '').trim();
+  if (!title) { document.getElementById('pptx-custom-title').focus(); return; }
+  _pptxCustomSlides.push({ title, description: desc });
+  _pptxRenderPlan();
 }
 
 // ── Generate ─────────────────────────────────────────────────────
@@ -5387,13 +5525,13 @@ async function _pptxGenerate() {
   }
 
   // Show spinner
-  _pptxShowStep(2);
+  _pptxShowStep(3);
   const content = document.getElementById('pptx-content');
   content.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:20px;">
       <div style="width:48px;height:48px;border:4px solid #FEE2E2;border-top-color:#CC0000;border-radius:50%;animation:spin 1s linear infinite;"></div>
       <div style="text-align:center;">
-        <div style="font-size:14px;font-weight:700;color:#1A1A1A;">Building your 17-slide presentation…</div>
+        <div style="font-size:14px;font-weight:700;color:#1A1A1A;">Building your presentation…</div>
         <div id="pptx-gen-progress" style="font-size:12px;color:#64748B;margin-top:6px;">Connecting to Claude…</div>
         <div style="font-size:11px;color:#94A3B8;margin-top:4px;">Generating charts &amp; slides — typically 3–4 minutes</div>
       </div>
@@ -5419,7 +5557,11 @@ async function _pptxGenerate() {
       body: JSON.stringify({
         sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
         brief: _pptxBrief,
-        operator: entity
+        operator: entity,
+        slidePlan: {
+          enabled: _pptxEnabledSlides,
+          custom:  _pptxCustomSlides
+        }
       })
     });
 
@@ -5448,7 +5590,8 @@ async function _pptxGenerate() {
       const elapsed = Math.round((Date.now() - _streamStart) / 1000);
       const slidesDone = (raw.match(/<SLIDE_END>/g) || []).length;
       if (slidesDone > 0) {
-        progressEl.textContent = `${slidesDone} of 17 slides generated… (${elapsed}s)`;
+        const totalExpected = (_pptxEnabledSlides ? _pptxEnabledSlides.length : 17) + (_pptxCustomSlides ? _pptxCustomSlides.length : 0) + 2;
+        progressEl.textContent = `${slidesDone} of ${totalExpected} slides generated… (${elapsed}s)`;
       } else if (raw.length > 0) {
         progressEl.textContent = `Generating… ${Math.round(raw.length / 1000)}k chars received (${elapsed}s)`;
       } else {
@@ -5516,7 +5659,7 @@ function _noop_loadChartJs() {
 }
 
 function _pptxRenderPreview() {
-  _pptxShowStep(2);
+  _pptxShowStep(3);
   if (!_pptxSlides || !_pptxSlides.length) return;
   _pptxActiveSlide = 0;
   _pptxDrawPreview();
@@ -5960,6 +6103,17 @@ async function _pptxDownload() {
       container.innerHTML = slide.html || '';
       // Wait three frames for CSS + SVG to fully paint before capture
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
+
+      // Force root slide div to fill the full 720px — height:100% CSS doesn't reliably
+      // compute in off-screen html2canvas contexts. This guarantees full-height capture.
+      const slideRoot = container.firstElementChild;
+      if (slideRoot) {
+        slideRoot.style.width  = '1280px';
+        slideRoot.style.height = '720px';
+        slideRoot.style.minHeight = '720px';
+        slideRoot.style.maxHeight = '720px';
+        slideRoot.style.overflow = 'hidden';
+      }
 
       // scale:2 → captures at 2560×1440 → 192dpi in pptx → crisp text and fonts
       const canvas = await window.html2canvas(container, {
