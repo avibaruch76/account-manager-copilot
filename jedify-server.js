@@ -89,11 +89,9 @@ async function generateSlidesWithClaude(sections, brief, operator) {
     `=== ${s.checkName} ===\n${s.content}`
   ).join('\n\n');
 
-  const systemPrompt = `You are an expert McKinsey-trained business storyteller. You create crisp SCR (Situation-Complication-Resolution) presentations for B2B client meetings.
+  const systemPrompt = `You are an expert B2B presentation designer for gaming analytics. Create data-rich presentations matching McKinsey narrative quality combined with RubyPlay's data visualization standards. CRITICAL: Return ONLY a valid JSON array. No markdown, no code fences, no explanation. Just the raw JSON array starting with [ and ending with ].`;
 
-CRITICAL: Return ONLY a valid JSON array. No markdown, no code fences, no explanation. Just the raw JSON array starting with [ and ending with ].`;
-
-  const userPrompt = `Create a presentation for ${operator} using the SCR narrative structure.
+  const userPrompt = `Create a data-rich QBR presentation for ${operator}.
 
 ## STORY BRIEF
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
@@ -104,58 +102,109 @@ ${brief.ask ? `The Ask: ${brief.ask}` : ''}
 ${sectionContent}
 
 ## REQUIRED OUTPUT FORMAT
-Return a JSON array with exactly this structure (5-8 slides total):
+Return a JSON array of 6-9 slides. Use these slide types:
 
 [
   {
     "type": "title",
-    "headline": "One powerful 6-8 word headline that captures the whole story",
-    "subtitle": "Operator name and period, e.g. Codere MX — Q1 2026 QBR",
-    "notes": "2-3 sentence talking track for presenter view. Welcome the audience, state the purpose of the meeting."
+    "headline": "Strong 6-8 word assertion headline that IS the story",
+    "subtitle": "${operator} — QBR Business Review",
+    "notes": "2-3 sentence talking track"
   },
   {
-    "type": "situation",
-    "title": "The Situation — what is the current state?",
-    "bullets": ["Key fact 1", "Key fact 2", "Key fact 3"],
-    "notes": "2-3 sentences. Set the scene. Establish what we know to be true."
-  },
-  {
-    "type": "complication",
-    "title": "The Complication — what is the tension?",
-    "bullets": ["Point 1", "Point 2"],
-    "dataPoint": "One bold stat that crystallises the complication, e.g. '12% market capture vs 31% competitor'",
-    "notes": "2-3 sentences. This is the 'but'. Introduce the tension that demands action."
-  },
-  {
-    "type": "supporting",
-    "title": "Title of this supporting data slide",
-    "bullets": ["Finding 1", "Finding 2", "Finding 3", "Finding 4"],
-    "notes": "2-3 sentences. Explain what this data means and why it matters."
-  },
-  {
-    "type": "resolution",
-    "title": "The Resolution — what are the three moves?",
-    "actions": [
-      {"label": "Action 1 short label", "outcome": "The outcome this action produces"},
-      {"label": "Action 2 short label", "outcome": "The outcome this action produces"},
-      {"label": "Action 3 short label", "outcome": "The outcome this action produces"}
+    "type": "kpi_hero",
+    "headline": "One sentence asserting the headline KPI story",
+    "kpis": [
+      {"label": "Q GGR", "value": "€X.XXM", "change": "+XX%", "positive": true},
+      {"label": "Monthly Bets", "value": "€XXM", "change": "+XX%", "positive": true},
+      {"label": "Active Players", "value": "XX,XXX", "change": "+XX%", "positive": true},
+      {"label": "Rounds/Player", "value": "XXX", "change": "+XX%", "positive": true}
     ],
-    "notes": "2-3 sentences. Walk through each action. Connect them back to the opportunity."
+    "notes": "2-3 sentence talking track"
+  },
+  {
+    "type": "trend_chart",
+    "headline": "One sentence asserting what the trend shows",
+    "charts": [
+      {
+        "title": "MONTHLY GGR",
+        "labels": ["Jan-25","Feb-25","Mar-25","Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"],
+        "values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        "highlight_from": 12,
+        "yoy_label": "Q1 YoY Growth",
+        "yoy_value": "+XX%",
+        "yoy_positive": true
+      },
+      {
+        "title": "MONTHLY BETS",
+        "labels": ["Jan-25","Feb-25","Mar-25","Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"],
+        "values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        "highlight_from": 12,
+        "yoy_label": "Q1 YoY Growth",
+        "yoy_value": "+XX%",
+        "yoy_positive": true
+      }
+    ],
+    "notes": "2-3 sentence talking track"
+  },
+  {
+    "type": "ranking_table",
+    "headline": "One sentence asserting what the rankings show",
+    "subtitle": "TOP GAMES BY GGR",
+    "columns": ["#", "Game", "Studio", "GGR", "Players"],
+    "rows": [
+      ["1", "Game Name", "RubyPlay", "€XXX K", "X,XXX"]
+    ],
+    "notes": "2-3 sentence talking track"
+  },
+  {
+    "type": "conclusions",
+    "headline": "One sentence asserting the key conclusion",
+    "groups": [
+      {
+        "title": "GGR TREND",
+        "bullets": [
+          "Key finding with specific numbers from data",
+          "Second finding with context"
+        ]
+      },
+      {
+        "title": "GAME PERFORMANCE",
+        "bullets": [
+          "Key finding about top games"
+        ]
+      }
+    ],
+    "highlights": ["key phrase", "number to highlight"],
+    "notes": "2-3 sentence talking track"
+  },
+  {
+    "type": "actions",
+    "headline": "Three moves to capture the opportunity",
+    "items": [
+      {"priority": "HIGH", "action": "Specific action description", "outcome": "Est. quantified outcome"},
+      {"priority": "HIGH", "action": "Specific action description", "outcome": "Est. quantified outcome"},
+      {"priority": "MED", "action": "Specific action description", "outcome": "Est. quantified outcome"}
+    ],
+    "notes": "2-3 sentence talking track"
   },
   {
     "type": "ask",
     "cta": "${brief.ask || 'Clear, specific call to action for this meeting'}",
-    "next_steps": ["Step 1 with owner and date", "Step 2 with owner and date", "Step 3 with owner and date"],
-    "notes": "2-3 sentences. State the ask clearly. Explain what happens if they say yes today."
+    "next_steps": ["Step 1 with owner", "Step 2 with owner", "Step 3 with owner"],
+    "notes": "2-3 sentence talking track"
   }
 ]
 
-Rules:
-- Insert one "supporting" slide per major check section (between complication and resolution)
-- Bullets: max 12 words each, no bullet symbols, just plain strings
-- Headlines/titles: max 10 words, punchy, active voice
-- All text must be derived from the analysis data provided
-- Do not invent facts not in the data`;
+## RULES
+- "headline" fields MUST be full assertion sentences stating the conclusion (e.g. "GGR grew +40% YoY confirming strong portfolio momentum" NOT "GGR Overview")
+- For "trend_chart": extract actual monthly numbers from the analysis text. If exact numbers are not available, estimate from trends described. Always return 12-15 data points. "highlight_from" = index where current quarter starts (usually 12 for Jan of current year)
+- For "ranking_table": include studio name exactly as it appears. Common studios: "RubyPlay", "Koala Games"
+- For "conclusions": "highlights" array = key phrases and numbers that should be highlighted in the slide
+- Insert one "trend_chart" slide and one "ranking_table" slide per major data section
+- Slide count: 6-9 slides total
+- All numbers must come from the analysis data — do not invent figures
+- Bullets in "conclusions.groups": full sentences, no bullet symbols, just plain strings`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
