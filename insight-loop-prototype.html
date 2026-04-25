@@ -5438,25 +5438,34 @@ async function _pptxGenerate() {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let raw = '';
-    let lastUpdate = 0;
+    let lastUpdate = 0; // eslint-disable-line no-unused-vars
+    const _streamStart = Date.now();
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      raw += decoder.decode(value, { stream: true });
-
-      // Live progress update every 1.5 seconds
-      const now = Date.now();
-      if (now - lastUpdate > 1500) {
-        lastUpdate = now;
-        const slidesDone = (raw.match(/<SLIDE_END>/g) || []).length;
-        const progressEl = document.getElementById('pptx-gen-progress');
-        if (progressEl) {
-          progressEl.textContent = slidesDone > 0
-            ? `${slidesDone} of 18 slides generated…`
-            : `Generating… (${Math.round(raw.length / 1000)}k chars)`;
-        }
+    // Elapsed-time ticker — reassures user Claude is working during TTFT wait (can be 30-60s)
+    const _ticker = setInterval(() => {
+      const progressEl = document.getElementById('pptx-gen-progress');
+      if (!progressEl) { clearInterval(_ticker); return; }
+      const elapsed = Math.round((Date.now() - _streamStart) / 1000);
+      const slidesDone = (raw.match(/<SLIDE_END>/g) || []).length;
+      if (slidesDone > 0) {
+        progressEl.textContent = `${slidesDone} of 18 slides generated… (${elapsed}s)`;
+      } else if (raw.length > 0) {
+        progressEl.textContent = `Generating… ${Math.round(raw.length / 1000)}k chars received (${elapsed}s)`;
+      } else {
+        progressEl.textContent = `Waiting for Claude to start… ${elapsed}s`;
       }
+    }, 1000);
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        // Update lastUpdate so ticker knows we have live data
+        lastUpdate = Date.now();
+      }
+    } finally {
+      clearInterval(_ticker);
     }
 
     // Check for server-side error marker
