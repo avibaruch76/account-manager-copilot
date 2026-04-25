@@ -250,24 +250,34 @@ Return a JSON array of 6-9 slides. Use these slide types:
     console.error('[generate-slides] No JSON array found in response. Raw (first 500):', raw.slice(0, 500));
     throw new Error('Claude response did not contain a JSON array');
   }
-  let jsonStr = raw.slice(start, end + 1);
+  const jsonStr = raw.slice(start, end + 1);
 
-  // Sanitise common Claude escaping mistakes inside string values:
-  // 1. Replace literal newlines inside strings with \n
-  // 2. Remove control characters
-  jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F]/g, c =>
-    c === '\n' ? '\\n' : c === '\t' ? '\\t' : ''
-  );
-
+  // First attempt: parse as-is (Claude usually returns clean JSON)
   try {
     return JSON.parse(jsonStr);
-  } catch (e) {
-    console.error('[generate-slides] JSON parse failed:', e.message);
-    console.error('[generate-slides] Around error — full string length:', jsonStr.length);
-    // Log the area around the error position if available
-    const pos = parseInt((e.message.match(/position (\d+)/) || [])[1]) || 0;
-    if (pos) console.error('[generate-slides] Context:', jsonStr.slice(Math.max(0, pos-80), pos+80));
-    throw new Error('Slide generation returned invalid JSON: ' + e.message);
+  } catch (e1) {
+    console.warn('[generate-slides] First parse failed:', e1.message, '— attempting repair...');
+
+    // Second attempt: fix unescaped control characters INSIDE string values only.
+    // The regex matches a complete JSON string token; we fix any raw newlines/tabs inside it.
+    // We do NOT touch characters outside strings (structural whitespace is valid JSON).
+    const repaired = jsonStr.replace(/"((?:[^"\\]|\\.)*)"/g, (match, inner) => {
+      const fixed = inner
+        .replace(/\r\n/g, '\\n')
+        .replace(/\r/g,   '\\n')
+        .replace(/\n/g,   '\\n')
+        .replace(/\t/g,   '\\t');
+      return '"' + fixed + '"';
+    });
+
+    try {
+      return JSON.parse(repaired);
+    } catch (e2) {
+      console.error('[generate-slides] Repair also failed:', e2.message);
+      const pos = parseInt((e2.message.match(/position (\d+)/) || [])[1]) || 0;
+      if (pos) console.error('[generate-slides] Context around error:', repaired.slice(Math.max(0, pos - 100), pos + 100));
+      throw new Error('Slide generation returned invalid JSON: ' + e2.message);
+    }
   }
 }
 
