@@ -78,198 +78,121 @@ async function persistTemplateToRender(template, apiKey, serviceId) {
 async function generateSlidesWithClaude(sections, brief, operator) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  const toneDescriptions = {
-    opportunity: 'Frame everything as an exciting opportunity with strong upside. Emphasise potential and growth levers.',
-    risk:        'Frame as a risk management conversation. Be measured, flag concerns clearly, recommend protective actions.',
-    growth:      'Celebrate momentum. Lead with positive trends. Frame actions as accelerating what is already working.',
-    recovery:    'Acknowledge current challenges honestly. Focus on recovery plan and green shoots.'
+  const toneMap = {
+    opportunity: 'Frame as an exciting opportunity — highlight upside, growth potential, and what is possible.',
+    risk:        'Frame as a risk review — be measured, flag concerns clearly, recommend protective actions.',
+    growth:      'Celebrate momentum — lead with positive trends and what is working well.',
+    recovery:    'Acknowledge challenges honestly — focus on the recovery plan and early green shoots.'
   };
-  const toneInstruction = toneDescriptions[brief.tone] || toneDescriptions.opportunity;
+  const toneInstruction = toneMap[brief.tone] || toneMap.opportunity;
 
   const sectionContent = sections.map(s =>
     `=== ${s.checkName} ===\n${s.content}`
   ).join('\n\n');
 
-  const systemPrompt = `You are an expert B2B presentation designer for gaming analytics. Create data-rich presentations matching McKinsey narrative quality combined with RubyPlay's data visualization standards.
+  const systemPrompt = `You are a senior McKinsey consultant creating an executive QBR presentation.
 
-CRITICAL OUTPUT RULES — violations will break the application:
-1. Return ONLY a valid JSON array. Start with [ and end with ]. Nothing before or after.
-2. No markdown, no code fences (\`\`\`), no prose, no explanation whatsoever.
-3. All string values must be properly escaped: use \\n for newlines, \\" for quotes inside strings.
-4. Never use actual newline characters inside a JSON string value — use \\n instead.
-5. Percentages, currency symbols (€$%), and special characters are fine inside strings.`;
+ABSOLUTE DATA INTEGRITY RULES — violating these destroys credibility:
+1. Use ONLY data explicitly stated in the analysis text. Never invent, estimate, or interpolate numbers, dates, game names, or any facts.
+2. Never reference time periods not mentioned in the analysis text.
+3. Never use made-up game names or placeholder values — only exact names and numbers from the data.
+4. If specific data for an element is not available, omit that element entirely. Never fill gaps with invented data.
+5. Output ONLY the slide delimiters below. No other text outside the delimiters.
 
-  const userPrompt = `Create a data-rich QBR presentation for ${operator}.
+OUTPUT FORMAT — use exactly these delimiters for each slide:
+<SLIDE_START>
+<NOTES>presenter talking track (2-3 sentences, plain text)</NOTES>
+<HTML>complete slide HTML here</HTML>
+<SLIDE_END>`;
 
-## STORY BRIEF
+  const userPrompt = `Create a QBR presentation for ${operator} using ONLY the data in the analysis text below.
+
+STORY BRIEF:
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
-${brief.exclude ? `IMPORTANT — EXCLUDE these topics/checks completely from the presentation: ${brief.exclude}` : ''}
+${brief.exclude ? `EXCLUDE these topics entirely: ${brief.exclude}` : ''}
 
-## SELECTION INSTRUCTIONS
-You have ALL analysis sections below. Automatically select the 4-6 most impactful findings that best serve the story angle and tone above. Prioritise sections with hard numbers, comparisons, and clear business implications. Ignore sections with weak or missing data.
-
-## ANALYSIS DATA
+══════════════════════════════════════
+ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
+══════════════════════════════════════
 
-## REQUIRED OUTPUT FORMAT
-Return a JSON array of 6-9 slides. Use these slide types:
+SLIDES TO CREATE (6–8 total):
+1. TITLE — operator name + exact date range from the data + strong assertion headline
+2. KPI SUMMARY — key metrics explicitly stated in the data, laid out as cards
+3–5. FINDINGS — 2–4 slides covering the most important findings. Use real data tables and numbers only.
+6. ACTIONS — 2–4 concrete recommendations based on what the data shows
+7. CLOSING — navy background, white text, The Ask: "${brief.ask || 'call to action for this meeting'}", next steps
 
-[
-  {
-    "type": "title",
-    "headline": "Strong 6-8 word assertion headline that IS the story",
-    "subtitle": "${operator} — QBR Business Review",
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "kpi_hero",
-    "headline": "One sentence asserting the headline KPI story",
-    "kpis": [
-      {"label": "Q GGR", "value": "€X.XXM", "change": "+XX%", "positive": true},
-      {"label": "Monthly Bets", "value": "€XXM", "change": "+XX%", "positive": true},
-      {"label": "Active Players", "value": "XX,XXX", "change": "+XX%", "positive": true},
-      {"label": "Rounds/Player", "value": "XXX", "change": "+XX%", "positive": true}
-    ],
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "trend_chart",
-    "headline": "One sentence asserting what the trend shows",
-    "charts": [
-      {
-        "title": "MONTHLY GGR",
-        "labels": ["Jan-25","Feb-25","Mar-25","Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"],
-        "values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "highlight_from": 12,
-        "yoy_label": "Q1 YoY Growth",
-        "yoy_value": "+XX%",
-        "yoy_positive": true
-      },
-      {
-        "title": "MONTHLY BETS",
-        "labels": ["Jan-25","Feb-25","Mar-25","Apr-25","May-25","Jun-25","Jul-25","Aug-25","Sep-25","Oct-25","Nov-25","Dec-25","Jan-26","Feb-26","Mar-26"],
-        "values": [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-        "highlight_from": 12,
-        "yoy_label": "Q1 YoY Growth",
-        "yoy_value": "+XX%",
-        "yoy_positive": true
-      }
-    ],
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "ranking_table",
-    "headline": "One sentence asserting what the rankings show",
-    "subtitle": "TOP GAMES BY GGR",
-    "columns": ["#", "Game", "Studio", "GGR", "Players"],
-    "rows": [
-      ["1", "Game Name", "RubyPlay", "€XXX K", "X,XXX"]
-    ],
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "growth_gap",
-    "headline": "Games your players want. That you don't offer yet.",
-    "your_stat": {"label": "Your market capture", "value": "12%"},
-    "market_stat": {"label": "Market leader capture", "value": "31%"},
-    "gap_multiplier": "2.6×",
-    "gap_label": "the gap",
-    "missing_games": [
-      {"rank": "#1 globally", "game": "Game Name", "studio": "RubyPlay", "global_ggr": "€X.XM", "status": "NOT LIVE"},
-      {"rank": "#3 globally", "game": "Game Name", "studio": "Koala Games", "global_ggr": "€X.XM", "status": "NOT LIVE"}
-    ],
-    "notes": "2-3 sentence talking track. This is the growth opportunity slide — make it urgent."
-  },
-  {
-    "type": "conclusions",
-    "headline": "One sentence asserting the key conclusion",
-    "groups": [
-      {
-        "title": "GGR TREND",
-        "bullets": [
-          "Key finding with specific numbers from data",
-          "Second finding with context"
-        ]
-      },
-      {
-        "title": "GAME PERFORMANCE",
-        "bullets": [
-          "Key finding about top games"
-        ]
-      }
-    ],
-    "highlights": ["key phrase", "number to highlight"],
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "actions",
-    "headline": "Three moves to capture the opportunity",
-    "items": [
-      {"priority": "HIGH", "action": "Specific action description", "outcome": "Est. quantified outcome"},
-      {"priority": "HIGH", "action": "Specific action description", "outcome": "Est. quantified outcome"},
-      {"priority": "MED", "action": "Specific action description", "outcome": "Est. quantified outcome"}
-    ],
-    "notes": "2-3 sentence talking track"
-  },
-  {
-    "type": "ask",
-    "cta": "${brief.ask || 'Clear, specific call to action for this meeting'}",
-    "next_steps": ["Step 1 with owner", "Step 2 with owner", "Step 3 with owner"],
-    "notes": "2-3 sentence talking track"
-  }
-]
+DESIGN RULES (McKinsey light theme — MANDATORY for slides 1–6):
+Each slide must be a <div> filling 100% width and height with this base:
+  style='width:100%;height:100%;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
-## RULES
-- "headline" fields MUST be full assertion sentences stating the conclusion (e.g. "GGR grew +40% YoY confirming strong portfolio momentum" NOT "GGR Overview")
-- For "trend_chart": extract actual monthly numbers from the analysis text. If exact numbers are not available, estimate from trends described. Always return 12-15 data points. "highlight_from" = index where current quarter starts (usually 12 for Jan of current year)
-- For "ranking_table": include studio name exactly as it appears. Common studios: "RubyPlay", "Koala Games"
-- For "conclusions": "highlights" array = key phrases and numbers that should be highlighted in the slide
-- Insert one "trend_chart" slide and one "ranking_table" slide per major data section
-- Insert a "growth_gap" slide whenever the analysis mentions missing games, benchmark gaps, competitor comparisons, or market capture rates. This is the most important slide for driving the Ask — make the gap vivid: left side = operator's current capture, right side = what the market leader achieves. "gap_multiplier" = how many times bigger the opportunity is (e.g. "2.6×"). "missing_games" = top globally popular games not yet live at this operator (from benchmark_gap check data)
-- "your_stat" and "market_stat" must use real numbers from the data — if exact % capture is not available, use absolute GGR or player numbers that show the gap
-- Slide count: 6-9 slides total
-- All numbers must come from the analysis data — do not invent figures
-- Bullets in "conclusions.groups": full sentences, no bullet symbols, just plain strings
-- The growth_gap headline should be a sharp two-sentence format like the Codere deck: "Games your players want. That you don't offer yet." or "Strong foundation. But the ceiling is another league."
-- Make every headline an assertion that would work as a standalone tweet — the reader should understand the point WITHOUT looking at the data below`;
+Header bar (top of every slide except closing):
+  background:#1E2761; color:white; padding:14px 32px; font-size:15px; font-weight:700; flex-shrink:0;
+
+Body area: padding:20px 32px; flex:1; overflow:hidden;
+
+KPI cards layout (when showing metrics):
+  display:flex; gap:16px; for each card:
+  background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:20px 16px; flex:1; text-align:center;
+  Label: font-size:11px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;
+  Value: font-size:36px; font-weight:700; color:#1E293B; margin-bottom:8px;
+  Change pill: display:inline-block; padding:3px 10px; border-radius:12px; font-size:13px; font-weight:700;
+    Positive: background:#DCFCE7; color:#16A34A;   Negative: background:#FEE2E2; color:#DC2626;
+
+Tables:
+  border-collapse:collapse; width:100%;
+  Header row: background:#1E2761; color:white; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+  Header cells: padding:10px 14px; text-align:left;
+  Data rows: alternating background:#fff / #F8FAFC; font-size:13px; color:#1E293B;
+  Data cells: padding:9px 14px; border-bottom:1px solid #E2E8F0;
+
+Accent / highlight color: #7C3AED (purple)
+Positive numbers: #16A34A   Negative numbers: #DC2626
+Body text: #1E293B, font-size:14px, line-height:1.6
+Section sub-labels: font-size:10px; color:#64748B; text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:8px;
+
+Closing slide: background:#1E2761 throughout; all text white.
+
+CRITICAL: Use ONLY single quotes for ALL HTML attribute values (mandatory).
+
+Generate the slides now:`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 4096,
+    max_tokens: 8000,
     messages: [{ role: 'user', content: userPrompt }],
     system: systemPrompt
   });
 
-  const raw = message.content[0].text.trim();
+  const raw = message.content[0].text;
+  console.log('[generate-slides] Raw response length:', raw.length);
 
-  // Extract the JSON array: find the first '[' and last ']' — strips any prose/fences around it
-  const start = raw.indexOf('[');
-  const end   = raw.lastIndexOf(']');
-  if (start === -1 || end === -1 || end < start) {
-    console.error('[generate-slides] No JSON array found in response. Raw (first 500):', raw.slice(0, 500));
-    throw new Error('Claude response did not contain a JSON array');
-  }
-  const jsonStr = raw.slice(start, end + 1);
-
-  // First attempt: parse as-is (Claude usually returns clean JSON)
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e1) {
-    console.warn('[generate-slides] First parse failed:', e1.message, '— running jsonrepair...');
-    // jsonrepair handles: unescaped quotes, trailing commas, unescaped newlines,
-    // single-quoted strings, missing commas, and most other Claude output quirks.
-    try {
-      const repaired = jsonrepair(jsonStr);
-      return JSON.parse(repaired);
-    } catch (e2) {
-      console.error('[generate-slides] jsonrepair also failed:', e2.message);
-      const pos = parseInt((e1.message.match(/position (\d+)/) || [])[1]) || 0;
-      if (pos) console.error('[generate-slides] Context around original error:', jsonStr.slice(Math.max(0, pos - 100), pos + 100));
-      throw new Error('Slide generation returned invalid JSON: ' + e1.message);
+  // Parse delimiter-based response — no JSON parsing of HTML needed
+  const slides = [];
+  const slideRegex = /<SLIDE_START>([\s\S]*?)<SLIDE_END>/g;
+  let match;
+  while ((match = slideRegex.exec(raw)) !== null) {
+    const block = match[1];
+    const notesMatch = block.match(/<NOTES>([\s\S]*?)<\/NOTES>/);
+    const htmlMatch  = block.match(/<HTML>([\s\S]*?)<\/HTML>/);
+    if (htmlMatch) {
+      slides.push({
+        notes: notesMatch ? notesMatch[1].trim() : '',
+        html:  htmlMatch[1].trim()
+      });
     }
   }
+
+  if (slides.length === 0) {
+    console.error('[generate-slides] No slides parsed. Raw (first 1500):', raw.slice(0, 1500));
+    throw new Error('No slides found in Claude response — check server logs for details.');
+  }
+
+  console.log(`[generate-slides] Parsed ${slides.length} slides successfully`);
+  return slides;
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────

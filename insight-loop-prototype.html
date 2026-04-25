@@ -5369,19 +5369,12 @@ async function _pptxGenerate() {
   }
 }
 
-// ── HTML Preview ─────────────────────────────────────────────────
+// ── HTML Preview — Claude generates slides as HTML directly ────────
 let _pptxActiveSlide = 0;
-let _chartJsLoaded = false;
 
-async function _loadChartJs() {
-  if (_chartJsLoaded || window.Chart) { _chartJsLoaded = true; return; }
-  await new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
-    s.onload = () => { _chartJsLoaded = true; resolve(); };
-    s.onerror = () => reject(new Error('Failed to load Chart.js'));
-    document.head.appendChild(s);
-  });
+// (Chart.js removed — Claude renders charts inline in HTML now)
+function _noop_loadChartJs() {
+  return Promise.resolve();
 }
 
 function _pptxRenderPreview() {
@@ -5392,54 +5385,48 @@ function _pptxRenderPreview() {
 }
 
 function _pptxDrawPreview() {
-  const slides = _pptxSlides;
-  const t = _pptxTemplate;
-  const accent = t.accent || '#CC0000';
+  const slides  = _pptxSlides;
   const content = document.getElementById('pptx-content');
+  const active  = slides[_pptxActiveSlide];
+  const notes   = active.notes || '';
 
-  // Thumbnail strip — dark theme
+  // Thumbnail strip — light professional theme
   const thumbs = slides.map((s, i) => `
-    <div class="pptx-slide-thumb${i===_pptxActiveSlide?' active':''}" onclick="_pptxSetSlide(${i})"
-         style="background:#0A0A0A;border-color:${i===_pptxActiveSlide?accent:'#333333'};">
-      <div style="padding:6px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:2px;">
-        <div style="height:4px;background:${i===_pptxActiveSlide?accent:'#444'};border-radius:2px;width:75%;"></div>
-        <div style="height:3px;background:#333;border-radius:2px;width:90%;"></div>
-        <div style="height:3px;background:#333;border-radius:2px;width:60%;"></div>
-        <div style="font-size:7px;color:#666;margin-top:2px;text-align:center;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${_pptxEsc(s.type||'')}</div>
-      </div>
-    </div>
+    <div onclick="_pptxSetSlide(${i})" style="
+      flex-shrink:0;width:88px;height:50px;border-radius:4px;cursor:pointer;
+      border:2px solid ${i===_pptxActiveSlide?'#7C3AED':'#E2E8F0'};
+      background:#F8FAFC;display:flex;align-items:center;justify-content:center;
+      font-size:11px;font-weight:700;
+      color:${i===_pptxActiveSlide?'#7C3AED':'#94A3B8'};
+      font-family:Segoe UI,system-ui,sans-serif;
+      transition:border-color 0.15s;
+    ">${i+1}</div>
   `).join('');
 
-  const activeSlide = slides[_pptxActiveSlide];
-  const notes = activeSlide.notes || '';
-
   content.innerHTML = `
-    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:12px;margin-bottom:16px;">
+    <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;">
       ${thumbs}
     </div>
-    <div class="pptx-slide-full" style="background:#0A0A0A;border-radius:4px;overflow:hidden;">
-      ${_pptxRenderSlide(activeSlide, t)}
+    <div style="width:100%;aspect-ratio:16/9;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+      <div id="pptx-slide-canvas" style="width:100%;height:100%;">
+        ${active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>'}
+      </div>
     </div>
     ${notes ? `
-      <div style="margin-top:12px;background:#111;border-radius:8px;padding:12px 14px;border-left:3px solid ${accent};">
-        <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:4px;letter-spacing:1px;">PRESENTER NOTES</div>
-        <div style="font-size:12px;color:#CCCCCC;line-height:1.6;">${_pptxEsc(notes)}</div>
+      <div style="margin-top:12px;background:#F8FAFC;border-radius:8px;padding:12px 16px;border-left:3px solid #7C3AED;">
+        <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:4px;letter-spacing:1px;">PRESENTER NOTES</div>
+        <div style="font-size:12px;color:#475569;line-height:1.6;">${_pptxEsc(notes)}</div>
       </div>
     ` : ''}
-    <div style="text-align:center;margin-top:8px;font-size:11px;color:#555;">
+    <div style="text-align:center;margin-top:8px;font-size:11px;color:#94A3B8;">
       Slide ${_pptxActiveSlide+1} of ${slides.length}
     </div>
   `;
 
-  // Render any charts after DOM is ready
-  if (activeSlide.type === 'trend_chart') {
-    _loadChartJs().then(() => _pptxRenderChartJs(activeSlide, t)).catch(()=>{});
-  }
-
   document.getElementById('pptx-footer').innerHTML = `
-    <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#1A1A1A;color:#CCCCCC;border:1px solid #333;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
+    <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
     <div style="flex:1"></div>
-    <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#990000,#CC0000);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
+    <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
 }
 
@@ -5448,62 +5435,30 @@ function _pptxSetSlide(idx) {
   _pptxDrawPreview();
 }
 
-// ── Dark theme helpers ────────────────────────────────────────────
-function _pptxStudioColor(studio, accent) {
-  if (!studio) return '#AAAAAA';
-  const s = studio.toLowerCase();
-  if (s.includes('rubyplay')) return accent || '#CC0000';
-  if (s.includes('koala')) return '#FFD700';
-  return '#AAAAAA';
+// ── Slide Renderers — Claude now generates HTML directly ──────────
+// _pptxRenderSlide is no longer called (slides contain .html property).
+// Kept as a no-op so any accidental call doesn't throw.
+function _pptxRenderSlide(slide) {
+  return slide.html || '';
 }
 
-function _pptxHighlightText(text, highlights, accent) {
-  if (!highlights || !highlights.length) return _pptxEsc(text);
-  let result = _pptxEsc(text);
-  highlights.forEach(phrase => {
-    const escaped = _pptxEsc(phrase);
-    // Replace case-insensitively in the already-escaped string
-    const re = new RegExp(escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-    result = result.replace(re, `<span style="color:${accent||'#CC0000'};font-weight:700;">$&</span>`);
-  });
-  return result;
-}
+// (All old per-type renderers removed — Claude generates HTML directly)
+// (old per-type renderer functions removed — Claude now generates HTML directly)
 
-// ── Slide Renderers (one per type) ───────────────────────────────
-function _pptxRenderSlide(slide, t) {
-  const accent = t.accent || '#CC0000';
-  switch (slide.type) {
-    case 'title':         return _pptxSlideTitle(slide, t, accent);
-    case 'kpi_hero':      return _pptxSlideKpiHero(slide, t, accent);
-    case 'trend_chart':   return _pptxSlideTrendChart(slide, t, accent);
-    case 'ranking_table': return _pptxSlideRankingTable(slide, t, accent);
-    case 'growth_gap':    return _pptxSlideGrowthGap(slide, t, accent);
-    case 'conclusions':   return _pptxSlideConclusions(slide, t, accent);
-    case 'actions':       return _pptxSlideActions(slide, t, accent);
-    case 'ask':           return _pptxSlideAsk(slide, t, accent);
-    // Legacy types — keep working for older slide sets
-    case 'situation':     return _pptxSlideLegacyBullets(slide, t, accent, 'SITUATION');
-    case 'complication':  return _pptxSlideLegacyBullets(slide, t, accent, 'COMPLICATION');
-    case 'supporting':    return _pptxSlideLegacyBullets(slide, t, accent, '');
-    case 'resolution':    return _pptxSlideLegacyResolution(slide, t, accent);
-    default:              return `<div style="padding:40px;color:#666;">[Unknown slide type: ${_pptxEsc(slide.type)}]</div>`;
-  }
-}
-
-function _pptxSlideTitle(s, t, accent) {
+function _pptxSlideTitle_REMOVED(s, t, accent) { // renamed to avoid accidental calls
   const logo = t.logoBase64
-    ? `<img src="${t.logoBase64}" style="height:36px;object-fit:contain;" alt="logo">`
-    : `<div style="font-size:10px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:3px;">RUBYPLAY</div>`;
+    ? `<img src="${t.logoBase64}" style="height:48px;object-fit:contain;" alt="logo">`
+    : `<div style="font-size:14px;font-weight:800;color:rgba(255,255,255,.4);letter-spacing:3px;">RUBYPLAY</div>`;
   return `
-    <div style="background:#0A0A0A;padding:40px;min-height:320px;display:flex;flex-direction:column;justify-content:space-between;position:relative;">
+    <div style="background:#0A0A0A;padding:44px 52px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;justify-content:space-between;position:relative;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>${logo}</div>
       </div>
-      <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;padding:20px 0;">
-        <div style="font-size:26px;font-weight:900;color:white;line-height:1.25;margin-bottom:14px;letter-spacing:-0.5px;">${_pptxEsc(s.headline||'')}</div>
-        <div style="font-size:13px;color:#888;letter-spacing:1px;text-transform:uppercase;">${_pptxEsc(s.subtitle||'')}</div>
+      <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;padding:24px 40px;">
+        <div style="font-size:42px;font-weight:900;color:white;line-height:1.2;margin-bottom:18px;letter-spacing:-1px;">${_pptxEsc(s.headline||'')}</div>
+        <div style="font-size:17px;color:#888;letter-spacing:2px;text-transform:uppercase;">${_pptxEsc(s.subtitle||'')}</div>
       </div>
-      <div style="height:2px;background:${accent};"></div>
+      <div style="height:3px;background:${accent};"></div>
     </div>
   `;
 }
@@ -5512,20 +5467,20 @@ function _pptxSlideKpiHero(s, t, accent) {
   const kpis = (s.kpis||[]).map(k => {
     const changeColor = k.positive ? '#22C55E' : '#EF4444';
     return `
-      <div style="flex:1;background:#111;border:1px solid #222;border-radius:6px;padding:16px 14px;text-align:center;min-width:0;">
-        <div style="font-size:10px;font-weight:700;color:#666;letter-spacing:1px;margin-bottom:8px;text-transform:uppercase;">${_pptxEsc(k.label||'')}</div>
-        <div style="font-size:22px;font-weight:900;color:white;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_pptxEsc(k.value||'')}</div>
-        <div style="display:inline-block;background:${changeColor}22;color:${changeColor};font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;">${_pptxEsc(k.change||'')}</div>
+      <div style="flex:1;background:#111;border:1px solid #222;border-radius:8px;padding:22px 18px;text-align:center;min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:#666;letter-spacing:1px;margin-bottom:10px;text-transform:uppercase;">${_pptxEsc(k.label||'')}</div>
+        <div style="font-size:38px;font-weight:900;color:white;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_pptxEsc(k.value||'')}</div>
+        <div style="display:inline-block;background:${changeColor}22;color:${changeColor};font-size:15px;font-weight:700;padding:4px 12px;border-radius:12px;">${_pptxEsc(k.change||'')}</div>
       </div>
     `;
   }).join('');
   return `
-    <div style="background:#0A0A0A;padding:28px 32px;min-height:320px;display:flex;flex-direction:column;gap:20px;">
+    <div style="background:#0A0A0A;padding:32px 40px;height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:22px;">
       <div>
-        <div style="height:2px;background:${accent};margin-bottom:16px;"></div>
-        <div style="font-size:15px;font-weight:700;color:white;line-height:1.4;">${_pptxEsc(s.headline||'')}</div>
+        <div style="height:3px;background:${accent};margin-bottom:18px;"></div>
+        <div style="font-size:22px;font-weight:700;color:white;line-height:1.4;">${_pptxEsc(s.headline||'')}</div>
       </div>
-      <div style="display:flex;gap:12px;flex:1;align-items:stretch;">
+      <div style="display:flex;gap:16px;flex:1;align-items:stretch;">
         ${kpis}
       </div>
     </div>
@@ -5806,53 +5761,89 @@ function _pptxSlideLegacyResolution(s, t, accent) {
   `;
 }
 
-// ── .pptx Download ───────────────────────────────────────────────
+// ── .pptx Download — html2canvas captures each slide as image ──────
 async function _pptxDownload() {
   if (!_pptxSlides || !_pptxSlides.length) return;
   const btn = document.querySelector('#pptx-footer button:last-child');
   if (btn) { btn.textContent = '⏳ Building .pptx…'; btn.disabled = true; }
 
-  // Load PptxGenJS on demand
-  if (!window.PptxGenJS) {
-    await new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
-      s.onload = resolve;
-      s.onerror = () => reject(new Error('Failed to load PptxGenJS'));
-      document.head.appendChild(s);
-    });
-  }
-
   try {
+    // Load html2canvas
+    if (!window.html2canvas) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load html2canvas'));
+        document.head.appendChild(s);
+      });
+    }
+    // Load PptxGenJS
+    if (!window.PptxGenJS) {
+      await new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+        s.onload = resolve;
+        s.onerror = () => reject(new Error('Failed to load PptxGenJS'));
+        document.head.appendChild(s);
+      });
+    }
+
+    // Hidden 1280×720 container for capturing each slide
+    const container = document.createElement('div');
+    container.style.cssText = 'position:fixed;left:-9999px;top:0;width:1280px;height:720px;overflow:hidden;z-index:-999;background:#fff;';
+    document.body.appendChild(container);
+
     const pptx = new window.PptxGenJS();
     pptx.layout  = 'LAYOUT_WIDE';
     pptx.author  = 'Account Manager Copilot';
     pptx.company = 'RubyPlay';
 
-    const t = _pptxTemplate;
     const entity = document.getElementById('operator-select')?.value || 'Operator';
 
-    for (const slide of _pptxSlides) {
-      _pptxBuildSlide(pptx, slide, t);
+    for (let i = 0; i < _pptxSlides.length; i++) {
+      const slide = _pptxSlides[i];
+      if (btn) btn.textContent = `⏳ Slide ${i+1}/${_pptxSlides.length}…`;
+
+      container.innerHTML = slide.html || '';
+      // Wait two frames for CSS to paint
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const canvas = await window.html2canvas(container, {
+        width: 1280, height: 720, scale: 1,
+        useCORS: true, logging: false, backgroundColor: '#ffffff'
+      });
+      const imgData = canvas.toDataURL('image/png');
+
+      const s = pptx.addSlide();
+      s.addImage({ data: imgData, x: 0, y: 0, w: '100%', h: '100%' });
+      if (slide.notes) s.addNotes(slide.notes);
     }
 
-    // Filename: {Entity}_QBR_{MonthYear}.pptx
-    const now = new Date();
-    const monthYear = now.toLocaleString('en-US', { month: 'short', year: 'numeric' }).replace(' ', '');
-    const safeName = entity.replace(/[^a-zA-Z0-9_]/g, '_');
-    const fileName = `${safeName}_QBR_${monthYear}.pptx`;
+    document.body.removeChild(container);
 
-    await pptx.writeFile({ fileName });
-    showToast(`📊 ${fileName} downloaded!`);
+    const now = new Date();
+    const monthYear = now.toLocaleString('en-US', { month:'short', year:'numeric' }).replace(' ','');
+    const safeName  = entity.replace(/[^a-zA-Z0-9_]/g, '_');
+    await pptx.writeFile({ fileName: `${safeName}_QBR_${monthYear}.pptx` });
+    showToast(`📊 ${safeName}_QBR_${monthYear}.pptx downloaded!`);
   } catch (e) {
-    showToast('❌ .pptx export failed: ' + e.message, true);
+    showToast('❌ Download failed: ' + e.message, true);
+    console.error('[pptx-download]', e);
   }
 
   if (btn) { btn.textContent = '⬇ Download .pptx'; btn.disabled = false; }
 }
 
 function _pptxBuildSlide(pptx, slide, t) {
+  // Legacy stub — new download uses html2canvas, not this function.
+  // Kept so any cached reference doesn't throw.
+  console.warn('[pptx] _pptxBuildSlide called but is deprecated');
   const s = pptx.addSlide();
+  s.addText(slide.html ? '[HTML slide]' : (slide.headline || ''), { x:1, y:2.5, w:11.3, h:2, fontSize:20, color:'000000' });
+  if (slide.notes) s.addNotes(slide.notes);
+  return;
+  // --- dead code below (preserved for reference only) ---
   const accent = t.accent || '#CC0000';
   const BG = '0A0A0A';
   const hex = c => c.replace('#','');
