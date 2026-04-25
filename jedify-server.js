@@ -89,7 +89,14 @@ async function generateSlidesWithClaude(sections, brief, operator) {
     `=== ${s.checkName} ===\n${s.content}`
   ).join('\n\n');
 
-  const systemPrompt = `You are an expert B2B presentation designer for gaming analytics. Create data-rich presentations matching McKinsey narrative quality combined with RubyPlay's data visualization standards. CRITICAL: Return ONLY a valid JSON array. No markdown, no code fences, no explanation. Just the raw JSON array starting with [ and ending with ].`;
+  const systemPrompt = `You are an expert B2B presentation designer for gaming analytics. Create data-rich presentations matching McKinsey narrative quality combined with RubyPlay's data visualization standards.
+
+CRITICAL OUTPUT RULES — violations will break the application:
+1. Return ONLY a valid JSON array. Start with [ and end with ]. Nothing before or after.
+2. No markdown, no code fences (\`\`\`), no prose, no explanation whatsoever.
+3. All string values must be properly escaped: use \\n for newlines, \\" for quotes inside strings.
+4. Never use actual newline characters inside a JSON string value — use \\n instead.
+5. Percentages, currency symbols (€$%), and special characters are fine inside strings.`;
 
   const userPrompt = `Create a data-rich QBR presentation for ${operator}.
 
@@ -235,9 +242,33 @@ Return a JSON array of 6-9 slides. Use these slide types:
   });
 
   const raw = message.content[0].text.trim();
-  // Strip any accidental markdown code fences
-  const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  return JSON.parse(cleaned);
+
+  // Extract the JSON array: find the first '[' and last ']' — strips any prose/fences around it
+  const start = raw.indexOf('[');
+  const end   = raw.lastIndexOf(']');
+  if (start === -1 || end === -1 || end < start) {
+    console.error('[generate-slides] No JSON array found in response. Raw (first 500):', raw.slice(0, 500));
+    throw new Error('Claude response did not contain a JSON array');
+  }
+  let jsonStr = raw.slice(start, end + 1);
+
+  // Sanitise common Claude escaping mistakes inside string values:
+  // 1. Replace literal newlines inside strings with \n
+  // 2. Remove control characters
+  jsonStr = jsonStr.replace(/[\u0000-\u001F\u007F]/g, c =>
+    c === '\n' ? '\\n' : c === '\t' ? '\\t' : ''
+  );
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    console.error('[generate-slides] JSON parse failed:', e.message);
+    console.error('[generate-slides] Around error — full string length:', jsonStr.length);
+    // Log the area around the error position if available
+    const pos = parseInt((e.message.match(/position (\d+)/) || [])[1]) || 0;
+    if (pos) console.error('[generate-slides] Context:', jsonStr.slice(Math.max(0, pos-80), pos+80));
+    throw new Error('Slide generation returned invalid JSON: ' + e.message);
+  }
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
