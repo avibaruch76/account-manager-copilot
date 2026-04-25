@@ -158,6 +158,19 @@ Return a JSON array of 6-9 slides. Use these slide types:
     "notes": "2-3 sentence talking track"
   },
   {
+    "type": "growth_gap",
+    "headline": "Games your players want. That you don't offer yet.",
+    "your_stat": {"label": "Your market capture", "value": "12%"},
+    "market_stat": {"label": "Market leader capture", "value": "31%"},
+    "gap_multiplier": "2.6×",
+    "gap_label": "the gap",
+    "missing_games": [
+      {"rank": "#1 globally", "game": "Game Name", "studio": "RubyPlay", "global_ggr": "€X.XM", "status": "NOT LIVE"},
+      {"rank": "#3 globally", "game": "Game Name", "studio": "Koala Games", "global_ggr": "€X.XM", "status": "NOT LIVE"}
+    ],
+    "notes": "2-3 sentence talking track. This is the growth opportunity slide — make it urgent."
+  },
+  {
     "type": "conclusions",
     "headline": "One sentence asserting the key conclusion",
     "groups": [
@@ -202,9 +215,13 @@ Return a JSON array of 6-9 slides. Use these slide types:
 - For "ranking_table": include studio name exactly as it appears. Common studios: "RubyPlay", "Koala Games"
 - For "conclusions": "highlights" array = key phrases and numbers that should be highlighted in the slide
 - Insert one "trend_chart" slide and one "ranking_table" slide per major data section
+- Insert a "growth_gap" slide whenever the analysis mentions missing games, benchmark gaps, competitor comparisons, or market capture rates. This is the most important slide for driving the Ask — make the gap vivid: left side = operator's current capture, right side = what the market leader achieves. "gap_multiplier" = how many times bigger the opportunity is (e.g. "2.6×"). "missing_games" = top globally popular games not yet live at this operator (from benchmark_gap check data)
+- "your_stat" and "market_stat" must use real numbers from the data — if exact % capture is not available, use absolute GGR or player numbers that show the gap
 - Slide count: 6-9 slides total
 - All numbers must come from the analysis data — do not invent figures
-- Bullets in "conclusions.groups": full sentences, no bullet symbols, just plain strings`;
+- Bullets in "conclusions.groups": full sentences, no bullet symbols, just plain strings
+- The growth_gap headline should be a sharp two-sentence format like the Codere deck: "Games your players want. That you don't offer yet." or "Strong foundation. But the ceiling is another league."
+- Make every headline an assertion that would work as a standalone tweet — the reader should understand the point WITHOUT looking at the data below`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
