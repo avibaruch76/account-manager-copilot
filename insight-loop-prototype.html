@@ -1031,6 +1031,14 @@ async function previewPrompt() {
     showToast('Please select an operator, brand, or account first.', true);
     return;
   }
+
+  // If cached results exist and are already displayed, confirm before burning tokens
+  if (document.getElementById('cache-banner')) {
+    const go = confirm('📂 Cached results are already loaded for this selection.\n\nRun a fresh analysis anyway? (uses Jedify tokens + Snowflake)');
+    if (!go) return;
+    // Remove banner so UI is fresh
+    document.getElementById('cache-banner').remove();
+  }
   const selection = buildSelectionPayload(pop);
   const entity = selection.entity || (selection.values && selection.values[0]) || selection.operator || 'Unknown';
   const scope = selection.scope || 'operator';
@@ -3069,6 +3077,111 @@ function renderResearchReport(data) {
     // Navigate to Output by Persona
     showSection('output', document.querySelector('.nav a[href="#output"]'));
   }
+
+  // Save to cache after every render — debounced so concurrent persona renders write once
+  clearTimeout(window._cacheSaveTimer);
+  window._cacheSaveTimer = setTimeout(saveAnalysisCache, 800);
+}
+
+// ── Analysis Result Cache (localStorage) ─────────────────────────────────────
+// Saves completed analysis results so deploys / page refreshes don't waste
+// Jedify tokens or Snowflake costs. Cache expires after 7 days.
+
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+const CACHE_KEY_PREFIX = 'qbr_cache_';
+
+function _getCacheKey() {
+  const pop = getSelectedPopulation();
+  const entity = pop.brands && pop.brands.length > 0 ? pop.brands.slice().sort().join('|') : 'all';
+  const endMonth = document.getElementById('filter-end-month').value || 'latest';
+  const monthsBack = document.getElementById('filter-months-back').value || '6';
+  return CACHE_KEY_PREFIX + btoa(encodeURIComponent([entity, endMonth, monthsBack].join('__'))).slice(0, 40);
+}
+
+function saveAnalysisCache() {
+  if (!_runSession) return;
+  try {
+    const key = _getCacheKey();
+    const panes = {};
+    Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
+      const el = document.getElementById(paneId);
+      if (el && el.innerHTML.trim()) panes[paneId] = el.innerHTML;
+    });
+    const checkResults = document.getElementById('check-results');
+    if (checkResults && checkResults.innerHTML.trim()) panes['check-results'] = checkResults.innerHTML;
+
+    const payload = {
+      savedAt: Date.now(),
+      savedAtLabel: new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+      runSession: _runSession,
+      panes,
+      entity: _runSession.entity,
+      downloadBtnsVisible: (document.getElementById('download-btns')?.style.display !== 'none')
+    };
+    localStorage.setItem(key, JSON.stringify(payload));
+    console.log('[cache] Saved analysis result for key:', key);
+  } catch (e) {
+    console.warn('[cache] Save failed:', e.message);
+  }
+}
+
+function tryRestoreAnalysisCache() {
+  try {
+    const key = _getCacheKey();
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    const payload = JSON.parse(raw);
+    if (!payload || !payload.savedAt || (Date.now() - payload.savedAt) > CACHE_TTL_MS) {
+      localStorage.removeItem(key);
+      return false;
+    }
+    // Restore panes
+    Object.entries(payload.panes || {}).forEach(([paneId, html]) => {
+      const el = document.getElementById(paneId);
+      if (el) el.innerHTML = html;
+    });
+    // Restore session state
+    _runSession = payload.runSession;
+    if (_runSession) renderCheckLists();
+    // Show download buttons
+    if (payload.downloadBtnsVisible) {
+      const dlBtns = document.getElementById('download-btns');
+      if (dlBtns) dlBtns.style.display = 'flex';
+    }
+    // Show cache banner
+    _showCacheBanner(payload.savedAtLabel, key);
+    // Clear sub-status placeholder text
+    const sub = document.getElementById('check-results-sub');
+    if (sub) sub.textContent = '';
+    console.log('[cache] Restored analysis result from:', payload.savedAtLabel);
+    return true;
+  } catch (e) {
+    console.warn('[cache] Restore failed:', e.message);
+    return false;
+  }
+}
+
+function _showCacheBanner(savedAtLabel, cacheKey) {
+  // Remove any existing banner
+  const existing = document.getElementById('cache-banner');
+  if (existing) existing.remove();
+
+  const banner = document.createElement('div');
+  banner.id = 'cache-banner';
+  banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;margin:8px 0 4px;font-size:12px;color:#1E40AF;';
+  banner.innerHTML = `
+    <span>📂 <strong>Cached results</strong> from ${savedAtLabel} — no need to re-run</span>
+    <button onclick="clearAnalysisCache('${cacheKey}')" style="background:none;border:none;cursor:pointer;color:#93C5FD;font-size:16px;line-height:1;padding:0 2px;" title="Clear cached results">×</button>
+  `;
+  const checkResults = document.getElementById('check-results');
+  if (checkResults) checkResults.before(banner);
+}
+
+function clearAnalysisCache(cacheKey) {
+  if (cacheKey) localStorage.removeItem(cacheKey);
+  const banner = document.getElementById('cache-banner');
+  if (banner) banner.remove();
+  showToast('Cached results cleared. Run Analysis to get fresh data.');
 }
 
 function downloadReport() {
@@ -4377,6 +4490,34 @@ const now = new Date();
 const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
 document.getElementById('filter-end-month').value = lastMonth.getFullYear() + '-' + String(lastMonth.getMonth() + 1).padStart(2, '0');
 updateCount();
+
+// Auto-restore cached analysis results on page load
+setTimeout(() => {
+  const restored = tryRestoreAnalysisCache();
+  if (restored) {
+    // Navigate to Analysis Results tab so user sees the restored content
+    const resultsNav = document.querySelector('.nav a[href="#results"]');
+    if (resultsNav) showSection('results', resultsNav);
+  }
+}, 200);
+
+// Re-check cache when date or months-back filter changes
+document.getElementById('filter-end-month').addEventListener('change', () => {
+  clearTimeout(window._cacheCheckTimer);
+  window._cacheCheckTimer = setTimeout(() => {
+    const banner = document.getElementById('cache-banner');
+    if (banner) banner.remove();
+    tryRestoreAnalysisCache();
+  }, 300);
+});
+document.getElementById('filter-months-back').addEventListener('change', () => {
+  clearTimeout(window._cacheCheckTimer);
+  window._cacheCheckTimer = setTimeout(() => {
+    const banner = document.getElementById('cache-banner');
+    if (banner) banner.remove();
+    tryRestoreAnalysisCache();
+  }, 300);
+});
 
 // ═══════════════════════════════════════════════════════
 // COMPETITIVE INTELLIGENCE
