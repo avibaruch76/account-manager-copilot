@@ -5171,37 +5171,44 @@ async function openPresentationBuilder() {
     // Final fallback: use all enabled checks
     checkIds = _checks.filter(c => c.enabled !== false).map(c => c.id);
   }
-  // PRIMARY: Read from persona report panes — these contain the full rendered
-  // analysis text with all data (tables, numbers, findings). Far richer than
-  // individual check cards which are small and get truncated.
+  // PRIMARY: Read from every individual check result card.
+  // These contain the raw data per check (game tables, benchmark gap details,
+  // per-player metrics, etc.) — exactly what Claude needs for accurate slides.
+  const checkSections = checkIds.map(id => {
+    const check = _checks.find(c => c.id === id);
+    const name  = check ? check.name : id;
+    const card  = document.querySelector(`[data-check-id="${id}"]`);
+    if (!card) return null;
+    const text = (card.innerText || card.textContent || '').trim();
+    if (text.length < 30) return null;
+    return { checkId: id, checkName: name, content: text.slice(0, 10000), selected: true };
+  }).filter(Boolean);
+
+  // SUPPLEMENT: also add persona panes for narrative context
   const personaSections = [];
   Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
     const pane = document.getElementById(paneId);
     if (!pane) return;
     const text = (pane.innerText || pane.textContent || '').trim();
-    if (text.length < 80) return; // skip empty / loading panes
-    // Skip panes that only contain a loading spinner or "running" message
+    if (text.length < 80) return;
     if (/⏳|researching\.\.\.|running/i.test(text) && text.length < 200) return;
     personaSections.push({
       checkId: persona,
       checkName: PERSONA_TITLE[persona] || persona,
-      content: text.slice(0, 12000),  // high limit — full reports needed
+      content: text.slice(0, 8000),
       selected: true
     });
   });
 
-  if (personaSections.length > 0) {
-    // Use persona reports as the primary source
-    _pptxSections = personaSections;
-  } else {
-    // FALLBACK: read from individual check result cards (less complete)
+  // Combine: check cards first (raw data), then persona panes (narrative context)
+  _pptxSections = [...checkSections, ...personaSections];
+
+  // Final fallback if nothing found
+  if (_pptxSections.length === 0) {
     _pptxSections = checkIds.map(id => {
       const check = _checks.find(c => c.id === id);
-      const name  = check ? check.name : id;
-      const card  = document.querySelector(`[data-check-id="${id}"]`);
-      const content = card ? (card.innerText || card.textContent || '') : '(no content available)';
-      return { checkId: id, checkName: name, content: content.trim().slice(0, 6000), selected: true };
-    }).filter(s => s.content !== '(no content available)');
+      return { checkId: id, checkName: check ? check.name : id, content: '(no content available)', selected: true };
+    });
   }
 
   _pptxShowStep(1);
@@ -5260,7 +5267,8 @@ function _pptxRenderBrief() {
   ];
   content.innerHTML = `
     <p style="font-size:12px;color:#64748B;margin-bottom:4px;">
-      Shape the story angle. Claude will automatically select and prioritise the most impactful findings from <strong style="color:#1E2761;">${sectionCount} analysis section${sectionCount !== 1 ? 's' : ''}</strong>.
+      Shape the story angle. Claude will read all <strong style="color:#1E2761;">${sectionCount} data section${sectionCount !== 1 ? 's' : ''}</strong> from the full analysis and select the most impactful findings.
+      ${sectionCount < 4 ? `<span style="color:#DC2626;font-weight:700;"> ⚠ Only ${sectionCount} sections found — for best results, wait for the full analysis to complete before generating.</span>` : ''}
     </p>
     <p style="font-size:11px;color:#94A3B8;margin-bottom:20px;">All fields are optional — but even a brief angle makes the narrative much sharper.</p>
 
@@ -5324,18 +5332,34 @@ async function _pptxGenerate() {
   _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
   _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
 
-  // Re-build sections if empty or stale (e.g. page reload with cache restored)
-  // Always prefer persona panes — they contain the full rendered reports
-  const _freshPersona = [];
-  Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
-    const pane = document.getElementById(paneId);
-    if (!pane) return;
-    const text = (pane.innerText || pane.textContent || '').trim();
-    if (text.length < 80) return;
-    if (/⏳|researching\.\.\.|running/i.test(text) && text.length < 200) return;
-    _freshPersona.push({ checkId: persona, checkName: PERSONA_TITLE[persona] || persona, content: text.slice(0, 12000), selected: true });
-  });
-  if (_freshPersona.length > 0) _pptxSections = _freshPersona;
+  // Re-build sections fresh — check cards first, persona panes as supplement
+  {
+    const ids = (window._currentRunCheckIds && window._currentRunCheckIds.length > 0)
+      ? window._currentRunCheckIds
+      : _checks.filter(c => c.enabled !== false).map(c => c.id);
+
+    const fresh = ids.map(id => {
+      const check = _checks.find(c => c.id === id);
+      const card  = document.querySelector(`[data-check-id="${id}"]`);
+      if (!card) return null;
+      const text = (card.innerText || card.textContent || '').trim();
+      if (text.length < 30) return null;
+      return { checkId: id, checkName: check ? check.name : id, content: text.slice(0, 10000), selected: true };
+    }).filter(Boolean);
+
+    const freshPersona = [];
+    Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
+      const pane = document.getElementById(paneId);
+      if (!pane) return;
+      const text = (pane.innerText || pane.textContent || '').trim();
+      if (text.length < 80 || (/⏳|researching\.\.\.|running/i.test(text) && text.length < 200)) return;
+      freshPersona.push({ checkId: persona, checkName: PERSONA_TITLE[persona] || persona, content: text.slice(0, 8000), selected: true });
+    });
+
+    if (fresh.length > 0 || freshPersona.length > 0) {
+      _pptxSections = [...fresh, ...freshPersona];
+    }
+  }
 
   const sections = _pptxSections;
   if (sections.length === 0) {
