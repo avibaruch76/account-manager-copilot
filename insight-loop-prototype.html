@@ -5393,7 +5393,7 @@ async function _pptxGenerate() {
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:300px;gap:20px;">
       <div style="width:48px;height:48px;border:4px solid #FEE2E2;border-top-color:#CC0000;border-radius:50%;animation:spin 1s linear infinite;"></div>
       <div style="text-align:center;">
-        <div style="font-size:14px;font-weight:700;color:#1A1A1A;">Building your 18-slide presentation…</div>
+        <div style="font-size:14px;font-weight:700;color:#1A1A1A;">Building your 17-slide presentation…</div>
         <div id="pptx-gen-progress" style="font-size:12px;color:#64748B;margin-top:6px;">Connecting to Claude…</div>
         <div style="font-size:11px;color:#94A3B8;margin-top:4px;">Generating charts &amp; slides — typically 3–4 minutes</div>
       </div>
@@ -5448,7 +5448,7 @@ async function _pptxGenerate() {
       const elapsed = Math.round((Date.now() - _streamStart) / 1000);
       const slidesDone = (raw.match(/<SLIDE_END>/g) || []).length;
       if (slidesDone > 0) {
-        progressEl.textContent = `${slidesDone} of 18 slides generated… (${elapsed}s)`;
+        progressEl.textContent = `${slidesDone} of 17 slides generated… (${elapsed}s)`;
       } else if (raw.length > 0) {
         progressEl.textContent = `Generating… ${Math.round(raw.length / 1000)}k chars received (${elapsed}s)`;
       } else {
@@ -5532,13 +5532,13 @@ function _pptxDrawPreview() {
   const SLIDE_LABELS_FIXED = [
     'Title','KPI Trends','Studios','New Games','Studio Bets',
     'Retention','Regional','Studio Table','Player Seg','VIP',
-    'Max Bet','Promos','vs Benchmark','Portfolio Gap','Growth Levers','KPI Gaps'
+    'Max Bet','Promos','Portfolio Gap','Growth Levers','KPI Gaps'
   ];
   function _slideLabel(idx, total) {
-    if (idx < 16) return SLIDE_LABELS_FIXED[idx] || `Slide ${idx+1}`;
+    if (idx < 15) return SLIDE_LABELS_FIXED[idx] || `Slide ${idx+1}`;
     if (idx === total - 1) return 'The Ask';
     if (idx === total - 2) return 'Actions';
-    return `Extra ${idx - 15}`;
+    return `Extra ${idx - 14}`;
   }
   const thumbs = slides.map((s, i) => {
     const label = _slideLabel(i, slides.length);

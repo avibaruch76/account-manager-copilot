@@ -126,7 +126,7 @@ ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
 ══════════════════════════════════════
 
-FIXED SLIDE TEMPLATE — generate ALL 18 slots in this exact order. Never skip a slot. Each slide must use the DESIGN RULES below.
+FIXED SLIDE TEMPLATE — generate ALL 17 slots in this exact order. Never skip a slot. Each slide must use the DESIGN RULES below.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DESIGN RULES (RubyPlay brand — apply to every slide):
@@ -258,14 +258,7 @@ SLIDE 11 — MAX BET ANALYSIS
 SLIDE 12 — PROMOTION ANALYSIS
   ALWAYS render as placeholder. Text: "Coming Soon — Promotion Analysis"
 
-SLIDE 13 — GROWTH VS BENCHMARK
-  Section label: COMPETITIVE POSITION
-  Headline: where we are relative to peers — honest, pointed
-  Layout: 2-column layout. Left: operator's key KPIs in large bold numbers. Right: benchmark/peer values in muted grey.
-  Gap delta: show +/- vs benchmark in #CC0000 (negative) or #16A34A (positive)
-  If no benchmark data, show placeholder
-
-SLIDE 14 — THE PORTFOLIO GAP
+SLIDE 13 — THE PORTFOLIO GAP
   Section label: MISSING OPPORTUNITIES
   Headline: the gap, as a dollar or % number if possible
   Table columns: Game Name | Key Fact | Market Rank | Market Share % | Signal badge
@@ -273,26 +266,26 @@ SLIDE 14 — THE PORTFOLIO GAP
   Signal badge colours per rules above
   Show maximum 8 rows; if more exist, add footer "… and N more"
 
-SLIDE 15 — THE GROWTH LEVERS
+SLIDE 14 — THE GROWTH LEVERS
   Section label: GROWTH LEVERS
   Headline: total opportunity size if possible
   Table columns: Game Name | Key Fact | Players | GGR/Player | Total GGR | Opportunity | Action
   Action column: small red pill button — <span style='background:#CC0000;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>ADD</span> or <span style='background:#1A1A1A;…'>EXPAND</span>
   Sort by Opportunity descending
 
-SLIDE 16 — KPI GAPS
+SLIDE 15 — KPI GAPS
   Section label: PERFORMANCE GAPS
   Headline: the most important gap in one sentence
   Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
   Gap column: colour red if negative, green if positive
   Trend column: ↑ ↓ → arrows coloured accordingly
 
-[AFTER SLIDE 16, INSERT ANY EXTRA NARRATIVE SLIDES HERE]
+[AFTER SLIDE 15, INSERT ANY EXTRA NARRATIVE SLIDES HERE]
   If the brief angle or the data warrants additional analysis slides (competitive intelligence, concentration risk, player lifetime value, etc.), insert them here — BEFORE the Actions slide.
   Each extra slide must follow the same design rules and have a section label + editorial headline.
-  If no extra slides are needed, simply proceed to slide 17.
+  If no extra slides are needed, simply proceed to slide 16.
 
-SLIDE 17 — ACTIONS & PRIORITIES
+SLIDE 16 — ACTIONS & PRIORITIES
   Section label: RECOMMENDED ACTIONS
   Headline: the decisive call — what must happen this quarter
   Layout: numbered action cards (1–5 max), each card has:
@@ -302,7 +295,7 @@ SLIDE 17 — ACTIONS & PRIORITIES
     - Expected outcome (small text, #16A34A)
   Cards stacked vertically; each card background alternates #fff / #F5F5F5 with left border #CC0000
 
-SLIDE 18 — THE ASK / CLOSING
+SLIDE 17 — THE ASK / CLOSING
   Layout: background #1A1A1A; full-bleed dark slide
   Top: RUBYPLAY × ${operator.toUpperCase()} in white/muted small text
   Centre: large white headline — the specific ask from the brief (or a powerful close if no ask provided)
@@ -319,7 +312,7 @@ COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12, and any slide with no data
   </div>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate all 18 slides now. Output only the slide delimiters — no other text:`;
+Generate all 17 slides now. Output only the slide delimiters — no other text:`;
 
   return { systemPrompt, userPrompt };
 }
