@@ -1614,6 +1614,7 @@ const server = http.createServer(async (req, res) => {
         const noSSE = !!reqBody.noSSE; // background mode: return plain JSON, no SSE stream
 
         if (noSSE) {
+          // noSSE path — runId is not assigned here, catch block handles that safely
           // Plain JSON response — no streaming, no progress events
           const results = await runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona });
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1631,7 +1632,7 @@ const server = http.createServer(async (req, res) => {
 
         // Generate a unique runId so the polling fallback can find THIS run's result
         // even when concurrent runs (e.g. data_analyst background) complete first
-        const runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        runId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         _activeRunIds.add(runId);
         // Clear stale _lastCompletedResult so a leftover result from a previous run
         // isn't returned to a new polling client before this run completes
@@ -1662,7 +1663,7 @@ const server = http.createServer(async (req, res) => {
         res.end();
       } catch (err) {
         console.error('[research] Pipeline error:', err);
-        _activeRunIds.delete(runId);
+        if (runId) _activeRunIds.delete(runId); // runId may be undefined if error was in noSSE path
         _activeSSeClients.delete(res);
         // If headers already sent (SSE mode), send error as event
         if (res.headersSent) {
