@@ -5958,12 +5958,14 @@ async function _pptxDownload() {
       if (btn) btn.textContent = `⏳ Slide ${i+1}/${_pptxSlides.length}…`;
 
       container.innerHTML = slide.html || '';
-      // Wait two frames for CSS to paint
-      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // Wait three frames for CSS + SVG to fully paint before capture
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
 
+      // scale:2 → captures at 2560×1440 → 192dpi in pptx → crisp text and fonts
       const canvas = await window.html2canvas(container, {
-        width: 1280, height: 720, scale: 1,
-        useCORS: true, logging: false, backgroundColor: '#ffffff'
+        width: 1280, height: 720, scale: 2,
+        useCORS: true, logging: false, backgroundColor: '#ffffff',
+        imageTimeout: 0, allowTaint: false
       });
       const imgData = canvas.toDataURL('image/png');
 

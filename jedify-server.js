@@ -351,7 +351,7 @@ async function streamSlidesToResponse(sections, brief, operator, res) {
 
   const stream = await client.messages.create({
     model:      'claude-sonnet-4-6',
-    max_tokens: 32000,
+    max_tokens: 48000,
     system:     systemPrompt,
     messages:   [{ role: 'user', content: userPrompt }],
     stream:     true
