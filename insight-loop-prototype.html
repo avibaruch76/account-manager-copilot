@@ -719,6 +719,51 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
     </div>
   </div>
 
+  <!-- BRAND TEMPLATE UPLOAD -->
+  <h3 style="font-size:14px;font-weight:800;color:#1E2761;margin:28px 0 12px;display:flex;align-items:center;gap:8px;">
+    🎨 Brand Template <span style="font-size:11px;color:#64748B;font-weight:400;">— upload once, applied to all presentations</span>
+  </h3>
+  <div style="background:white;border-radius:12px;border:1.5px solid #E0E8F0;padding:20px 24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06);">
+    <p style="font-size:12px;color:#64748B;line-height:1.6;margin-bottom:16px;">
+      Upload one empty branded .pptx slide. We extract your logo, colours, and fonts automatically. Saved to the server — shared across all team members.
+    </p>
+    <div id="brand-upload-zone" onclick="document.getElementById('brand-file-input').click()"
+         style="border:2px dashed #CBD5E1;border-radius:8px;padding:24px;text-align:center;background:#F8FAFC;cursor:pointer;transition:border-color .15s;"
+         ondragover="event.preventDefault();this.style.borderColor='#7C3AED'"
+         ondragleave="this.style.borderColor='#CBD5E1'"
+         ondrop="_pptxHandleDrop(event)">
+      <div style="font-size:28px;margin-bottom:8px;">📎</div>
+      <div style="font-size:13px;font-weight:600;color:#1E2761;">Drop your .pptx template here</div>
+      <div style="font-size:11px;color:#94A3B8;margin-top:4px;">One slide with your logo and brand colours · .pptx files only</div>
+      <div style="margin-top:12px;display:inline-block;padding:6px 16px;background:#1E2761;color:white;border-radius:6px;font-size:12px;font-weight:600;">Choose file</div>
+      <input type="file" id="brand-file-input" accept=".pptx" style="display:none;" onchange="_pptxHandleFile(this.files[0])">
+    </div>
+
+    <div id="brand-preview" style="display:none;margin-top:16px;">
+      <div style="font-size:11px;font-weight:700;color:#64748B;margin-bottom:10px;">EXTRACTED BRAND ASSETS — click swatches to adjust</div>
+      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start;margin-bottom:16px;">
+        <div id="brand-logo-preview" style="flex:0 0 auto;"></div>
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:8px;">COLOURS</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="brand-swatches"></div>
+          <div style="margin-top:10px;">
+            <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:4px;">FONTS</div>
+            <div id="brand-fonts" style="font-size:12px;color:#1E2761;"></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="_pptxSaveTemplate()" style="padding:8px 18px;background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">💾 Save Template</button>
+        <button onclick="_pptxClearTemplate()" style="padding:8px 14px;background:#F1F5F9;color:#64748B;border:none;border-radius:8px;font-size:12px;cursor:pointer;">Clear</button>
+        <span id="brand-save-msg" style="font-size:11px;color:#16A34A;display:none;align-self:center;">✓ Saved</span>
+        <span id="brand-save-err" style="font-size:11px;color:#DC2626;display:none;align-self:center;"></span>
+      </div>
+    </div>
+
+    <div id="brand-current" style="margin-top:14px;padding:10px 14px;background:#F0F9FF;border-radius:6px;border-left:3px solid #0EA5E9;font-size:11px;color:#0C4A6E;display:none;">
+      ✓ Template active — last uploaded <span id="brand-uploaded-at"></span>
+    </div>
+  </div>
 
 </div>
 
@@ -5348,6 +5393,183 @@ function _pptxBuildSlide(pptx, slide, t) {
     }
   }
 }
+
+// ── Brand Template Upload ────────────────────────────────────────
+let _pptxExtracted = null;  // extracted template data before save
+
+function _pptxHandleDrop(event) {
+  event.preventDefault();
+  document.getElementById('brand-upload-zone').style.borderColor = '#CBD5E1';
+  const file = event.dataTransfer.files[0];
+  if (file) _pptxHandleFile(file);
+}
+
+async function _pptxHandleFile(file) {
+  if (!file || !file.name.endsWith('.pptx')) {
+    showToast('⚠️ Please upload a .pptx file', true);
+    return;
+  }
+  // Load JSZip on demand
+  if (!window.JSZip) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load JSZip'));
+      document.head.appendChild(s);
+    });
+  }
+  try {
+    const buf = await file.arrayBuffer();
+    const zip = await JSZip.loadAsync(buf);
+
+    // ── 1. Extract colours from theme1.xml ──
+    let primary='#1E2761', accent='#7C3AED', background='#FFFFFF', highlight='#F59E0B', text='#1E293B';
+    const themeFile = zip.file('ppt/theme/theme1.xml') ||
+                      zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/theme\/theme\d+\.xml/)) || '');
+    if (themeFile) {
+      const xml = await themeFile.async('text');
+      // Grab all hex colours in order from val="XXXXXX" attributes
+      const allHex = [...xml.matchAll(/val="([A-Fa-f0-9]{6})"/g)].map(m => '#' + m[1]);
+      if (allHex[0]) primary    = allHex[0];
+      if (allHex[1]) text       = allHex[1];
+      if (allHex[2]) background = allHex[2];
+      if (allHex[4]) accent     = allHex[4];
+      if (allHex[6]) highlight  = allHex[6];
+    }
+
+    // ── 2. Extract fonts from slideMaster1.xml ──
+    let fontHeading = 'Calibri', fontBody = 'Calibri';
+    const masterFile = zip.file('ppt/slideMasters/slideMaster1.xml') ||
+                       zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/slideMasters\/slideMaster\d+\.xml/)) || '');
+    if (masterFile) {
+      const xml = await masterFile.async('text');
+      const latinMatches = [...xml.matchAll(/latin typeface="([^"]+)"/g)];
+      if (latinMatches[0]) fontHeading = latinMatches[0][1];
+      if (latinMatches[1]) fontBody    = latinMatches[1][1];
+    }
+
+    // ── 3. Extract logo (largest image in ppt/media/) ──
+    let logoBase64 = null;
+    const mediaFiles = Object.entries(zip.files).filter(([k]) => k.startsWith('ppt/media/') && !zip.files[k].dir);
+    if (mediaFiles.length) {
+      const withSizes = await Promise.all(mediaFiles.map(async ([k, f]) => {
+        const data = await f.async('uint8array');
+        return { key: k, data, size: data.length };
+      }));
+      withSizes.sort((a, b) => b.size - a.size);
+      const largest = withSizes[0];
+      const ext = largest.key.split('.').pop().toLowerCase();
+      const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml', emf:'image/x-emf' };
+      const mime = mimeMap[ext] || 'image/png';
+      const b64 = btoa(String.fromCharCode(...largest.data));
+      logoBase64 = `data:${mime};base64,${b64}`;
+    }
+
+    _pptxExtracted = { primary, accent, background, highlight, text, logoBase64, fontHeading, fontBody };
+    _pptxShowExtracted(_pptxExtracted);
+  } catch (e) {
+    showToast('❌ Could not parse .pptx: ' + e.message, true);
+  }
+}
+
+function _pptxShowExtracted(data) {
+  document.getElementById('brand-preview').style.display = 'block';
+
+  // Logo
+  const logoEl = document.getElementById('brand-logo-preview');
+  if (data.logoBase64) {
+    logoEl.innerHTML = `
+      <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:6px;">LOGO</div>
+      <img src="${data.logoBase64}" style="height:60px;max-width:120px;object-fit:contain;border-radius:6px;border:1px solid #E2E8F0;" alt="logo">
+    `;
+  } else {
+    logoEl.innerHTML = '<div style="font-size:11px;color:#94A3B8;margin-top:10px;">No image found in template</div>';
+  }
+
+  // Colour swatches
+  const fields = [
+    { key:'primary', label:'Primary' },
+    { key:'accent', label:'Accent' },
+    { key:'background', label:'Background' },
+    { key:'highlight', label:'Highlight' },
+    { key:'text', label:'Text' }
+  ];
+  document.getElementById('brand-swatches').innerHTML = fields.map(f => `
+    <div style="text-align:center;">
+      <div style="width:40px;height:40px;border-radius:6px;background:${data[f.key]};border:2px solid #E2E8F0;cursor:pointer;position:relative;"
+           onclick="document.getElementById('swatch-input-${f.key}').click()">
+        <input type="color" id="swatch-input-${f.key}" value="${data[f.key]}"
+               style="position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;"
+               oninput="_pptxUpdateSwatch('${f.key}',this.value)">
+      </div>
+      <div style="font-size:9px;color:#64748B;margin-top:3px;">${f.label}</div>
+    </div>
+  `).join('');
+
+  // Fonts
+  document.getElementById('brand-fonts').innerHTML =
+    `<span style="background:#F1F5F9;padding:3px 10px;border-radius:4px;margin-right:6px;">${_pptxEsc(data.fontHeading)} — Headings</span>` +
+    `<span style="background:#F1F5F9;padding:3px 10px;border-radius:4px;">${_pptxEsc(data.fontBody)} — Body</span>`;
+}
+
+function _pptxUpdateSwatch(field, value) {
+  if (_pptxExtracted) _pptxExtracted[field] = value;
+  const input = document.getElementById(`swatch-input-${field}`);
+  if (input && input.parentElement) input.parentElement.style.background = value;
+}
+
+async function _pptxSaveTemplate() {
+  if (!_pptxExtracted) return;
+  const msg = document.getElementById('brand-save-msg');
+  const err = document.getElementById('brand-save-err');
+  msg.style.display = 'none';
+  err.style.display = 'none';
+  try {
+    const res = await apiFetch('/api/upload-template', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_pptxExtracted)
+    });
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    _pptxTemplate = { ..._pptxExtracted, uploadedAt: data.uploadedAt };
+    msg.style.display = 'inline';
+    setTimeout(() => { msg.style.display = 'none'; }, 3000);
+    showToast('🎨 Brand template saved!');
+    _pptxShowCurrentTemplate(data.uploadedAt);
+  } catch (e) {
+    err.textContent = '❌ ' + e.message;
+    err.style.display = 'inline';
+  }
+}
+
+function _pptxClearTemplate() {
+  _pptxExtracted = null;
+  document.getElementById('brand-preview').style.display = 'none';
+  document.getElementById('brand-file-input').value = '';
+}
+
+function _pptxShowCurrentTemplate(uploadedAt) {
+  const el = document.getElementById('brand-current');
+  const dateEl = document.getElementById('brand-uploaded-at');
+  if (!el) return;
+  el.style.display = 'block';
+  if (dateEl && uploadedAt) {
+    try {
+      dateEl.textContent = new Date(uploadedAt).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    } catch(e) { dateEl.textContent = uploadedAt; }
+  }
+}
+
+// Show current template status on page load
+(async () => {
+  try {
+    const res = await apiFetch('/api/get-template');
+    const data = await res.json();
+    if (data.uploadedAt) _pptxShowCurrentTemplate(data.uploadedAt);
+  } catch(e) { /* ignore */ }
+})();
 </script>
 </body>
 </html>
