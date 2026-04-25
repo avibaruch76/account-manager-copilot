@@ -5129,11 +5129,23 @@ function closePresentationBuilder() {
   const backdrop = document.getElementById('pptx-backdrop');
   overlay.classList.remove('open');
   backdrop.classList.remove('open');
+  // Immediately disable pointer events so the backdrop doesn't block clicks
+  // during the 300ms fade-out animation
+  backdrop.style.pointerEvents = 'none';
   setTimeout(() => {
     overlay.style.display  = 'none';
     backdrop.style.display = 'none';
+    backdrop.style.pointerEvents = '';  // reset for next open
   }, 300);
 }
+
+// Close presentation builder with Escape key
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    const overlay = document.getElementById('pptx-overlay');
+    if (overlay && overlay.classList.contains('open')) closePresentationBuilder();
+  }
+});
 
 // ── Step indicator ──────────────────────────────────────────────
 function _pptxShowStep(n) {
