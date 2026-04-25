@@ -2012,6 +2012,10 @@ const server = http.createServer(async (req, res) => {
         'Cache-Control': 'no-cache',
         'X-Content-Type-Options': 'nosniff'
       });
+      // Flush headers to client immediately — Node.js buffers until first write(),
+      // so without this the browser's fetch() stays pending until Claude's first token (TTFT).
+      // A newline is harmless — our parser only looks for <SLIDE_START>/<SLIDE_END> delimiters.
+      res.write('\n');
 
       try {
         await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res);
