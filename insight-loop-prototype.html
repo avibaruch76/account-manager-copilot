@@ -2339,8 +2339,11 @@ function runAnalysis(customPrompt, partialCheckIds) {
           _analysisRunning = false;
 
       if (data && data.error) {
-        showToast('❌ Analysis failed: ' + data.error, true);
-        document.getElementById('check-results-sub').textContent = 'Analysis failed: ' + data.error;
+        showToast('❌ ' + data.error, true);
+        document.getElementById('check-results-sub').textContent = data.error;
+        // Clear any stale "Full analysis running..." message so UI isn't contradictory
+        const cr = document.getElementById('check-results');
+        if (cr && cr.innerHTML.includes('running')) cr.innerHTML = '';
         return;
       }
 
@@ -2642,9 +2645,38 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
     return result || { report: 'done' };
   } catch (e) {
     console.error('[insight-loop] Fetch failed:', e.message);
-    const errMsg = e.name === 'AbortError' ? 'Analysis cancelled.' :
-                   e.name === 'TimeoutError' ? 'Request timed out.' : e.message;
-    return { error: errMsg };
+    if (e.name === 'AbortError') return { error: 'Analysis cancelled.' };
+    if (e.name === 'TimeoutError') return { error: 'Request timed out.' };
+
+    // Network/connection error (computer sleep, Render drop, etc.)
+    // The server is likely still running the Jedify inquiry — don't show "failed".
+    // Poll /api/research-status until we get a result or give up after 30 minutes.
+    const eta = document.getElementById('run-eta');
+    const fill = document.getElementById('progress-fill');
+    if (eta) eta.innerHTML = '<strong style="color:#7C3AED">🔄 Connection lost — server is still running. Waiting for results...</strong>';
+    if (fill) fill.style.width = '75%';
+
+    const MAX_WAIT_MS = 30 * 60 * 1000;
+    const POLL_MS = 5000;
+    const pollStart = Date.now();
+    while (Date.now() - pollStart < MAX_WAIT_MS) {
+      await new Promise(r => setTimeout(r, POLL_MS));
+      try {
+        const sr = await apiFetch('/api/research-status');
+        if (!sr.ok) continue;
+        const status = await sr.json();
+        if (status.report) {
+          if (fill) fill.style.width = '100%';
+          return status;
+        }
+        if (!status.active) {
+          return { error: 'Connection was interrupted and the server restarted. Please run the analysis again.' };
+        }
+        const elapsed = Math.round((Date.now() - pollStart) / 1000);
+        if (eta) eta.innerHTML = `<strong style="color:#7C3AED">🔄 Reconnected — Jedify still working...</strong> (${elapsed}s elapsed)`;
+      } catch (_) { /* network still recovering — keep polling */ }
+    }
+    return { error: 'Analysis timed out waiting for results. Jedify may still be running — try again in a moment.' };
   }
 }
 
