@@ -119,85 +119,212 @@ STORY BRIEF:
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
-${brief.include ? `MUST-INCLUDE — always create a dedicated slide for each of these topics (if data exists): ${brief.include}` : ''}
-${brief.exclude ? `EXCLUDE — remove these topics entirely, do not mention them: ${brief.exclude}` : ''}
+${brief.include ? `MUST-INCLUDE topics (if data exists): ${brief.include}` : ''}
+${brief.exclude ? `EXCLUDE these topics entirely: ${brief.exclude}` : ''}
 
 ══════════════════════════════════════
 ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
 ══════════════════════════════════════
 
-SLIDES TO CREATE (8–14 total):
+FIXED SLIDE TEMPLATE — generate ALL 18 slots in this exact order. Never skip a slot. Each slide must use the DESIGN RULES below.
 
-Structure every presentation with:
-1. TITLE — operator name + exact date/period from the data + sharp assertion headline
-2–N. FINDINGS — as many slides as the story needs, one per major theme
-   Last-1. ACTIONS — concrete recommendations that follow from the findings
-   Last. CLOSING / THE ASK — dark background, white text, call to action
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DESIGN RULES (RubyPlay brand — apply to every slide):
 
-EDITORIAL JUDGMENT — this is your most important instruction:
-For each possible topic in the data (KPIs, per-player metrics, benchmark gaps, game performance, portfolio gaps, concentration risk, VIPs, promos, etc.):
-- Include it ONLY if it advances the audience one step further toward The Ask
-- Skip it if it adds noise, creates doubt, or the data is too thin to land a clear point
-- A slide that weakens the narrative is worse than no slide at all
-- The best presentations have 8-10 purposeful slides, not 14 padded ones
+Brand colours:
+  Red:      #CC0000  (accents, key numbers, signal badges, chart QBR bars)
+  Dark:     #1A1A1A  (table headers, title/closing bg, dark cards)
+  Off-white:#F5F5F5  (alt rows, KPI card bg)
+  Body:     #1E293B
+  Muted:    #64748B
+  White:    #FFFFFF
+  Positive: #16A34A  |  Negative: #CC0000
+  Chart palette (studios/lines): ['#CC0000','#1A1A1A','#2563EB','#D97706','#16A34A','#7C3AED','#0891B2']
 
-Ask yourself before each slide: "Does this make the audience more ready to say yes?" If not, cut it.
-
-DESIGN RULES (RubyPlay brand — MANDATORY):
-
-BRAND COLOURS:
-  Primary red:   #CC0000  (RubyPlay red — use for accents, highlights, key numbers, signal badges)
-  Dark/black:    #1A1A1A  (table headers, closing slide background, strong contrast elements)
-  Off-white:     #F5F5F5  (alternating table rows, KPI card backgrounds)
-  Body text:     #1E293B
-  Muted labels:  #64748B
-  White:         #FFFFFF  (slide backgrounds, text on dark backgrounds)
-  Positive:      #16A34A  |  Negative: #CC0000
-
-Each slide outer div:
+Outer div (every slide):
   style='width:100%;height:100%;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
 Logo bar (top of every slide):
-  Small "RUBYPLAY × {OPERATOR}" text top-left, font-size:11px; color:#64748B; letter-spacing:2px; padding:12px 28px 0;
+  <div style='font-size:11px;color:#64748B;letter-spacing:2px;padding:10px 28px 0;text-transform:uppercase;'>RUBYPLAY × ${operator.toUpperCase()}</div>
 
-Section label + headline pattern (like a premium editorial):
-  Left red border: border-left:3px solid #CC0000; padding-left:12px; margin-bottom:16px;
-  Section label: display:block; font-size:10px; color:#CC0000; letter-spacing:2px; text-transform:uppercase; font-weight:700; margin-bottom:4px;
-  Headline: font-size:28px–36px; font-weight:800; color:#1A1A1A; line-height:1.2;
+Editorial headline block (after logo bar, before body):
+  <div style='border-left:3px solid #CC0000;padding-left:12px;margin:8px 28px 0;'>
+    <span style='display:block;font-size:10px;color:#CC0000;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;'>[SECTION LABEL]</span>
+    <span style='display:block;font-size:26px;font-weight:800;color:#1A1A1A;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
+  </div>
 
-Body area: padding:16px 28px; flex:1; overflow:hidden;
+Body area: <div style='padding:10px 28px;flex:1;overflow:hidden;'>
 
-KPI cards (for metrics slides):
-  background:#F5F5F5; border:none; border-radius:0; padding:18px 16px; flex:1; text-align:left;
-  OR use a dark contrast card: background:#1A1A1A; color:white;
-  Label: font-size:10px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;
-  Value: font-size:32px–38px; font-weight:700; color:#1A1A1A (or white on dark card);
-  Highlighted value (key number): color:#CC0000;
+Tables: border-collapse:collapse; width:100%;
+  Header: background:#1A1A1A; color:#fff; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:8px 12px;
+  Rows: alternating #fff / #F5F5F5; font-size:12px; color:#1E293B; padding:7px 12px; border-bottom:1px solid #E5E7EB;
+  Key numbers: color:#CC0000; font-weight:700;
 
-Tables:
-  border-collapse:collapse; width:100%;
-  Header row: background:#1A1A1A; color:white; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
-  Header cells: padding:10px 14px; text-align:left;
-  Data rows: alternating background:#fff / #F5F5F5; font-size:13px; color:#1E293B;
-  Data cells: padding:9px 14px; border-bottom:1px solid #E5E7EB;
-  Key numbers in tables: color:#CC0000; font-weight:700;
+Signal badges: display:inline-block; padding:2px 8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+  CRITICAL → background:#CC0000; color:#fff
+  HIGH     → background:#1A1A1A; color:#fff
+  MEDIUM   → background:#64748B; color:#fff
 
-Signal / status badges:
-  CRITICAL: background:#CC0000; color:white; padding:3px 10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
-  HIGH: background:#1A1A1A; color:white; same padding;
-  MEDIUM: background:#64748B; color:white; same padding;
+Footer (bottom of every slide): <div style='font-size:10px;color:#94A3B8;padding:0 28px 8px;display:flex;justify-content:space-between;'><span>${operator} QBR</span><span>[SLIDE NUMBER]</span></div>
 
-Closing slide: background:#1A1A1A; color:white throughout; red accent bar or elements.
-Footer line on every slide (bottom): font-size:10px; color:#94A3B8; padding:0 28px 10px; display:flex; justify-content:space-between;
+SVG CHART RULES:
+- Use inline <svg> with a viewBox; set width="100%" and a fixed height in px
+- Bar charts: vertical bars, x-axis shows abbreviated month labels (Jan, Feb…), bars touching
+- QBR-period bars: fill #CC0000 | Non-QBR bars: fill #CBD5E1
+- Line charts: multiple coloured lines, one per studio; dots at data points; x-axis = months
+- Horizontal bar charts: sorted descending; label on left, bar extends right, value label at end
+- Always include axis tick lines and labels; no grid lines
+- Show up to 12 months of data — use whatever months are present in the analysis data
+- If only 1 or 2 months of data exist, show those bars/points; do not invent extra months
 
-CRITICAL: Use ONLY single quotes for ALL HTML attribute values (mandatory).
+ATTRIBUTE QUOTES: Use ONLY single quotes for ALL HTML attribute values. No double quotes inside HTML strings.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Generate the slides now:`;
+NOW GENERATE ALL 18 SLIDES:
+
+SLIDE 1 — TITLE
+  Layout: background #1A1A1A; logo top-left in white/muted; large centred operator name; sub-headline is a sharp assertion about the period; date range bottom-left; "QBR" badge top-right in #CC0000.
+  Headline rule: make it the strongest single statement you can draw from the data (e.g. "GGR +41% — Now Prove It Can Scale").
+
+SLIDE 2 — KPI CHARTS (Monthly Trends)
+  Section label: KPI OVERVIEW
+  Headline: write a conclusion drawn from the dominant KPI trend
+  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #F5F5F5; padding:12px)
+  Chart 1 — Total Bets (monthly)
+  Chart 2 — GGR (monthly)
+  Chart 3 — Active Players (monthly)
+  Chart 4 — Rounds per Player (monthly)
+  Each chart: x-axis = months (abbreviated), y-axis = values (no decimals for large numbers, use K/M suffix). QBR period bars = #CC0000, prior months = #CBD5E1. Include a tiny label above each chart naming the metric.
+  If a metric is not in the data, show its card with: font-size:11px; color:#64748B; text-align:center; padding-top:30px; "No data available"
+
+SLIDE 3 — GAME STUDIO PERFORMANCE (Monthly)
+  Section label: STUDIO BREAKDOWN
+  Headline: conclusion about which studio is leading or has the best trend
+  Layout: one SVG line chart, full-width, height ~200px
+  Lines: one per studio, colour from palette above, dots at each data point
+  Legend below chart: coloured dot + studio name
+  x-axis = months, y-axis = Total Bets or GGR (use whichever is in the data)
+  If studio breakdown by month is not in the data, render a "Coming Soon — Studio monthly data" placeholder (see placeholder spec at end)
+
+SLIDE 4 — NEW GAMES LAUNCHED
+  Section label: NEW LAUNCHES · [QBR period]
+  Headline: conclusion about new game performance
+  Table columns: Game Name | Studio | RTP | Total Bets (14d) | Players (14d)
+  Sort by Total Bets descending
+  Highlight top game row with left border: border-left:3px solid #CC0000
+  If no new games in data, show placeholder: "Coming Soon — New games data"
+
+SLIDE 5 — NEW GAMES: BETS BY STUDIO (Bar Chart)
+  Section label: LAUNCH PERFORMANCE
+  Headline: which studio launched strongest
+  Layout: one horizontal SVG bar chart — one bar per studio showing total bets from new games in the QBR period
+  Bars coloured using palette; sorted descending; value label at end of each bar
+  If data not available, show placeholder
+
+SLIDE 6 — RETENTION ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Retention Analysis"
+  Use the placeholder style defined at end.
+
+SLIDE 7 — REGIONAL COMPARISON
+  Section label: MARKET POSITION
+  Headline: conclusion about operator's position vs market/world
+  Layout: 3 side-by-side horizontal bar chart groups, one per dimension:
+    Group A — "This Operator" vs "Market Average" vs "World Benchmark" for Total Bets
+    Group B — same three for GGR
+    Group C — same three for Players
+  If regional/benchmark comparison data is not available, show placeholder
+
+SLIDE 8 — STUDIO SUMMARY TABLE
+  Section label: PORTFOLIO PERFORMANCE
+  Headline: conclusion about portfolio health
+  Table columns: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game
+  Sort by Total Bets descending
+  Add a summary row at the bottom (TOTAL) in bold
+  Key number: Bet Share % in #CC0000 for top studio
+
+SLIDE 9 — PLAYER SEGMENTATION
+  ALWAYS render as placeholder. Text: "Coming Soon — Player Segmentation"
+
+SLIDE 10 — VIP ANALYSIS
+  Section label: VIP PLAYERS
+  Headline: conclusion about VIP contribution or opportunity
+  Table columns: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€)
+  Sort by VIP Bets descending
+  If VIP data not available, show placeholder
+
+SLIDE 11 — MAX BET ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Max Bet Analysis"
+
+SLIDE 12 — PROMOTION ANALYSIS
+  ALWAYS render as placeholder. Text: "Coming Soon — Promotion Analysis"
+
+SLIDE 13 — GROWTH VS BENCHMARK
+  Section label: COMPETITIVE POSITION
+  Headline: where we are relative to peers — honest, pointed
+  Layout: 2-column layout. Left: operator's key KPIs in large bold numbers. Right: benchmark/peer values in muted grey.
+  Gap delta: show +/- vs benchmark in #CC0000 (negative) or #16A34A (positive)
+  If no benchmark data, show placeholder
+
+SLIDE 14 — THE PORTFOLIO GAP
+  Section label: MISSING OPPORTUNITIES
+  Headline: the gap, as a dollar or % number if possible
+  Table columns: Game Name | Key Fact | Market Rank | Market Share % | Signal badge
+  Each row is a game the operator is underperforming or missing
+  Signal badge colours per rules above
+  Show maximum 8 rows; if more exist, add footer "… and N more"
+
+SLIDE 15 — THE GROWTH LEVERS
+  Section label: GROWTH LEVERS
+  Headline: total opportunity size if possible
+  Table columns: Game Name | Key Fact | Players | GGR/Player | Total GGR | Opportunity | Action
+  Action column: small red pill button — <span style='background:#CC0000;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>ADD</span> or <span style='background:#1A1A1A;…'>EXPAND</span>
+  Sort by Opportunity descending
+
+SLIDE 16 — KPI GAPS
+  Section label: PERFORMANCE GAPS
+  Headline: the most important gap in one sentence
+  Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
+  Gap column: colour red if negative, green if positive
+  Trend column: ↑ ↓ → arrows coloured accordingly
+
+[AFTER SLIDE 16, INSERT ANY EXTRA NARRATIVE SLIDES HERE]
+  If the brief angle or the data warrants additional analysis slides (competitive intelligence, concentration risk, player lifetime value, etc.), insert them here — BEFORE the Actions slide.
+  Each extra slide must follow the same design rules and have a section label + editorial headline.
+  If no extra slides are needed, simply proceed to slide 17.
+
+SLIDE 17 — ACTIONS & PRIORITIES
+  Section label: RECOMMENDED ACTIONS
+  Headline: the decisive call — what must happen this quarter
+  Layout: numbered action cards (1–5 max), each card has:
+    - Priority badge (CRITICAL / HIGH / MEDIUM)
+    - Action title (bold, 1 line)
+    - One-line rationale (muted text)
+    - Expected outcome (small text, #16A34A)
+  Cards stacked vertically; each card background alternates #fff / #F5F5F5 with left border #CC0000
+
+SLIDE 18 — THE ASK / CLOSING
+  Layout: background #1A1A1A; full-bleed dark slide
+  Top: RUBYPLAY × ${operator.toUpperCase()} in white/muted small text
+  Centre: large white headline — the specific ask from the brief (or a powerful close if no ask provided)
+  Below: 3 bullet next steps in #CBD5E1 text
+  Red accent bar: <div style='width:48px;height:4px;background:#CC0000;margin:24px auto 0;'></div>
+  No footer on this slide.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12, and any slide with no data):
+  <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
+    <div style='width:40px;height:40px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
+    <div style='font-size:13px;font-weight:700;color:#1A1A1A;'>[TOPIC] — Coming Soon</div>
+    <div style='font-size:11px;color:#64748B;'>Data will appear here in a future analysis run</div>
+  </div>
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Generate all 18 slides now. Output only the slide delimiters — no other text:`;
 
   const message = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 8000,
+    max_tokens: 16000,
     messages: [{ role: 'user', content: userPrompt }],
     system: systemPrompt
   });
@@ -1983,6 +2110,7 @@ process.on('SIGTERM', () => {
     process.exit(1);
   }
 
+  server.timeout = 180000; // 3-minute request timeout (18-slide AI generation can take ~60s)
   server.listen(PORT, () => {
     console.log(`\n[jedify] Server running → http://localhost:${PORT}`);
     console.log(`[jedify] Mode: direct HTTP${process.env.JEDIFY_REFRESH_TOKEN ? ' (cloud)' : ' (local)'}`);
