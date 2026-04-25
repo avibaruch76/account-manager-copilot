@@ -118,43 +118,72 @@ ANALYSIS DATA — USE ONLY WHAT IS EXPLICITLY STATED HERE:
 ${sectionContent}
 ══════════════════════════════════════
 
-SLIDES TO CREATE (6–8 total):
-1. TITLE — operator name + exact date range from the data + strong assertion headline
-2. KPI SUMMARY — key metrics explicitly stated in the data, laid out as cards
-3–5. FINDINGS — 2–4 slides covering the most important findings. Use real data tables and numbers only.
-6. ACTIONS — 2–4 concrete recommendations based on what the data shows
-7. CLOSING — navy background, white text, The Ask: "${brief.ask || 'call to action for this meeting'}", next steps
+SLIDES TO CREATE (8–14 total) — include ALL of the following that have data:
 
-DESIGN RULES (McKinsey light theme — MANDATORY for slides 1–6):
-Each slide must be a <div> filling 100% width and height with this base:
+MANDATORY (always include if data exists):
+1. TITLE — operator name + exact date/period from the data + sharp assertion headline
+2. VOLUME & PLAYER KPIs — one slide showing ALL key metrics from the data: total GGR, total bets, active players, GGR/player, rounds/player, bet/round, avg session length, retention — whatever is in the data. Layout: 2 rows of metric cards or a comparison table vs peer benchmark
+3. PEER BENCHMARK COMPARISON — how operator KPIs compare to market/peer benchmarks. Must show actual numbers side by side.
+4. PORTFOLIO GAP — games the market plays that this operator doesn't have or underplays. Real game names only.
+5. ACTIONS & NEXT STEPS — concrete recommendations
+6. CLOSING / THE ASK — navy background, white text
+
+INCLUDE IF DATA IS AVAILABLE (add one slide per topic):
+- Per-player economics breakdown (rounds/player, bet/round, GGR/player vs peers)
+- Top performing games table
+- Concentration risk (if top 2 games dominate)
+- VIP / high-ARPU segment analysis
+- Promo / free-rounds impact
+- Any other major finding from the analysis
+
+Cover EVERY significant finding in the data. Do not skip topics because you've "run out of slides" — go up to 14 if needed.
+
+DESIGN RULES (RubyPlay brand — MANDATORY):
+
+BRAND COLOURS:
+  Primary red:   #CC0000  (RubyPlay red — use for accents, highlights, key numbers, signal badges)
+  Dark/black:    #1A1A1A  (table headers, closing slide background, strong contrast elements)
+  Off-white:     #F5F5F5  (alternating table rows, KPI card backgrounds)
+  Body text:     #1E293B
+  Muted labels:  #64748B
+  White:         #FFFFFF  (slide backgrounds, text on dark backgrounds)
+  Positive:      #16A34A  |  Negative: #CC0000
+
+Each slide outer div:
   style='width:100%;height:100%;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
-Header bar (top of every slide except closing):
-  background:#1E2761; color:white; padding:14px 32px; font-size:15px; font-weight:700; flex-shrink:0;
+Logo bar (top of every slide):
+  Small "RUBYPLAY × {OPERATOR}" text top-left, font-size:11px; color:#64748B; letter-spacing:2px; padding:12px 28px 0;
 
-Body area: padding:20px 32px; flex:1; overflow:hidden;
+Section label + headline pattern (like a premium editorial):
+  Left red border: border-left:3px solid #CC0000; padding-left:12px; margin-bottom:16px;
+  Section label: display:block; font-size:10px; color:#CC0000; letter-spacing:2px; text-transform:uppercase; font-weight:700; margin-bottom:4px;
+  Headline: font-size:28px–36px; font-weight:800; color:#1A1A1A; line-height:1.2;
 
-KPI cards layout (when showing metrics):
-  display:flex; gap:16px; for each card:
-  background:#F8FAFC; border:1px solid #E2E8F0; border-radius:8px; padding:20px 16px; flex:1; text-align:center;
-  Label: font-size:11px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:8px;
-  Value: font-size:36px; font-weight:700; color:#1E293B; margin-bottom:8px;
-  Change pill: display:inline-block; padding:3px 10px; border-radius:12px; font-size:13px; font-weight:700;
-    Positive: background:#DCFCE7; color:#16A34A;   Negative: background:#FEE2E2; color:#DC2626;
+Body area: padding:16px 28px; flex:1; overflow:hidden;
+
+KPI cards (for metrics slides):
+  background:#F5F5F5; border:none; border-radius:0; padding:18px 16px; flex:1; text-align:left;
+  OR use a dark contrast card: background:#1A1A1A; color:white;
+  Label: font-size:10px; color:#64748B; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;
+  Value: font-size:32px–38px; font-weight:700; color:#1A1A1A (or white on dark card);
+  Highlighted value (key number): color:#CC0000;
 
 Tables:
   border-collapse:collapse; width:100%;
-  Header row: background:#1E2761; color:white; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
+  Header row: background:#1A1A1A; color:white; font-size:11px; text-transform:uppercase; letter-spacing:0.5px;
   Header cells: padding:10px 14px; text-align:left;
-  Data rows: alternating background:#fff / #F8FAFC; font-size:13px; color:#1E293B;
-  Data cells: padding:9px 14px; border-bottom:1px solid #E2E8F0;
+  Data rows: alternating background:#fff / #F5F5F5; font-size:13px; color:#1E293B;
+  Data cells: padding:9px 14px; border-bottom:1px solid #E5E7EB;
+  Key numbers in tables: color:#CC0000; font-weight:700;
 
-Accent / highlight color: #7C3AED (purple)
-Positive numbers: #16A34A   Negative numbers: #DC2626
-Body text: #1E293B, font-size:14px, line-height:1.6
-Section sub-labels: font-size:10px; color:#64748B; text-transform:uppercase; letter-spacing:1px; font-weight:700; margin-bottom:8px;
+Signal / status badges:
+  CRITICAL: background:#CC0000; color:white; padding:3px 10px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
+  HIGH: background:#1A1A1A; color:white; same padding;
+  MEDIUM: background:#64748B; color:white; same padding;
 
-Closing slide: background:#1E2761 throughout; all text white.
+Closing slide: background:#1A1A1A; color:white throughout; red accent bar or elements.
+Footer line on every slide (bottom): font-size:10px; color:#94A3B8; padding:0 28px 10px; display:flex; justify-content:space-between;
 
 CRITICAL: Use ONLY single quotes for ALL HTML attribute values (mandatory).
 
