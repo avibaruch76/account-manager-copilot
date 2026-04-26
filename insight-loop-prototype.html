@@ -2714,6 +2714,25 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
             setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
             return;
           }
+          // Show live Jedify progress in the full analysis panel
+          if (status && status.progress && checkResults) {
+            const p = status.progress;
+            const elapsedMin = Math.floor((Date.now() - pollStart) / 60000);
+            const elapsedSec = Math.round(((Date.now() - pollStart) % 60000) / 1000);
+            const elapsedStr = elapsedMin > 0 ? `${elapsedMin}m ${elapsedSec}s` : `${elapsedSec}s`;
+            checkResults.innerHTML = `
+              <div style="padding:20px 20px 12px;">
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                  <div style="width:14px;height:14px;border:2px solid #E2E8F0;border-top-color:#7C3AED;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0;"></div>
+                  <span style="font-size:13px;font-weight:700;color:#1A1A1A;">Full analysis running…</span>
+                  <span style="font-size:11px;color:#94A3B8;margin-left:auto;">${elapsedStr}</span>
+                </div>
+                <div style="background:#F1F5F9;border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px;">
+                  <div style="height:100%;width:${p.pct}%;background:#7C3AED;border-radius:6px;transition:width 0.5s;"></div>
+                </div>
+                <div style="font-size:11px;color:#64748B;">Jedify: check ${p.iter} of ${p.maxIter} · ${p.pct}% complete</div>
+              </div>`;
+          }
         } catch (pollErr) {
           console.warn('[insight-loop] Background poll error (continuing):', pollErr.message);
         }

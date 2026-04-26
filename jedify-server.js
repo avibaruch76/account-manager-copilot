@@ -1471,6 +1471,8 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
         const maxIter = statusParsed.max_iterations || 1;
         const progressPct = Math.round((statusParsed.progress || 0) * 100);
         console.log(`[jedify-research] Poll ${i}: status=${JSON.stringify(generalStatus)} iter=${iteration}/${maxIter} progress=${progressPct}%`);
+        // Expose live progress to /api/research-status so client can show a progress indicator
+        _bgProgress = { iter: iteration, maxIter, pct: progressPct, elapsedS: i * pollInterval / 1000, inquiryId };
 
         // Emit real progress stage based on iteration count
         if (onStage && maxIter > 0) {
@@ -1484,6 +1486,7 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
         if (generalStatus === 'done' || statusParsed.is_complete) {
           const report = statusParsed.final_answer || statusParsed.answer || statusParsed.report || '';
           console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
+          _bgProgress = null; // clear progress — run is done
           if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
           return report;
         }
@@ -1507,6 +1510,8 @@ let _lastCompletedResult = null;
 // Per-runId completed results — keyed by runId so concurrent runs don't overwrite each other
 const _completedResultsByRunId = new Map(); // runId → result
 const _activeRunIds = new Set();             // runIds currently executing
+// Live progress for the active background run — exposed via /api/research-status
+let _bgProgress = null; // { iter, maxIter, pct, elapsed, inquiryId }
 // All active SSE response objects — so SIGTERM can notify them before shutdown
 const _activeSSeClients = new Set();
 
@@ -1630,7 +1635,7 @@ const server = http.createServer(async (req, res) => {
       } else {
         const active = _activeRunIds.has(runId);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ active, inquiry_id: active ? _activeInquiryId : null }));
+        res.end(JSON.stringify({ active, inquiry_id: active ? _activeInquiryId : null, progress: _bgProgress }));
       }
     } else {
       // Legacy path (no runId) — return last completed result or active status
