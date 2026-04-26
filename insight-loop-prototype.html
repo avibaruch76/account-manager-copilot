@@ -1861,6 +1861,13 @@ function showPartialRunControls() {
   if (tbSel)   tbSel.style.display   = 'inline-flex';
   if (tbRerun) tbRerun.style.display = 'inline-flex';
   if (tbHint)  tbHint.style.display  = 'inline';
+
+  // Pre-select mandatory checks by default if nothing is selected yet
+  if (_partialSelectedIds.size === 0) {
+    _checks.filter(c => c.type === 'mandatory').forEach(c => _partialSelectedIds.add(c.id));
+    renderCheckLists(); // refresh checkboxes to show the pre-selection
+  }
+
   updatePartialRunButton();
 }
 
