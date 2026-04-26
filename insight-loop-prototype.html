@@ -508,8 +508,7 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
     </div>
     <p class="brand-label" id="run-brand-label"></p>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-    <div id="research-timeline" style="text-align:left;margin:16px 0"></div>
-    <p id="run-eta" style="font-size:11px;color:#94A3B8;margin-top:8px">Connecting to Jedify...</p>
+    <p id="run-eta" style="font-size:12px;color:#94A3B8;margin-top:10px">Connecting to Jedify...</p>
     <div style="margin-top:16px;text-align:center">
       <button onclick="cancelAnalysis()" style="background:linear-gradient(135deg,#7F1D1D,#DC2626);color:white;border:none;padding:9px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✕ Cancel Analysis</button>
     </div>
@@ -2411,23 +2410,6 @@ async function runAnalysis(customPrompt, partialCheckIds) {
     }
   }
 
-  // Initialize research timeline — pre-render all stages as grey
-  const TIMELINE_STAGES = [
-    'Submitting research request...',
-    'Jedify is reading the semantic model...',
-    'Querying performance data...',
-    'Analyzing trends and patterns...',
-    'Building insights...',
-    'Drafting recommendations...',
-    'Finalizing report...'
-  ];
-  const timeline = document.getElementById('research-timeline');
-  if (timeline) {
-    timeline.innerHTML = TIMELINE_STAGES.map((label, i) =>
-      `<div id="rt-stage-${i}" style="padding:5px 0;font-size:13px;color:#C0C8D4;display:flex;align-items:center;gap:8px">` +
-      `<span id="rt-icon-${i}" style="font-size:16px">⬜</span> ${label}</div>`
-    ).join('');
-  }
   const personaLabel = {
     qbr_customer: 'QBR Customer',
     am_actions: 'AM Actions',
@@ -2439,7 +2421,7 @@ async function runAnalysis(customPrompt, partialCheckIds) {
     ? ` — Run ${_runSession.runs.length + 1} (${partialCheckIds.length} check${partialCheckIds.length > 1 ? 's' : ''})`
     : '';
   document.getElementById('run-eta').innerHTML =
-    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}${iterLabel}</strong> — Jedify is researching. This takes 5-10 minutes.`;
+    `<strong style="color:#4A235A">🔬 ${personaLabel}${iterLabel}</strong> — researching…`;
 
   // Show overlay
   const overlay = document.getElementById('run-overlay');
@@ -2892,6 +2874,8 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
   try {
     // Fire data_analyst silently in background — only on full runs (not partial re-runs)
     if (!partialCheckIds) fireBackground('data_analyst');
+    // Start elapsed timer on the persona tab before firing
+    _startPersonaTimer(_selectedPersona);
     // Run selected persona with full SSE progress
     const result = await fireForeground(_selectedPersona);
     return result || { report: 'done' };
@@ -2967,25 +2951,8 @@ async function readSSEStream(response) {
         }
 
         if (evt.type === 'stage') {
-          // Mark all previous stages as done (green ✅), current as active (⏳)
+          // Advance progress bar based on stage index — no stage list shown
           const total = evt.total || 7;
-          for (let s = 0; s < total; s++) {
-            const row = document.getElementById('rt-stage-' + s);
-            const icon = document.getElementById('rt-icon-' + s);
-            if (!row || !icon) continue;
-            if (s < evt.index) {
-              // Already done
-              icon.textContent = '✅';
-              row.style.color = '#64748B';
-            } else if (s === evt.index) {
-              // Currently active
-              icon.textContent = '⏳';
-              row.style.color = '#4A235A';
-              row.style.fontWeight = '700';
-              row.style.animation = 'fadeIn .4s ease';
-            }
-            // Future stages stay grey ⬜
-          }
           const pct = Math.min(90, Math.round(((evt.index + 1) / total) * 90));
           if (fill) fill.style.width = pct + '%';
         }
@@ -3078,6 +3045,40 @@ const PERSONA_TITLE = {
   am_detailed:  '📊 AM Detailed Briefing',
   data_analyst: '🔬 Full Data Analysis'
 };
+
+// ── Persona tab elapsed timers ────────────────────────────────────────────────
+const _personaTimers   = {};
+const _personaTabOrig  = {};
+
+function _startPersonaTimer(persona) {
+  const shortId = PERSONA_TAB_ID[persona];
+  if (!shortId) return;
+  const tab = document.querySelector(`.ptab[data-persona-id="${shortId}"]`);
+  if (!tab) return;
+  if (_personaTimers[persona]) clearInterval(_personaTimers[persona]);
+  _personaTabOrig[persona] = tab.innerHTML;
+  const startMs = Date.now();
+  function _tick() {
+    const elapsed = Math.round((Date.now() - startMs) / 1000);
+    const m = Math.floor(elapsed / 60), s = elapsed % 60;
+    const t = m > 0 ? `${m}m ${s}s` : `${s}s`;
+    tab.innerHTML = (_personaTabOrig[persona] || '') +
+      ` <span style="font-size:10px;color:#7C3AED;font-weight:600;background:#F3F0FF;padding:1px 6px;border-radius:10px;vertical-align:middle;">⏳ ${t}</span>`;
+  }
+  _tick();
+  _personaTimers[persona] = setInterval(_tick, 1000);
+}
+
+function _stopPersonaTimer(persona) {
+  if (_personaTimers[persona]) { clearInterval(_personaTimers[persona]); delete _personaTimers[persona]; }
+  const shortId = PERSONA_TAB_ID[persona];
+  if (!shortId) return;
+  const tab = document.querySelector(`.ptab[data-persona-id="${shortId}"]`);
+  if (tab && _personaTabOrig[persona] !== undefined) {
+    tab.innerHTML = _personaTabOrig[persona];
+    delete _personaTabOrig[persona];
+  }
+}
 
 // ── Lightweight markdown → HTML renderer ─────────────────────────────────────
 function renderMarkdown(raw) {
@@ -3247,8 +3248,9 @@ function isJedifyErrorReport(report) {
 
 function renderResearchReport(data) {
   console.log('[renderResearchReport] persona:', data?.persona, '| report length:', data?.report?.length ?? 'N/A');
-  // Fresh results arriving — remove stale cache banner
+  // Fresh results arriving — remove stale cache banner + stop persona tab timer
   document.getElementById('cache-banner')?.remove();
+  if (data?.persona) _stopPersonaTimer(data.persona);
   // Update session state (creates session on first call, appends on subsequent)
   if (data && data.persona !== 'data_analyst') {
     initOrUpdateSession(data, window._currentRunCheckIds || []);
@@ -4300,23 +4302,6 @@ function confirmAndRun() {
 
   const enabledChecks = selection.enabledChecks || [];
 
-  // Initialize research timeline — pre-render all stages as grey
-  const TIMELINE_STAGES = [
-    'Submitting research request...',
-    'Jedify is reading the semantic model...',
-    'Querying performance data...',
-    'Analyzing trends and patterns...',
-    'Building insights...',
-    'Drafting recommendations...',
-    'Finalizing report...'
-  ];
-  const timeline = document.getElementById('research-timeline');
-  if (timeline) {
-    timeline.innerHTML = TIMELINE_STAGES.map((label, i) =>
-      `<div id="rt-stage-${i}" style="padding:5px 0;font-size:13px;color:#C0C8D4;display:flex;align-items:center;gap:8px">` +
-      `<span id="rt-icon-${i}" style="font-size:16px">⬜</span> ${label}</div>`
-    ).join('');
-  }
   const personaLabel = {
     qbr_customer: 'QBR Customer',
     am_actions: 'AM Actions',
@@ -4325,7 +4310,7 @@ function confirmAndRun() {
     admin: 'All Personas'
   }[_selectedPersona] || _selectedPersona;
   document.getElementById('run-eta').innerHTML =
-    `<strong style="color:#4A235A">🔬 Persona: ${personaLabel}</strong> — Jedify is researching. This takes 5-10 minutes.`;
+    `<strong style="color:#4A235A">🔬 ${personaLabel}</strong> — researching…`;
   fill.style.width = '5%';
 
   const progressTimer = setInterval(() => {
