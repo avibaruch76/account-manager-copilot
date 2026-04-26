@@ -1399,7 +1399,7 @@ const STAGE_POLL_AT = [0, 2, 5, 9, 14, 20, 28];
 // Active inquiry ID — stored so /api/cancel-research can stop it
 let _activeInquiryId = null;
 
-async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
+async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken, onInquiryId) {
   // Submit the research question
   console.log(`[jedify-research] Submitting ask_a_research_question (prompt length: ${prompt.length})`);
   const askRes = await sendMCP({
@@ -1418,6 +1418,7 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken) {
   if (!inquiryId) throw new Error('No inquiry_id in response: ' + askText.slice(0, 200));
 
   _activeInquiryId = inquiryId;
+  if (onInquiryId) onInquiryId(inquiryId); // notify caller so it can associate inquiry_id with bgRunId
   const sessionVersionAtStart = getSessionVersion();
   console.log(`[jedify-research] Submitted → inquiry_id=${inquiryId}, session=${sessionVersionAtStart}, polling...`);
   if (onStage) onStage(0, RESEARCH_STAGES[0]);
@@ -1510,12 +1511,13 @@ let _lastCompletedResult = null;
 // Per-runId completed results — keyed by runId so concurrent runs don't overwrite each other
 const _completedResultsByRunId = new Map(); // runId → result
 const _activeRunIds = new Set();             // runIds currently executing
+const _bgInquiryByRunId = new Map();         // runId → Jedify inquiry_id (for resume after restart)
 // Live progress for the active background run — exposed via /api/research-status
 let _bgProgress = null; // { iter, maxIter, pct, elapsed, inquiryId }
 // All active SSE response objects — so SIGTERM can notify them before shutdown
 const _activeSSeClients = new Set();
 
-async function runResearch(reqBody, onProgress) {
+async function runResearch(reqBody, onProgress, onInquiryId) {
   const { entity, scope, dateRange, enabledOptionalCheckIds, checkDefinitions, partialMandatoryIds, persona, customPrompt, globalRules } = reqBody;
   const emit = onProgress || (() => {});
   const scopeLabel = scope || 'operator';
@@ -1533,7 +1535,7 @@ async function runResearch(reqBody, onProgress) {
   _cancelToken = { cancelled: false };
   const report = await askJedifyResearch(prompt, onStage, (pollNum) => {
     emit({ type: 'heartbeat', poll: pollNum });
-  }, _cancelToken);
+  }, _cancelToken, onInquiryId || null);
 
   console.log(`[research] Research complete. Report length: ${report.length} chars.`);
 
@@ -1634,8 +1636,10 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify(result));
       } else {
         const active = _activeRunIds.has(runId);
+        // Return the specific inquiry_id for this runId (more reliable than the global _activeInquiryId)
+        const inquiryId = _bgInquiryByRunId.get(runId) || (active ? _activeInquiryId : null);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ active, inquiry_id: active ? _activeInquiryId : null, progress: _bgProgress }));
+        res.end(JSON.stringify({ active, inquiry_id: inquiryId, progress: _bgProgress }));
       }
     } else {
       // Legacy path (no runId) — return last completed result or active status
@@ -1671,6 +1675,76 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ ok: true, cancelled: _activeInquiryId || 'none' }));
+    return;
+  }
+
+  // Resume polling an existing Jedify inquiry after server restart.
+  // The inquiry lives on Jedify's backend and survives our server restarts.
+  if (req.method === 'POST' && req.url === '/api/resume-inquiry') {
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      try {
+        const { runId, inquiryId } = JSON.parse(body);
+        if (!runId || !inquiryId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Missing runId or inquiryId' }));
+          return;
+        }
+        // If already completed or already active, don't start a duplicate
+        if (_completedResultsByRunId.has(runId) || _activeRunIds.has(runId)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, status: 'already_tracked' }));
+          return;
+        }
+        console.log(`[resume-inquiry] Resuming polling for runId=${runId} inquiryId=${inquiryId}`);
+        _activeRunIds.add(runId);
+        _bgInquiryByRunId.set(runId, inquiryId);
+        _activeInquiryId = inquiryId;
+        // Poll the existing inquiry until done
+        (async () => {
+          const maxPolls = 360;
+          const pollInterval = 5000;
+          try {
+            for (let i = 1; i <= maxPolls; i++) {
+              await new Promise(r => setTimeout(r, pollInterval));
+              try {
+                const statusRes = await sendMCP({
+                  method: 'tools/call',
+                  params: { name: 'check_question_status', arguments: { inquiry_id: inquiryId, inquiry_type: 'research' } }
+                }, 30000);
+                if (statusRes.error) continue;
+                const sp = JSON.parse(statusRes.result?.content?.[0]?.text || '{}');
+                const iter = sp.current_iteration || 0;
+                const maxIter = sp.max_iterations || 1;
+                const pct = Math.round((sp.progress || 0) * 100);
+                _bgProgress = { iter, maxIter, pct, elapsedS: i * pollInterval / 1000, inquiryId };
+                const done = (sp.status?.general || sp.status) === 'done' || sp.is_complete;
+                console.log(`[resume-inquiry] poll ${i}: iter=${iter}/${maxIter} pct=${pct}% done=${done}`);
+                if (done) {
+                  const report = sp.final_answer || sp.answer || sp.report || '';
+                  const result = { report, persona: 'data_analyst', generatedAt: new Date().toISOString() };
+                  _completedResultsByRunId.set(runId, result);
+                  _lastCompletedResult = result;
+                  _bgProgress = null;
+                  console.log(`[resume-inquiry] Done. report=${report.length} chars`);
+                  break;
+                }
+              } catch (e) { console.warn(`[resume-inquiry] poll ${i} error:`, e.message); }
+            }
+          } finally {
+            _activeRunIds.delete(runId);
+            _bgInquiryByRunId.delete(runId);
+            _activeInquiryId = null;
+          }
+        })();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, runId, inquiryId }));
+      } catch (e) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
     return;
   }
 
@@ -1841,16 +1915,29 @@ const server = http.createServer(async (req, res) => {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ backgroundRunId: bgRunId }));
           // Run async — store result in the same per-runId map used by /api/research-status
-          runResearch({ ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona })
+          _activeRunIds.add(bgRunId);
+          runResearch(
+            { ...reqBody, entity, scope, dateRange, enabledOptionalCheckIds, persona },
+            null,
+            (inquiryId) => {
+              // Inquiry submitted to Jedify — store id so client can resume if server restarts
+              _bgInquiryByRunId.set(bgRunId, inquiryId);
+              console.log(`[noSSE background] Run ${bgRunId} → Jedify inquiry ${inquiryId}`);
+            }
+          )
             .then(results => {
               _completedResultsByRunId.set(bgRunId, results);
               _lastCompletedResult = results;
+              _activeRunIds.delete(bgRunId);
+              _bgInquiryByRunId.delete(bgRunId);
               if (_completedResultsByRunId.size > 20) {
                 _completedResultsByRunId.delete(_completedResultsByRunId.keys().next().value);
               }
               console.log(`[noSSE background] Run ${bgRunId} complete, report: ${results?.report?.length ?? 0} chars`);
             })
             .catch(err => {
+              _activeRunIds.delete(bgRunId);
+              _bgInquiryByRunId.delete(bgRunId);
               console.error(`[noSSE background] Run ${bgRunId} failed:`, err.message);
             });
           return;
