@@ -90,7 +90,9 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   ).join('\n\n');
 
   // Build dynamic slide list based on plan
-  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17];
+  // Default order: Title → KPI → Studio Summary Table (8) → Studio Performance (3) → New Games → Retention → Free Rounds (20) → Player Seg → VIP → MaxBet → Promo → Portfolio → Growth → KPI Gaps
+  // Slides 5 (Bets by Studio) and 7 (Regional) removed from default
+  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,8,3,4,6,20,9,10,11,12,13,14,15,16,17];
   const customSlides = (slidePlan && slidePlan.custom) ? slidePlan.custom : [];
   const on = id => enabledIds.includes(id);
 
@@ -102,12 +104,12 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
     2: `SLIDE {{N}} — KPI CHARTS (Monthly Trends)
   Section label: KPI OVERVIEW
   Headline: write a conclusion drawn from the dominant KPI trend
-  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #F5F5F5; padding:12px)
+  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #1A1A1A; border:1px solid #2D3748; border-radius:6px; padding:12px)
   Chart 1 — Total Bets (monthly)
   Chart 2 — GGR (monthly)
   Chart 3 — Active Players (monthly)
   Chart 4 — Rounds per Player (monthly)
-  Each chart: x-axis = months (abbreviated), y-axis = values (use K/M suffix). QBR period bars = #CC0000, prior months = #CBD5E1. Tiny label above each chart.
+  Each chart: x-axis = months (abbreviated), y-axis = values (use K/M suffix). QBR period bars = #CC0000, prior months = #374151. Tiny label above each chart in #888.
   If a metric is not in the data, show its card with muted "No data available" text.`,
 
     3: `SLIDE {{N}} — STUDIO PERFORMANCE (Monthly)
@@ -125,24 +127,8 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   Sort by Total Bets descending. Highlight top game row with left border: border-left:3px solid #CC0000
   If no new games in data, show placeholder`,
 
-    5: `SLIDE {{N}} — BETS BY STUDIO (Bar Chart)
-  Section label: STUDIO PERFORMANCE
-  Headline: which studio commands the most action
-  Layout: one horizontal SVG bar chart — one bar per studio showing total bets (all games, full QBR period)
-  Bars coloured using palette (one colour per studio); sorted descending; value label at end of each bar
-  Always render this chart — every analysis has studio-level bet data`,
-
     6: `SLIDE {{N}} — RETENTION ANALYSIS
   ALWAYS render as placeholder. Text: "Coming Soon — Retention Analysis"`,
-
-    7: `SLIDE {{N}} — REGIONAL COMPARISON
-  Section label: MARKET POSITION
-  Headline: conclusion about operator's position vs market/world
-  Layout: 3 side-by-side horizontal bar chart groups:
-    Group A — "This Operator" vs "Market Average" vs "World Benchmark" for Total Bets
-    Group B — same three for GGR
-    Group C — same three for Players
-  If comparison data is not available, show placeholder`,
 
     8: `SLIDE {{N}} — STUDIO SUMMARY TABLE
   Section label: PORTFOLIO PERFORMANCE
@@ -185,6 +171,14 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   Headline: the most important gap in one sentence
   Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
   Gap column: red if negative, green if positive. Trend: ↑ ↓ → arrows coloured accordingly`,
+
+    20: `SLIDE {{N}} — FREE ROUNDS PERFORMANCE
+  Section label: FREE ROUNDS
+  Headline: conclusion about free rounds volume, frequency, or opportunity (e.g. "Free Rounds Drive 18% of All Activity — Untapped Upsell")
+  Table columns: Studio | Free Round Games | Total Free Rounds | FR Share % | GGR from FR (€)
+  Sort by Total Free Rounds descending. Bold TOTAL summary row at bottom.
+  FR Share % in #CC0000 for the top studio.
+  If free rounds data is not available, show placeholder`,
   };
 
   const ACTIONS_DEF = `SLIDE {{N}} — ACTIONS & PRIORITIES
@@ -192,10 +186,10 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   Headline: the decisive call — what must happen this quarter
   Layout: numbered action cards (1–5 max), each card:
     - Priority badge (CRITICAL / HIGH / MEDIUM)
-    - Action title (bold, 1 line)
-    - One-line rationale (muted text)
+    - Action title (bold, white, 1 line)
+    - One-line rationale (muted text, #64748B)
     - Expected outcome (small text, #16A34A)
-  Cards stacked vertically; alternating #fff / #F5F5F5 background; left border #CC0000`;
+  Cards stacked vertically; alternating #161616 / #1E1E1E background; left border #CC0000; border-bottom:1px solid #2D3748`;
 
   const ASK_DEF = `SLIDE {{N}} — THE ASK / CLOSING
   Layout: background #1A1A1A; full-bleed dark slide
@@ -208,8 +202,9 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   let slideN = 1;
   const slideLines = [];
 
-  // Standard slides 1-15 (filtered by plan)
-  for (let id = 1; id <= 15; id++) {
+  // Standard slides in presentation order (filtered by plan)
+  const SLIDE_ORDER = [1, 2, 8, 3, 4, 6, 20, 9, 10, 11, 12, 13, 14, 15];
+  for (const id of SLIDE_ORDER) {
     if (on(id) && SLIDE_DEFS[id]) {
       slideLines.push(SLIDE_DEFS[id].replace(/\{\{N\}\}/g, String(slideN++)));
     }
@@ -233,8 +228,8 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
 
   const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12 and any slide with no data available):
   <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
-    <div style='width:40px;height:40px;border-radius:50%;background:#F5F5F5;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
-    <div style='font-size:16px;font-weight:700;color:#1A1A1A;'>[TOPIC] — Coming Soon</div>
+    <div style='width:40px;height:40px;border-radius:50%;background:#1A1A1A;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
+    <div style='font-size:16px;font-weight:700;color:#FFFFFF;'>[TOPIC] — Coming Soon</div>
     <div style='font-size:13px;color:#64748B;'>Data will appear here in a future analysis run</div>
   </div>`;
 
@@ -282,44 +277,46 @@ DESIGN RULES (RubyPlay brand — apply to every slide):
 
 Brand colours:
   Red:      #CC0000  (accents, key numbers, signal badges, chart QBR bars)
-  Dark:     #1A1A1A  (table headers, title/closing bg, dark cards)
-  Off-white:#F5F5F5  (alt rows, KPI card bg)
-  Body:     #1E293B
+  Dark:     #1A1A1A  (table headers, card surfaces)
+  Surface:  #161616  (even table rows on black bg)
+  Surface2: #1E1E1E  (odd table rows on black bg)
+  Body:     #CBD5E1  (body text on dark bg)
   Muted:    #64748B
-  White:    #FFFFFF
+  White:    #FFFFFF  (headlines, important text)
   Positive: #16A34A  |  Negative: #CC0000
-  Chart palette (studios/lines): ['#CC0000','#1A1A1A','#2563EB','#D97706','#16A34A','#7C3AED','#0891B2']
+  Chart palette (studios/lines): ['#CC0000','#60A5FA','#34D399','#FBBF24','#A78BFA','#F87171','#38BDF8']
 
 Outer div (every slide):
-  style='width:1280px;height:720px;box-sizing:border-box;background:#fff;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
+  style='width:1280px;height:720px;box-sizing:border-box;background:#0D0D0D;color:#CBD5E1;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
 Logo bar (top of every slide):
-  <div style='font-size:11px;color:#64748B;letter-spacing:2px;padding:10px 28px 0;text-transform:uppercase;'>RUBYPLAY × ${operator.toUpperCase()}</div>
+  <div style='font-size:11px;color:#555;letter-spacing:2px;padding:10px 28px 0;text-transform:uppercase;'>RUBYPLAY × ${operator.toUpperCase()}</div>
 
 Editorial headline block (after logo bar, before body):
   <div style='border-left:3px solid #CC0000;padding-left:12px;margin:8px 28px 0;'>
     <span style='display:block;font-size:10px;color:#CC0000;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;'>[SECTION LABEL]</span>
-    <span style='display:block;font-size:32px–40px;font-weight:800;color:#1A1A1A;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
+    <span style='display:block;font-size:32px–40px;font-weight:800;color:#FFFFFF;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
   </div>
 
 Body area: <div style='padding:10px 28px;flex:1;overflow:hidden;'>
 
 Tables: border-collapse:collapse; width:100%;
   Header: background:#1A1A1A; color:#fff; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:8px 12px;
-  Rows: alternating #fff / #F5F5F5; font-size:12px; color:#1E293B; padding:7px 12px; border-bottom:1px solid #E5E7EB;
+  Rows: alternating #161616 / #1E1E1E; font-size:12px; color:#CBD5E1; padding:7px 12px; border-bottom:1px solid #2D3748;
   Key numbers: color:#CC0000; font-weight:700;
 
 Signal badges: display:inline-block; padding:2px 8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
   CRITICAL → background:#CC0000; color:#fff
   HIGH     → background:#1A1A1A; color:#fff
-  MEDIUM   → background:#64748B; color:#fff
+  MEDIUM   → background:#374151; color:#CBD5E1
 
-Footer (bottom of every slide): <div style='font-size:10px;color:#94A3B8;padding:0 28px 8px;display:flex;justify-content:space-between;'><span>${operator} QBR</span><span>[SLIDE NUMBER]</span></div>
+Footer (bottom of every slide): <div style='font-size:10px;color:#555;padding:0 28px 8px;display:flex;justify-content:space-between;'><span>${operator} QBR</span><span>[SLIDE NUMBER]</span></div>
 
 SVG CHART RULES:
 - Use inline <svg> with a viewBox; set width="100%" and a fixed height in px
 - Bar charts: vertical bars, x-axis shows abbreviated month labels (Jan, Feb…), bars touching
-- QBR-period bars: fill #CC0000 | Non-QBR bars: fill #CBD5E1
+- QBR-period bars: fill #CC0000 | Non-QBR bars: fill #374151
+- Axis labels: fill #888 | Tick lines: stroke #333
 - Line charts: multiple coloured lines, one per studio; dots at data points; x-axis = months
 - Horizontal bar charts: sorted descending; label on left, bar extends right, value label at end
 - Always include axis tick lines and labels; no grid lines
