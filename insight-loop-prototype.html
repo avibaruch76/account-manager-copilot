@@ -1862,12 +1862,6 @@ function showPartialRunControls() {
   if (tbRerun) tbRerun.style.display = 'inline-flex';
   if (tbHint)  tbHint.style.display  = 'inline';
 
-  // Pre-select mandatory checks by default if nothing is selected yet
-  if (_partialSelectedIds.size === 0) {
-    _checks.filter(c => c.type === 'mandatory').forEach(c => _partialSelectedIds.add(c.id));
-    renderCheckLists(); // refresh checkboxes to show the pre-selection
-  }
-
   updatePartialRunButton();
 }
 
@@ -3315,7 +3309,10 @@ function tryRestoreAnalysisCache() {
     // Restore session state
     _runSession = payload.runSession;
     if (_runSession) {
-      renderCheckLists();       // shows checkboxes instead of toggles
+      // On cache restore, pre-select mandatory checks so the user is ready to re-run fresh
+      _partialSelectedIds.clear();
+      _checks.filter(c => c.type === 'mandatory').forEach(c => _partialSelectedIds.add(c.id));
+      renderCheckLists();       // shows checkboxes with mandatory pre-ticked
       showPartialRunControls(); // shows "Run Selected" + "Re-run All" in toolbar
     }
     // Show download buttons
