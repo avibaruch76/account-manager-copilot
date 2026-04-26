@@ -5624,15 +5624,18 @@ async function _pptxGenerate() {
     _pptxSlides = slides;
     _pptxRenderPreview();
   } catch (e) {
+    const isNetwork = /failed to fetch|network|aborted|load failed/i.test(e.message);
     content.innerHTML = `
       <div style="text-align:center;padding:40px 20px;">
         <div style="font-size:32px;margin-bottom:12px;">❌</div>
         <div style="font-size:14px;font-weight:700;color:#DC2626;margin-bottom:8px;">Generation failed</div>
-        <div style="font-size:12px;color:#64748B;margin-bottom:20px;">${_pptxEsc(e.message)}</div>
+        <div style="font-size:12px;color:#64748B;margin-bottom:4px;">${_pptxEsc(e.message)}</div>
+        ${isNetwork ? `<div style="font-size:11px;color:#94A3B8;margin-bottom:20px;">Network error — the server may have been briefly restarting. Please try again.</div>` : '<div style="margin-bottom:20px;"></div>'}
       </div>
     `;
     document.getElementById('pptx-footer').innerHTML = `
-      <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back to Brief</button>
+      <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
+      <button onclick="_pptxRenderPlan()" style="padding:9px 18px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">↺ Try Again</button>
     `;
   }
   } catch (fatalErr) {
