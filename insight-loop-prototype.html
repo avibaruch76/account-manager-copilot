@@ -2254,7 +2254,7 @@ async function cancelAnalysis() {
 let _analysisRunning = false;
 let _analysisAbortController = null;
 
-function runAnalysis(customPrompt, partialCheckIds) {
+async function runAnalysis(customPrompt, partialCheckIds) {
   const pop = getSelectedPopulation();
 
   if (pop.count === 0) {
@@ -2294,6 +2294,54 @@ function runAnalysis(customPrompt, partialCheckIds) {
   // Build selection payload (includes enabledChecks)
   const selection = buildSelectionPayload(pop);
   const enabledChecks = selection.enabledChecks || [];
+
+  // ── Pre-run check count warning ──────────────────────────────────────────
+  // Jedify times out with too many checks. Warn the user and let them reduce.
+  // Skip warning for partial re-runs (partialCheckIds) — those are already reduced.
+  const WARN_CHECK_THRESHOLD = 8;   // above this = likely timeout
+  const totalChecks = partialCheckIds ? partialCheckIds.length : enabledChecks.length;
+  if (!partialCheckIds && totalChecks > WARN_CHECK_THRESHOLD) {
+    const minMins = Math.round(totalChecks * 0.4);
+    const maxMins = Math.round(totalChecks * 0.8);
+    const proceed = await new Promise(resolve => {
+      const w = document.createElement('div');
+      w.id = 'check-count-warning';
+      w.style.cssText = `
+        position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.5);
+        display:flex;align-items:center;justify-content:center;
+      `;
+      w.innerHTML = `
+        <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:420px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.25);font-family:Segoe UI,system-ui,sans-serif;">
+          <div style="font-size:28px;text-align:center;margin-bottom:12px;">⚠️</div>
+          <div style="font-size:16px;font-weight:700;color:#1A1A1A;text-align:center;margin-bottom:8px;">
+            ${totalChecks} checks selected
+          </div>
+          <div style="font-size:13px;color:#475569;text-align:center;line-height:1.6;margin-bottom:20px;">
+            This is likely to take <strong>${minMins}–${maxMins} minutes</strong> and may time out.<br>
+            For best results, keep it under ${WARN_CHECK_THRESHOLD} checks per run.
+          </div>
+          <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 14px;margin-bottom:20px;font-size:12px;color:#92400E;line-height:1.5;">
+            <strong>Tip:</strong> Go to <strong>Research Config</strong> → disable optional checks you don't need → use <strong>Run 2</strong> to add them iteratively after the first results arrive.
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button id="warn-reduce-btn" style="flex:1;padding:10px;background:#F1F5F9;color:#1E2761;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Reduce Checks</button>
+            <button id="warn-run-btn" style="flex:1;padding:10px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">▶ Run Anyway</button>
+          </div>
+        </div>`;
+      document.body.appendChild(w);
+      document.getElementById('warn-reduce-btn').onclick = () => {
+        document.body.removeChild(w);
+        showSection('config', document.querySelector('.nav a[href="#config"]'));
+        resolve(false);
+      };
+      document.getElementById('warn-run-btn').onclick = () => {
+        document.body.removeChild(w);
+        resolve(true);
+      };
+    });
+    if (!proceed) return;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
   // Invalidate session if entity or date context has changed
   if (_runSession) {
