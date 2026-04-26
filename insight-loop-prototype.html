@@ -2383,11 +2383,15 @@ function runAnalysis(customPrompt, partialCheckIds) {
           _analysisRunning = false;
 
       if (data && data.error) {
-        showToast('❌ ' + data.error, true);
-        document.getElementById('check-results-sub').textContent = data.error;
-        // Clear any stale "Full analysis running..." message so UI isn't contradictory
+        // Only show foreground error if the full analysis panel isn't already showing a specific timeout message
         const cr = document.getElementById('check-results');
-        if (cr && cr.innerHTML.includes('running')) cr.innerHTML = '';
+        const crHasTimeout = cr && cr.innerHTML.includes('Retry Full Analysis');
+        if (!crHasTimeout) {
+          showToast('❌ ' + data.error, true);
+          document.getElementById('check-results-sub').textContent = data.error;
+          // Clear any stale "Full analysis running..." message so UI isn't contradictory
+          if (cr && cr.innerHTML.includes('running')) cr.innerHTML = '';
+        }
         return;
       }
 
@@ -2668,13 +2672,23 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
       throw new Error('Background analysis polling timed out after 30 minutes');
 
     } catch (err) {
-      // Fail silently — background run is supplementary, don't alarm the user
       console.warn('[insight-loop] Background analysis failed:', err.message);
       if (navLink) navLink.textContent = 'Analysis Results';
-      if (checkResults && checkResults.innerHTML.includes('⏳'))
-        checkResults.innerHTML = `<div style="padding:20px;color:#94A3B8;font-size:13px">Full analysis unavailable for this run.</div>`;
+      if (checkResults && checkResults.innerHTML.includes('⏳')) {
+        // Show a friendly timeout message with a Retry button — Jedify sometimes needs a second attempt
+        checkResults.innerHTML = `
+          <div style="padding:24px 20px;text-align:center;">
+            <div style="font-size:24px;margin-bottom:10px;">⏱️</div>
+            <div style="font-size:13px;font-weight:700;color:#1A1A1A;margin-bottom:6px;">Full analysis timed out</div>
+            <div style="font-size:12px;color:#64748B;margin-bottom:16px;">Jedify is still processing. Click Retry to try again — your persona results above are safe.</div>
+            <button onclick="window._retryFullAnalysis && window._retryFullAnalysis()" style="padding:8px 20px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">↺ Retry Full Analysis</button>
+          </div>`;
+      }
     }
   }
+
+  // Expose retry handler globally so the inline Retry button can call it
+  window._retryFullAnalysis = () => fireBackground('data_analyst');
 
   // SSE foreground fetch — shows progress bar, used for selected persona
   // Retries once after 7s if server returns 503 (MCP reconnecting)
