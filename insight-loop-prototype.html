@@ -3127,6 +3127,12 @@ function initOrUpdateSession(data, checkedIds) {
   showPartialRunControls(); // show partial-run controls now that session exists
 }
 
+// Detect Jedify's "I couldn't complete" error messages — these shouldn't be cached or treated as success
+function isJedifyErrorReport(report) {
+  if (!report || typeof report !== 'string') return false;
+  return /ran into some trouble|wasn.t able to finish|give it another shot|couldn.t complete|unable to gather|sorry.*couldn.t|please try again later/i.test(report);
+}
+
 function renderResearchReport(data) {
   console.log('[renderResearchReport] persona:', data?.persona, '| report length:', data?.report?.length ?? 'N/A');
   // Update session state (creates session on first call, appends on subsequent)
@@ -3138,6 +3144,23 @@ function renderResearchReport(data) {
   if (data.persona === 'data_analyst') {
     // Data Analyst → always goes to Analysis Results (#check-results)
     const checkResults = document.getElementById('check-results');
+
+    // Jedify returned an error message — show retry panel, don't cache
+    if (isJedifyErrorReport(data.report)) {
+      if (checkResults) {
+        checkResults.innerHTML = `
+          <div style="padding:24px 20px;text-align:center;">
+            <div style="font-size:24px;margin-bottom:10px;">😕</div>
+            <div style="font-size:13px;font-weight:700;color:#1A1A1A;margin-bottom:6px;">Jedify couldn't complete the analysis</div>
+            <div style="font-size:12px;color:#64748B;margin-bottom:6px;line-height:1.6;">${data.report.trim()}</div>
+            <div style="font-size:11px;color:#94A3B8;margin-bottom:16px;">Your persona results are still available above.</div>
+            <button onclick="window._retryFullAnalysis && window._retryFullAnalysis()" style="padding:8px 20px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">↺ Retry Full Analysis</button>
+          </div>`;
+      }
+      // Do NOT cache a Jedify error response
+      return;
+    }
+
     if (checkResults) {
       // Clear any loading/placeholder messages (non-run-tagged divs)
       checkResults.querySelectorAll('div:not([data-persona]):not([data-run])').forEach(el => el.remove());
@@ -3241,11 +3264,12 @@ function saveAnalysisCache() {
     });
     const checkResults = document.getElementById('check-results');
     // Only save check-results if the background data_analyst run has actually completed
-    // (i.e. not still showing a loading/spinner placeholder)
+    // (i.e. not still showing a loading/spinner placeholder, and not a Jedify error message)
     if (checkResults && checkResults.innerHTML.trim()) {
       const cr = checkResults.innerHTML;
       const isLoading = cr.includes('Full analysis running') || cr.includes('analysis-spinner') || cr.includes('⏳');
-      if (!isLoading) panes['check-results'] = cr;
+      const isError = cr.includes("Jedify couldn't complete") || cr.includes('Retry Full Analysis') || cr.includes('ran into some trouble');
+      if (!isLoading && !isError) panes['check-results'] = cr;
     }
 
     const payload = {
@@ -3273,12 +3297,13 @@ function tryRestoreAnalysisCache() {
       localStorage.removeItem(key);
       return false;
     }
-    // Restore panes — skip any that were saved mid-load (stale spinner state)
+    // Restore panes — skip stale spinners and Jedify error messages
     Object.entries(payload.panes || {}).forEach(([paneId, html]) => {
       const el = document.getElementById(paneId);
       if (!el) return;
       const isStaleSpinner = html.includes('Full analysis running') || html.includes('analysis-spinner') || html.includes('⏳');
-      if (!isStaleSpinner) el.innerHTML = html;
+      const isJedifyErr = html.includes("Jedify couldn't complete") || html.includes('ran into some trouble');
+      if (!isStaleSpinner && !isJedifyErr) el.innerHTML = html;
     });
     // Restore session state
     _runSession = payload.runSession;
