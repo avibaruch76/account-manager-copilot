@@ -502,7 +502,10 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 <!-- ═══ PROGRESS OVERLAY ═══ -->
 <div class="run-overlay" id="run-overlay">
   <div class="run-modal">
-    <h3>🔄 Running Analysis</h3>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+      <h3 style="margin:0">🔄 Running Analysis</h3>
+      <button onclick="minimiseRunOverlay()" title="Minimise — analysis keeps running" style="background:none;border:1px solid #E2E8F0;border-radius:6px;padding:4px 10px;font-size:12px;color:#64748B;cursor:pointer;line-height:1.4;">⊟ Minimise</button>
+    </div>
     <p class="brand-label" id="run-brand-label"></p>
     <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
     <div id="research-timeline" style="text-align:left;margin:16px 0"></div>
@@ -511,6 +514,14 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
       <button onclick="cancelAnalysis()" style="background:linear-gradient(135deg,#7F1D1D,#DC2626);color:white;border:none;padding:9px 24px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">✕ Cancel Analysis</button>
     </div>
   </div>
+</div>
+
+<!-- ═══ MINIMISED RUN STRIP ═══ -->
+<div id="run-strip" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:301;background:#1E2761;color:#fff;padding:10px 20px;display:none;align-items:center;gap:12px;box-shadow:0 -2px 12px rgba(0,0,0,0.2);">
+  <div style="width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:#fff;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0;"></div>
+  <span id="run-strip-label" style="font-size:13px;font-weight:600;flex:1;">Running Analysis…</span>
+  <button onclick="restoreRunOverlay()" style="background:rgba(255,255,255,0.15);border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">⊞ Show</button>
+  <button onclick="cancelAnalysis()" style="background:rgba(220,38,38,0.8);border:none;color:#fff;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">✕ Cancel</button>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -2227,6 +2238,44 @@ function getSelectedPopulation() {
 }
 
 // ═══════════════════════════════════════════════════════
+// RUN OVERLAY HELPERS
+// ═══════════════════════════════════════════════════════
+function _hideRunOverlay() {
+  const overlay = document.getElementById('run-overlay');
+  const strip   = document.getElementById('run-strip');
+  if (overlay) overlay.classList.remove('active');
+  if (strip)   strip.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════
+// MINIMISE / RESTORE RUN OVERLAY
+// ═══════════════════════════════════════════════════════
+function minimiseRunOverlay() {
+  const overlay = document.getElementById('run-overlay');
+  const strip   = document.getElementById('run-strip');
+  if (overlay) overlay.classList.remove('active');
+  if (strip)   strip.style.display = 'flex';
+}
+
+function restoreRunOverlay() {
+  const overlay = document.getElementById('run-overlay');
+  const strip   = document.getElementById('run-strip');
+  if (overlay) overlay.classList.add('active');
+  if (strip)   strip.style.display = 'none';
+}
+
+// Keep the strip label in sync with the ETA div text
+const _etaObserver = new MutationObserver(() => {
+  const eta   = document.getElementById('run-eta');
+  const strip = document.getElementById('run-strip-label');
+  if (eta && strip) strip.textContent = eta.textContent || 'Running Analysis…';
+});
+document.addEventListener('DOMContentLoaded', () => {
+  const eta = document.getElementById('run-eta');
+  if (eta) _etaObserver.observe(eta, { childList: true, subtree: true, characterData: true });
+});
+
+// ═══════════════════════════════════════════════════════
 // CANCEL ANALYSIS
 // ═══════════════════════════════════════════════════════
 async function cancelAnalysis() {
@@ -2245,7 +2294,7 @@ async function cancelAnalysis() {
   const btn = document.getElementById('run-btn');
   btn.classList.remove('running');
   btn.innerHTML = '<span>▶</span> Run Analysis';
-  document.getElementById('run-overlay').classList.remove('active');
+  _hideRunOverlay();
   showToast('Analysis cancelled.');
 }
 
@@ -2270,7 +2319,7 @@ async function runAnalysis(customPrompt, partialCheckIds) {
       if (_analysisAbortController) _analysisAbortController.abort();
       _analysisRunning = false;
       const overlay = document.getElementById('run-overlay');
-      overlay.classList.remove('active');
+      _hideRunOverlay();
       const btn = document.getElementById('run-btn');
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
@@ -2431,7 +2480,7 @@ async function runAnalysis(customPrompt, partialCheckIds) {
     document.getElementById('run-eta').innerHTML = '<strong style="color:#1D6A39">\u2705 All checks complete!</strong> Building results...';
 
     setTimeout(() => {
-      overlay.classList.remove('active');
+      _hideRunOverlay();
       btn.classList.remove('running');
       btn.innerHTML = '<span>\u25B6</span> Run Analysis';
           _analysisRunning = false;
@@ -4275,7 +4324,7 @@ function confirmAndRun() {
     document.getElementById('run-eta').innerHTML = '<strong style="color:#1D6A39">All checks complete!</strong> Building results...';
 
     setTimeout(() => {
-      overlay.classList.remove('active');
+      _hideRunOverlay();
       btn.classList.remove('running');
       btn.innerHTML = '<span>▶</span> Run Analysis';
           _analysisRunning = false;
@@ -4323,7 +4372,7 @@ function confirmAndRun() {
   }).catch(err => {
     clearInterval(progressTimer);
     console.error('[confirmAndRun] Fetch error:', err);
-    overlay.classList.remove('active');
+    _hideRunOverlay();
     btn.classList.remove('running');
     btn.innerHTML = '<span>▶</span> Run Analysis';
     _analysisRunning = false;
