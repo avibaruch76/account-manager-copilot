@@ -2757,6 +2757,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
       const pollStart = Date.now();
       let _storedInquiryId = null; // saved so we can resume after a server restart
       let _resumeAttempted = false;
+      let _inactiveCount   = 0;    // consecutive polls with active:false — only resume after 3+
       while (Date.now() - pollStart < MAX_WAIT_MS) {
         await new Promise(r => setTimeout(r, POLL_MS));
         try {
@@ -2775,9 +2776,18 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
             return;
           }
 
+          // Track consecutive inactive polls — Jedify briefly returns active:false mid-run
+          // so only treat it as a real server restart after 3 consecutive inactive polls (~18s)
+          if (status.active) {
+            _inactiveCount = 0;
+          } else if (!status.report) {
+            _inactiveCount++;
+          }
+
           // Server restarted (run no longer in memory) — resume via stored inquiry_id
-          if (!status.active && !status.report && _storedInquiryId && !_resumeAttempted) {
+          if (_inactiveCount >= 3 && _storedInquiryId && !_resumeAttempted) {
             _resumeAttempted = true;
+            _inactiveCount   = 0;
             console.log('[insight-loop] Server restarted — resuming inquiry', _storedInquiryId);
             if (checkResults) checkResults.innerHTML = `<div style="padding:20px;color:#7C3AED;font-size:13px;font-weight:600;">🔄 Server restarted — resuming full analysis…</div>`;
             try {
@@ -2785,12 +2795,16 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
                 method: 'POST',
                 body: JSON.stringify({ runId: bgRunId, inquiryId: _storedInquiryId })
               });
-              _resumeAttempted = false; // allow another resume attempt if needed
+              // Only allow another resume attempt once the server confirms active again
             } catch (resumeErr) {
               console.warn('[insight-loop] Resume failed:', resumeErr.message);
+              _resumeAttempted = false; // resume POST failed — allow retry
             }
             continue;
           }
+
+          // Allow a further resume attempt once the server is active again after a resume
+          if (status.active && _resumeAttempted) _resumeAttempted = false;
 
           // Show live Jedify progress in the full analysis panel
           if (status && status.progress && checkResults) {
@@ -3233,6 +3247,8 @@ function isJedifyErrorReport(report) {
 
 function renderResearchReport(data) {
   console.log('[renderResearchReport] persona:', data?.persona, '| report length:', data?.report?.length ?? 'N/A');
+  // Fresh results arriving — remove stale cache banner
+  document.getElementById('cache-banner')?.remove();
   // Update session state (creates session on first call, appends on subsequent)
   if (data && data.persona !== 'data_analyst') {
     initOrUpdateSession(data, window._currentRunCheckIds || []);
