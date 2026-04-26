@@ -2344,8 +2344,13 @@ async function runAnalysis(customPrompt, partialCheckIds) {
   }
   // ─────────────────────────────────────────────────────────────────────────
 
-  // Invalidate session if entity or date context has changed
-  if (_runSession) {
+  // Full runs always start a fresh session (Run 1).
+  // Only partial re-runs (triggered by "Run Selected Checks") continue an existing session.
+  if (!partialCheckIds) {
+    _runSession = null;
+    _partialSelectedIds.clear();
+  } else if (_runSession) {
+    // Partial run: also reset if entity/date context changed
     const entityNow = selection.entity || (selection.values && selection.values[0]) || '';
     const sessionKey = _runSession.entity + '|' + _runSession.scope;
     const nowKey = entityNow + '|' + (selection.scope || 'operator');
