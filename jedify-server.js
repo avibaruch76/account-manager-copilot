@@ -90,9 +90,9 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   ).join('\n\n');
 
   // Build dynamic slide list based on plan
-  // Default order: Title → KPI → Studio Summary Table (8) → Studio Performance (3) → New Games → Retention → Free Rounds (20) → Player Seg → VIP → MaxBet → Promo → Portfolio → Growth → KPI Gaps
+  // Default order: Title → KPI → Studio Summary Table (8) → Studio Performance (3) → New Games → Retention → Player Seg → VIP → MaxBet → Promo → Portfolio → Growth → KPI Gaps
   // Slides 5 (Bets by Studio) and 7 (Regional) removed from default
-  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,8,3,4,6,20,9,10,11,12,13,14,15,16,17];
+  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,8,3,4,6,9,10,11,12,13,14,15,16,17];
   const customSlides = (slidePlan && slidePlan.custom) ? slidePlan.custom : [];
   const on = id => enabledIds.includes(id);
 
@@ -172,13 +172,6 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
   Gap column: red if negative, green if positive. Trend: ↑ ↓ → arrows coloured accordingly`,
 
-    20: `SLIDE {{N}} — FREE ROUNDS PERFORMANCE
-  Section label: FREE ROUNDS
-  Headline: conclusion about free rounds volume, frequency, or opportunity (e.g. "Free Rounds Drive 18% of All Activity — Untapped Upsell")
-  Table columns: Studio | Free Round Games | Total Free Rounds | FR Share % | GGR from FR (€)
-  Sort by Total Free Rounds descending. Bold TOTAL summary row at bottom.
-  FR Share % in #CC0000 for the top studio.
-  If free rounds data is not available, show placeholder`,
   };
 
   const ACTIONS_DEF = `SLIDE {{N}} — ACTIONS & PRIORITIES
@@ -203,7 +196,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
   const slideLines = [];
 
   // Standard slides in presentation order (filtered by plan)
-  const SLIDE_ORDER = [1, 2, 8, 3, 4, 6, 20, 9, 10, 11, 12, 13, 14, 15];
+  const SLIDE_ORDER = [1, 2, 8, 3, 4, 6, 9, 10, 11, 12, 13, 14, 15];
   for (const id of SLIDE_ORDER) {
     if (on(id) && SLIDE_DEFS[id]) {
       slideLines.push(SLIDE_DEFS[id].replace(/\{\{N\}\}/g, String(slideN++)));

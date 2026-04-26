@@ -5327,7 +5327,6 @@ const _PPTX_STANDARD_SLIDES = [
   { id:3,  name:'Studio Performance',     desc:'Monthly trend line chart by studio',              alwaysOn:false, comingSoon:false },
   { id:4,  name:'New Games Table',        desc:'New launches: RTP, Bets 14d, Players 14d',        alwaysOn:false, comingSoon:false },
   { id:6,  name:'Retention',              desc:'Player retention analysis',                       alwaysOn:false, comingSoon:true  },
-  { id:20, name:'Free Rounds',            desc:'Free rounds volume, share % and GGR by studio',   alwaysOn:false, comingSoon:false },
   { id:9,  name:'Player Segmentation',    desc:'Player segments breakdown',                       alwaysOn:false, comingSoon:true  },
   { id:10, name:'VIP Analysis',           desc:'VIP players: count, bets, GGR',                   alwaysOn:false, comingSoon:false },
   { id:11, name:'Max Bet Analysis',       desc:'Max bet behaviour and patterns',                  alwaysOn:false, comingSoon:true  },
@@ -5338,8 +5337,36 @@ const _PPTX_STANDARD_SLIDES = [
   { id:16, name:'Actions & Priorities',   desc:'Numbered recommendations with outcomes',          alwaysOn:true,  comingSoon:false },
   { id:17, name:'The Ask / Closing',      desc:'Dark closing slide with the ask and next steps',  alwaysOn:true,  comingSoon:false },
 ];
-let _pptxEnabledSlides = _PPTX_STANDARD_SLIDES.map(s => s.id); // all on by default
-let _pptxCustomSlides  = []; // [{title, description}]
+// Restore persisted slide plan from localStorage so custom slides survive page reloads
+const _pptxSavedPlan = (() => {
+  try { return JSON.parse(localStorage.getItem('pptx_slide_plan') || 'null'); } catch { return null; }
+})();
+let _pptxEnabledSlides = (() => {
+  if (_pptxSavedPlan && Array.isArray(_pptxSavedPlan.enabled)) {
+    // Merge: keep any newly-added standard slides that weren't in the saved list
+    const validIds  = _PPTX_STANDARD_SLIDES.map(s => s.id);
+    const saved     = _pptxSavedPlan.enabled.filter(id => validIds.includes(id));
+    // Add any standard slides added since the last save (always add alwaysOn)
+    const missing   = validIds.filter(id => {
+      const s = _PPTX_STANDARD_SLIDES.find(x => x.id === id);
+      return s && s.alwaysOn && !saved.includes(id);
+    });
+    return [...saved, ...missing];
+  }
+  return _PPTX_STANDARD_SLIDES.map(s => s.id);
+})();
+let _pptxCustomSlides = (_pptxSavedPlan && Array.isArray(_pptxSavedPlan.custom))
+  ? _pptxSavedPlan.custom
+  : [];
+
+function _pptxSavePlan() {
+  try {
+    localStorage.setItem('pptx_slide_plan', JSON.stringify({
+      enabled: _pptxEnabledSlides,
+      custom:  _pptxCustomSlides
+    }));
+  } catch (e) { /* quota exceeded — silently ignore */ }
+}
 
 // ── Open / Close ────────────────────────────────────────────────
 async function openPresentationBuilder() {
@@ -5568,11 +5595,13 @@ function _pptxToggleSlide(id) {
   } else {
     _pptxEnabledSlides.push(id);
   }
+  _pptxSavePlan();
   _pptxRenderPlan();
 }
 
 function _pptxRemoveCustomSlide(idx) {
   _pptxCustomSlides.splice(idx, 1);
+  _pptxSavePlan();
   _pptxRenderPlan();
 }
 
@@ -5663,6 +5692,7 @@ function _pptxConfirmAddCustomSlide() {
   const desc  = (document.getElementById('pptx-custom-desc')?.value  || '').trim();
   if (!title) { document.getElementById('pptx-custom-title').focus(); return; }
   _pptxCustomSlides.push({ title, description: desc });
+  _pptxSavePlan();
   _pptxRenderPlan();
 }
 
