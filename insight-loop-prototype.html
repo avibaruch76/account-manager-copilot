@@ -6778,7 +6778,26 @@ async function _pptxHandleFile(file) {
       logoBase64 = `data:${mime};base64,${b64}`;
     }
 
-    _pptxExtracted = { primary, accent, background, highlight, text, logoBase64, fontHeading, fontBody };
+    // ── 4. Extract slide definitions from ppt/slides/slide*.xml ──
+    const slideFiles = Object.keys(zip.files)
+      .filter(name => /^ppt\/slides\/slide\d+\.xml$/.test(name))
+      .sort((a, b) => {
+        const na = parseInt(a.match(/\d+/)[0]), nb = parseInt(b.match(/\d+/)[0]);
+        return na - nb;
+      });
+
+    const extractedSlides = [];
+    for (const fname of slideFiles) {
+      const xml = await zip.files[fname].async('string');
+      const titleMatch = xml.match(/<p:sp>(?:(?!<p:sp>).)*?<p:ph[^>]+type="(?:title|ctrTitle)"[^>]*\/>(?:(?!<\/p:sp>).)*?<\/p:sp>/s);
+      const title = titleMatch ? titleMatch[0].replace(/<[^>]+>/g, '').trim() : null;
+      if (!title) continue;
+      const bodyXml = xml.replace(titleMatch ? titleMatch[0] : '', '');
+      const description = bodyXml.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+      extractedSlides.push({ title, description });
+    }
+
+    _pptxExtracted = { primary, accent, background, highlight, text, logoBase64, fontHeading, fontBody, slides: extractedSlides };
     _pptxShowExtracted(_pptxExtracted);
   } catch (e) {
     showToast('❌ Could not parse .pptx: ' + e.message, true);
