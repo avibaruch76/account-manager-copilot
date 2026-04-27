@@ -389,6 +389,16 @@ function parseSlidesFromText(raw) {
   return slides;
 }
 
+async function streamSingleSlide({ slideTitle, slideDescription, brief, operator, sectionContent, instructions }, res) {
+  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const systemPrompt = `You are a world-class presentation designer. Generate exactly ONE slide following the RubyPlay brand design rules. Output only: <SLIDE_START><NOTES>notes</NOTES><HTML>html</HTML><SLIDE_END>`;
+  const userPrompt = `Slide: ${slideTitle}\nDescription: ${slideDescription}\n${instructions ? `Special instructions: ${instructions}\n` : ''}Analysis data:\n${sectionContent}\nOperator: ${operator}\nBrief tone: ${brief?.tone || 'opportunity'}`;
+  const stream = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: systemPrompt, messages: [{ role: 'user', content: userPrompt }], stream: true });
+  for await (const chunk of stream) {
+    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') res.write(chunk.delta.text);
+  }
+}
+
 // Stream Claude's slide generation directly to an HTTP response.
 // The response is written as plain text chunks — client reads with ReadableStream.
 async function streamSlidesToResponse(sections, brief, operator, res, slidePlan) {
@@ -2176,6 +2186,25 @@ const server = http.createServer(async (req, res) => {
         res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
       } finally {
         clearInterval(_heartbeat);
+      }
+      res.end();
+    });
+    return;
+  }
+
+  if (req.method === 'POST' && req.url === '/api/regenerate-slide') {
+    if (!process.env.ANTHROPIC_API_KEY) { res.writeHead(500); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return; }
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      const { slideTitle, slideDescription, brief, operator, sectionContent, instructions } = JSON.parse(body);
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
+      res.flushHeaders();
+      try {
+        await streamSingleSlide({ slideTitle, slideDescription, brief, operator, sectionContent, instructions }, res);
+      } catch (e) {
+        res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
       }
       res.end();
     });
