@@ -5838,7 +5838,7 @@ async function _pptxShowPromptPreview() {
       body: JSON.stringify({
         sections,
         brief,
-        operator: _currentOperator || 'Operator',
+        operator: document.getElementById('operator-select')?.value || 'Operator',
         slidePlan: { enabled: _pptxEnabledSlides, custom: _pptxCustomSlides },
         templateId: _selectedTemplateId
       })

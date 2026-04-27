@@ -2120,11 +2120,17 @@ const server = http.createServer(async (req, res) => {
     let body = '';
     req.on('data', c => body += c);
     req.on('end', () => {
-      const { sections, brief, operator, slidePlan, templateId } = JSON.parse(body);
-      const template = _templates.find(t => t.id === templateId) || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
-      const { systemPrompt, userPrompt } = buildSlidesPrompt(sections || [], brief || {}, operator || 'Operator', slidePlan || null, template);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ systemPrompt, userPrompt }));
+      try {
+        const { sections, brief, operator, slidePlan, templateId } = JSON.parse(body);
+        const template = _templates.find(t => t.id === templateId) || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
+        const { systemPrompt, userPrompt } = buildSlidesPrompt(sections || [], brief || {}, operator || 'Operator', slidePlan || null, template);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ systemPrompt, userPrompt }));
+      } catch (e) {
+        console.error('[preview-prompt] Error:', e.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
     });
     return;
   }
