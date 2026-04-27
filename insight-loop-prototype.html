@@ -5508,7 +5508,11 @@ function _pptxSelectTemplate(id) {
   _pptxLoadTemplateList();
 }
 
-function _pptxStep0Next() {
+async function _pptxStep0Next() {
+  try {
+    const tplRes = await apiFetch(`/api/templates/${_selectedTemplateId}`);
+    _selectedTemplate = await tplRes.json();
+  } catch { _selectedTemplate = null; }
   _pptxRenderBrief();
 }
 
@@ -5688,7 +5692,11 @@ function _pptxRenderPlan() {
 
   const enabledCount = _pptxEnabledSlides.length + _pptxCustomSlides.length + 2; // +2 for always-on Actions/Ask
 
-  const standardRows = _PPTX_STANDARD_SLIDES.map(s => {
+  const slideSource = (_selectedTemplate && _selectedTemplate.slides && _selectedTemplate.slides.length)
+    ? _selectedTemplate.slides.map((s, i) => ({ id: i, name: s.title, desc: s.description, locked: false, alwaysOn: false, comingSoon: false }))
+    : _PPTX_STANDARD_SLIDES;
+
+  const standardRows = slideSource.map(s => {
     const enabled  = _pptxEnabledSlides.includes(s.id);
     const locked   = s.alwaysOn;
     const coming   = s.comingSoon;
@@ -5776,6 +5784,11 @@ function _pptxConfirmAddCustomSlide() {
 // ── Generate ─────────────────────────────────────────────────────
 async function _pptxGenerate() {
   console.log('[pptx] _pptxGenerate called, sections:', _pptxSections?.length);
+  // Load full template before generation
+  try {
+    const tplRes = await apiFetch(`/api/templates/${_selectedTemplateId}`);
+    _selectedTemplate = await tplRes.json();
+  } catch { _selectedTemplate = null; }
   try {
   // Save brief state
   _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
@@ -5855,7 +5868,8 @@ async function _pptxGenerate() {
         slidePlan: {
           enabled: _pptxEnabledSlides,
           custom:  _pptxCustomSlides
-        }
+        },
+        templateId: _selectedTemplateId
       })
     });
 
