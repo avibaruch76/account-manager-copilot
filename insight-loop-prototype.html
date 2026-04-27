@@ -957,7 +957,8 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 
   <!-- Step indicator -->
   <div style="display:flex;background:#F8FAFC;border-bottom:1px solid #E2E8F0;flex-shrink:0;">
-    <div class="pptx-step-dot" id="pptx-dot-1" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:#1E2761;border-bottom:2px solid #7C3AED;">1 STORY BRIEF</div>
+    <div class="pptx-step-dot" id="pptx-dot-0" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:#1E2761;border-bottom:2px solid #7C3AED;">0 TEMPLATE</div>
+    <div class="pptx-step-dot" id="pptx-dot-1" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">1 STORY BRIEF</div>
     <div class="pptx-step-dot" id="pptx-dot-2" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">2 SLIDE PLAN</div>
     <div class="pptx-step-dot" id="pptx-dot-3" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">3 PREVIEW</div>
   </div>
@@ -5273,6 +5274,9 @@ populateCompManualList();
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
 let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
+let _pptxTemplates      = [];
+let _selectedTemplateId = 'default';
+let _selectedTemplate   = null;
 
 // Slide plan state — which standard slides to include + custom additions
 const _PPTX_STANDARD_SLIDES = [
@@ -5392,8 +5396,7 @@ async function openPresentationBuilder() {
     });
   }
 
-  _pptxShowStep(1);
-  _pptxRenderBrief();
+  _pptxRenderStep0();
 }
 
 function closePresentationBuilder() {
@@ -5421,10 +5424,11 @@ document.addEventListener('keydown', e => {
 
 // ── Step indicator ──────────────────────────────────────────────
 function _pptxShowStep(n) {
-  const labels = ['', 'Shape the story angle', 'Select & customise slides', 'Review and download'];
+  const labels = ['Choose a template', 'Shape the story angle', 'Select & customise slides', 'Review and download'];
   document.getElementById('pptx-step-label').textContent = labels[n];
-  [1,2,3].forEach(i => {
+  [0,1,2,3].forEach(i => {
     const dot = document.getElementById(`pptx-dot-${i}`);
+    if (!dot) return;
     dot.style.color        = i === n ? '#1E2761' : '#94A3B8';
     dot.style.fontWeight   = i === n ? '700' : '600';
     dot.style.borderBottom = i === n ? '2px solid #7C3AED' : '2px solid transparent';
@@ -5455,6 +5459,63 @@ function _pptxEsc(str) {
 }
 
 // ── Story Brief ─────────────────────────────────────────────────
+function _pptxRenderStep0() {
+  _pptxShowStep(0);
+  const c = document.getElementById('pptx-content');
+  c.innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:#1E293B;margin-bottom:4px;">Choose a template</div>
+    <div style="font-size:11px;color:#64748B;margin-bottom:14px;">Shared across your team · Defines slide structure and brand</div>
+    <div id="pptx-tpl-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;"></div>
+    <div id="pptx-tpl-upload" style="border:1.5px dashed #CBD5E1;border-radius:8px;padding:12px;text-align:center;cursor:pointer;"
+         onclick="document.getElementById('pptx-tpl-file').click()">
+      <div style="font-size:18px;margin-bottom:4px;">+</div>
+      <div style="font-weight:600;font-size:12px;color:#64748B;">Upload new template (.pptx)</div>
+      <input type="file" id="pptx-tpl-file" accept=".pptx" style="display:none" onchange="_pptxUploadTemplate(this.files[0])">
+    </div>`;
+  _pptxLoadTemplateList();
+  const footer = document.getElementById('pptx-footer');
+  if (footer) footer.innerHTML = `
+    <button onclick="_pptxStep0Next()" style="margin-left:auto;padding:8px 20px;background:linear-gradient(135deg,#7C3AED,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Next: Story Brief →</button>`;
+}
+
+async function _pptxLoadTemplateList() {
+  try {
+    const res = await apiFetch('/api/templates');
+    _pptxTemplates = await res.json();
+  } catch {
+    _pptxTemplates = [{ id: 'default', name: 'RubyPlay Default', isDefault: true, slideCount: 15 }];
+  }
+  const list = document.getElementById('pptx-tpl-list');
+  if (!list) return;
+  list.innerHTML = _pptxTemplates.map(t => `
+    <div onclick="_pptxSelectTemplate('${t.id}')" id="pptx-tpl-${t.id}"
+         style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-radius:8px;cursor:pointer;border:1.5px solid ${_selectedTemplateId===t.id?'#7C3AED':'#E2E8F0'};background:${_selectedTemplateId===t.id?'#F5F3FF':'white'};">
+      <div style="width:36px;height:36px;background:${t.isDefault?'#7C3AED':'#1A1A2E'};border-radius:6px;display:flex;align-items:center;justify-content:center;color:white;font-size:${t.isDefault?'16':'10'}px;font-weight:700;flex-shrink:0;">${t.isDefault?'★':t.name.slice(0,2).toUpperCase()}</div>
+      <div style="flex:1;">
+        <div style="font-weight:700;color:#1E293B;font-size:13px;">${t.name}</div>
+        <div style="font-size:11px;color:#64748B;">${t.slideCount} slides${t.updatedAt?' · Updated '+t.updatedAt.slice(0,10):''}</div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        ${_selectedTemplateId===t.id?'<span style="font-size:10px;font-weight:700;color:#7C3AED;background:#EDE9FE;padding:2px 8px;border-radius:10px;">SELECTED</span>':''}
+        <button onclick="event.stopPropagation();_pptxEditTemplate('${t.id}')" style="padding:3px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:5px;font-size:10px;color:#64748B;cursor:pointer;">Edit</button>
+        ${!t.isDefault?`<button onclick="event.stopPropagation();_pptxDeleteTemplate('${t.id}')" style="padding:3px 8px;background:#FEF2F2;border:1px solid #FECACA;border-radius:5px;font-size:10px;color:#CC0000;cursor:pointer;">Delete</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function _pptxSelectTemplate(id) {
+  _selectedTemplateId = id;
+  _pptxLoadTemplateList();
+}
+
+function _pptxStep0Next() {
+  _pptxRenderBrief();
+}
+
+function _pptxUploadTemplate(file) { /* Task 9 */ }
+function _pptxEditTemplate(id)     { /* Task 9 */ }
+function _pptxDeleteTemplate(id)   { /* Task 9 */ }
+
 function _pptxRenderBrief() {
   _pptxShowStep(1);
   const content = document.getElementById('pptx-content');
