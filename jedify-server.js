@@ -2182,51 +2182,74 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Upload brand template
-  if (req.method === 'POST' && req.url === '/api/upload-template') {
+  // GET /api/templates — list all templates (no auth required)
+  if (req.method === 'GET' && req.url === '/api/templates') {
+    const list = _templates.map(({ id, name, isDefault, slides, createdAt, updatedAt }) => ({
+      id, name, isDefault, slideCount: slides.length, createdAt, updatedAt
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(list));
+    return;
+  }
+
+  // POST /api/templates — create a new template
+  if (req.method === 'POST' && req.url === '/api/templates') {
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', c => body += c);
     req.on('end', async () => {
-      try {
-        const template = JSON.parse(body);
-        // Validate required fields
-        const required = ['primary','accent','background','highlight','text','fontHeading','fontBody'];
-        for (const f of required) {
-          if (!template[f]) throw new Error(`Missing field: ${f}`);
-        }
-        template.uploadedAt = new Date().toISOString();
-        // Update in-memory immediately
-        _brandTemplate = { ...DEFAULT_BRAND_TEMPLATE, ...template };
-        console.log('[brand] Template updated in memory');
-
-        // Persist to Render env var if configured
-        const renderApiKey = process.env.RENDER_API_KEY;
-        const renderServiceId = process.env.RENDER_SERVICE_ID;
-        if (renderApiKey && renderServiceId) {
-          try {
-            await persistTemplateToRender(template, renderApiKey, renderServiceId);
-            console.log('[brand] Template persisted to Render env var');
-          } catch (e) {
-            console.warn('[brand] Render persist failed (template still updated in memory):', e.message);
-          }
-        } else {
-          console.warn('[brand] RENDER_API_KEY or RENDER_SERVICE_ID not set — template will reset on redeploy');
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true, uploadedAt: template.uploadedAt }));
-      } catch (e) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: e.message }));
-      }
+      const { name, slides, brand } = JSON.parse(body);
+      if (!name || !slides || !brand) { res.writeHead(400); res.end(JSON.stringify({ error: 'name, slides, brand required' })); return; }
+      const id = 'tpl_' + Date.now();
+      const now = new Date().toISOString();
+      const tpl = { id, name, isDefault: false, slides, brand, createdAt: now, updatedAt: now };
+      _templates.push(tpl);
+      await persistTemplates();
+      res.writeHead(201, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id }));
     });
     return;
   }
 
-  // Brand template endpoint
-  if (req.method === 'GET' && req.url === '/api/get-template') {
+  // GET /api/templates/:id — get full template (no auth required)
+  if (req.method === 'GET' && req.url.startsWith('/api/templates/')) {
+    const id = req.url.slice('/api/templates/'.length);
+    const t = _templates.find(t => t.id === id);
+    if (!t) { res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' })); return; }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(_brandTemplate));
+    res.end(JSON.stringify(t));
+    return;
+  }
+
+  // PUT /api/templates/:id — update a template
+  if (req.method === 'PUT' && req.url.startsWith('/api/templates/')) {
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+    const id = req.url.slice('/api/templates/'.length);
+    const idx = _templates.findIndex(t => t.id === id);
+    if (idx === -1) { res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' })); return; }
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', async () => {
+      const patch = JSON.parse(body);
+      _templates[idx] = { ..._templates[idx], ...patch, updatedAt: new Date().toISOString() };
+      await persistTemplates();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+    });
+    return;
+  }
+
+  // DELETE /api/templates/:id — delete a template
+  if (req.method === 'DELETE' && req.url.startsWith('/api/templates/')) {
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+    const id = req.url.slice('/api/templates/'.length);
+    const tpl = _templates.find(t => t.id === id);
+    if (!tpl) { res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' })); return; }
+    if (tpl.isDefault) { res.writeHead(403); res.end(JSON.stringify({ error: 'Cannot delete default template' })); return; }
+    _templates = _templates.filter(t => t.id !== id);
+    await persistTemplates();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
     return;
   }
 
