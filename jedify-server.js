@@ -18,43 +18,68 @@ const { jsonrepair } = require('jsonrepair');
 
 const PORT = process.env.PORT || 3001;
 
-// ── Presentation Builder — Brand Template ────────────────────────────────────
-const DEFAULT_BRAND_TEMPLATE = {
-  primary:    '#1E2761',
-  accent:     '#7C3AED',
-  background: '#FFFFFF',
-  highlight:  '#F59E0B',
-  text:       '#1E293B',
-  logoBase64: null,
-  fontHeading: 'Calibri',
-  fontBody:    'Calibri',
-  uploadedAt:  null
-};
+// ── Template library ─────────────────────────────────────────────────────────
+// Built-in default: slide definitions from SLIDE_DEFS, RubyPlay brand palette.
+// Persisted to TEMPLATES_JSON env var (logos excluded — too large).
 
-let _brandTemplate = DEFAULT_BRAND_TEMPLATE;
-try {
-  if (process.env.BRAND_TEMPLATE) {
-    _brandTemplate = { ...DEFAULT_BRAND_TEMPLATE, ...JSON.parse(process.env.BRAND_TEMPLATE) };
-    console.log('[brand] Template loaded from env var');
-  }
-} catch (e) {
-  console.warn('[brand] Failed to parse BRAND_TEMPLATE env var:', e.message);
+function buildDefaultTemplate() {
+  return {
+    id: 'default',
+    name: 'RubyPlay Default',
+    isDefault: true,
+    slides: [
+      { title: 'Title',               description: 'Operator name, bold assertion headline, date range, QBR badge. Headline: strongest statement from data.' },
+      { title: 'KPI Charts',          description: '2×2 grid SVG bar charts: Total Bets, GGR, Active Players, Rounds/Player. QBR bars red, prior months grey.' },
+      { title: 'Studio Summary Table',description: 'Table: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game. Sort by Total Bets desc.' },
+      { title: 'Studio Performance',  description: 'Full-width SVG line chart, one line per studio over months. Legend below chart.' },
+      { title: 'New Games Launched',  description: 'Table: Game | Studio | RTP | Total Bets 14d | Players 14d. Sort by Total Bets desc.' },
+      { title: 'Retention Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
+      { title: 'Player Segmentation', description: 'PLACEHOLDER — Coming Soon.' },
+      { title: 'VIP Analysis',        description: 'Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€). Sort by VIP Bets desc.' },
+      { title: 'Max Bet Analysis',    description: 'PLACEHOLDER — Coming Soon.' },
+      { title: 'Promotion Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
+      { title: 'The Portfolio Gap',   description: 'Table: Game | Key Fact | Market Rank | Market Share % | Signal badge. Max 8 rows.' },
+      { title: 'Growth Levers',       description: 'Table: Game | Key Fact | Players | GGR/Player | Total GGR | Opportunity | ADD/EXPAND pill. Sort by Opportunity desc.' },
+      { title: 'KPI Gaps',            description: 'Table: KPI | Our Value | Peer Benchmark | Gap | Trend arrows. Red gaps negative, green positive.' },
+      { title: 'Actions & Priorities',description: 'Up to 5 numbered action cards: priority badge, bold title, rationale, expected outcome.' },
+      { title: 'The Ask',             description: 'Full-bleed dark slide. Large headline = the specific ask. 3 bullet next steps. Red accent bar.' },
+    ],
+    brand: {
+      primary: '#CC0000', accent: '#CC0000', background: '#0D0D0D',
+      highlight: '#1A1A1A', text: '#CBD5E1',
+      fontHeading: 'Segoe UI', fontBody: 'Segoe UI',
+      logoBase64: null
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
 }
 
-async function persistTemplateToRender(template, apiKey, serviceId) {
-  const jsonStr = JSON.stringify(template);
+let _templates = [];
+
+function loadTemplates() {
+  try {
+    const saved = process.env.TEMPLATES_JSON ? JSON.parse(process.env.TEMPLATES_JSON) : [];
+    const hasDefault = saved.some(t => t.id === 'default');
+    _templates = hasDefault ? saved : [buildDefaultTemplate(), ...saved];
+  } catch {
+    _templates = [buildDefaultTemplate()];
+  }
+}
+
+async function updateRenderEnvVar(key, value) {
   const https = require('https');
   return new Promise((resolve, reject) => {
     const payload = JSON.stringify([
-      { key: 'BRAND_TEMPLATE', value: jsonStr }
+      { key, value }
     ]);
     const options = {
       hostname: 'api.render.com',
-      path: `/v1/services/${serviceId}/env-vars`,
+      path: `/v1/services/${process.env.RENDER_SERVICE_ID}/env-vars`,
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${process.env.RENDER_API_KEY}`,
         'Content-Length': Buffer.byteLength(payload)
       }
     };
@@ -74,6 +99,19 @@ async function persistTemplateToRender(template, apiKey, serviceId) {
     req.end();
   });
 }
+
+async function persistTemplates() {
+  const stripped = _templates.map(t => ({ ...t, brand: { ...t.brand, logoBase64: null } }));
+  const json = JSON.stringify(stripped);
+  console.log(`[templates] Persisting ${_templates.length} templates (${json.length} chars)`);
+  if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
+    console.warn('[templates] RENDER_API_KEY/SERVICE_ID not set — templates will reset on restart');
+    return;
+  }
+  await updateRenderEnvVar('TEMPLATES_JSON', json);
+}
+
+loadTemplates();
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
 function buildSlidesPrompt(sections, brief, operator, slidePlan) {
