@@ -114,7 +114,8 @@ async function persistTemplates() {
 loadTemplates();
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
-function buildSlidesPrompt(sections, brief, operator, slidePlan) {
+function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
+  const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
   const toneMap = {
     opportunity: 'Frame as an exciting opportunity — highlight upside, growth potential, and what is possible.',
     risk:        'Frame as a risk review — be measured, flag concerns clearly, recommend protective actions.',
@@ -127,132 +128,20 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan) {
     `=== ${s.checkName} ===\n${s.content}`
   ).join('\n\n');
 
-  // Build dynamic slide list based on plan
-  // Default order: Title → KPI → Studio Summary Table (8) → Studio Performance (3) → New Games → Retention → Player Seg → VIP → MaxBet → Promo → Portfolio → Growth → KPI Gaps
-  // Slides 5 (Bets by Studio) and 7 (Regional) removed from default
-  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : [1,2,8,3,4,6,9,10,11,12,13,14,15,16,17];
+  // Build dynamic slide list based on template + plan
+  const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : tpl.slides.map((_, i) => i);
   const customSlides = (slidePlan && slidePlan.custom) ? slidePlan.custom : [];
-  const on = id => enabledIds.includes(id);
 
-  const SLIDE_DEFS = {
-    1: `SLIDE {{N}} — TITLE
-  Layout: background #1A1A1A; logo top-left in white/muted; large centred operator name; sub-headline is a sharp assertion about the period; date range bottom-left; "QBR" badge top-right in #CC0000.
-  Headline rule: make it the strongest single statement you can draw from the data (e.g. "GGR +41% — Now Prove It Can Scale").`,
-
-    2: `SLIDE {{N}} — KPI CHARTS (Monthly Trends)
-  Section label: KPI OVERVIEW
-  Headline: write a conclusion drawn from the dominant KPI trend
-  Layout: 2×2 grid of 4 SVG bar charts, each in its own card (background #1A1A1A; border:1px solid #2D3748; border-radius:6px; padding:12px)
-  Chart 1 — Total Bets (monthly)
-  Chart 2 — GGR (monthly)
-  Chart 3 — Active Players (monthly)
-  Chart 4 — Rounds per Player (monthly)
-  Each chart: x-axis = months (abbreviated), y-axis = values (use K/M suffix). QBR period bars = #CC0000, prior months = #374151. Tiny label above each chart in #888.
-  If a metric is not in the data, show its card with muted "No data available" text.`,
-
-    3: `SLIDE {{N}} — STUDIO PERFORMANCE (Monthly)
-  Section label: STUDIO BREAKDOWN
-  Headline: conclusion about which studio is leading or has the best trend
-  Layout: one SVG line chart, full-width, height ~200px
-  Lines: one per studio, colour from palette, dots at each data point; legend below chart
-  x-axis = months, y-axis = Total Bets or GGR (whichever is in the data)
-  If studio monthly data is not available, render placeholder`,
-
-    4: `SLIDE {{N}} — NEW GAMES LAUNCHED
-  Section label: NEW LAUNCHES · [QBR period]
-  Headline: conclusion about new game performance
-  Table columns: Game Name | Studio | RTP | Total Bets (14d) | Players (14d)
-  Sort by Total Bets descending. Highlight top game row with left border: border-left:3px solid #CC0000
-  If no new games in data, show placeholder`,
-
-    6: `SLIDE {{N}} — RETENTION ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Retention Analysis"`,
-
-    8: `SLIDE {{N}} — STUDIO SUMMARY TABLE
-  Section label: PORTFOLIO PERFORMANCE
-  Headline: conclusion about portfolio health
-  Table columns: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game
-  Sort by Total Bets descending. Summary TOTAL row at bottom in bold.
-  Bet Share % in #CC0000 for top studio`,
-
-    9: `SLIDE {{N}} — PLAYER SEGMENTATION
-  ALWAYS render as placeholder. Text: "Coming Soon — Player Segmentation"`,
-
-    10: `SLIDE {{N}} — VIP ANALYSIS
-  Section label: VIP PLAYERS
-  Headline: conclusion about VIP contribution or opportunity
-  Table columns: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€)
-  Sort by VIP Bets descending. If VIP data not available, show placeholder`,
-
-    11: `SLIDE {{N}} — MAX BET ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Max Bet Analysis"`,
-
-    12: `SLIDE {{N}} — PROMOTION ANALYSIS
-  ALWAYS render as placeholder. Text: "Coming Soon — Promotion Analysis"`,
-
-    13: `SLIDE {{N}} — THE PORTFOLIO GAP
-  Section label: MISSING OPPORTUNITIES
-  Headline: the gap, as a dollar or % number if possible
-  Table columns: Game Name | Key Fact | Market Rank | Market Share % | Signal badge
-  Each row is a game the operator is underperforming or missing. Max 8 rows.
-  Signal badge colours per rules above`,
-
-    14: `SLIDE {{N}} — THE GROWTH LEVERS
-  Section label: GROWTH LEVERS
-  Headline: total opportunity size if possible
-  Table columns: Game Name | Key Fact | Players | GGR/Player | Total GGR | Opportunity | Action
-  Action column: small red pill <span style='background:#CC0000;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>ADD</span> or <span style='background:#1A1A1A;color:#fff;padding:2px 8px;font-size:9px;font-weight:700;'>EXPAND</span>
-  Sort by Opportunity descending`,
-
-    15: `SLIDE {{N}} — KPI GAPS
-  Section label: PERFORMANCE GAPS
-  Headline: the most important gap in one sentence
-  Table columns: KPI | Our Value | Peer Benchmark | Gap | Trend
-  Gap column: red if negative, green if positive. Trend: ↑ ↓ → arrows coloured accordingly`,
-
-  };
-
-  const ACTIONS_DEF = `SLIDE {{N}} — ACTIONS & PRIORITIES
-  Section label: RECOMMENDED ACTIONS
-  Headline: the decisive call — what must happen this quarter
-  Layout: numbered action cards (1–5 max), each card:
-    - Priority badge (CRITICAL / HIGH / MEDIUM)
-    - Action title (bold, white, 1 line)
-    - One-line rationale (muted text, #64748B)
-    - Expected outcome (small text, #16A34A)
-  Cards stacked vertically; alternating #161616 / #1E1E1E background; left border #CC0000; border-bottom:1px solid #2D3748`;
-
-  const ASK_DEF = `SLIDE {{N}} — THE ASK / CLOSING
-  Layout: background #1A1A1A; full-bleed dark slide
-  Top: RUBYPLAY × ${operator.toUpperCase()} in white/muted small text
-  Centre: large white headline — the specific ask from the brief (or a powerful close if no ask provided)
-  Below: 3 bullet next steps in #CBD5E1 text
-  Red accent bar: <div style='width:48px;height:4px;background:#CC0000;margin:24px auto 0;'></div>
-  No footer on this slide.`;
-
-  let slideN = 1;
   const slideLines = [];
-
-  // Standard slides in presentation order (filtered by plan)
-  const SLIDE_ORDER = [1, 2, 8, 3, 4, 6, 9, 10, 11, 12, 13, 14, 15];
-  for (const id of SLIDE_ORDER) {
-    if (on(id) && SLIDE_DEFS[id]) {
-      slideLines.push(SLIDE_DEFS[id].replace(/\{\{N\}\}/g, String(slideN++)));
-    }
+  let slideN = 1;
+  for (const idx of enabledIds) {
+    const s = tpl.slides[idx];
+    if (!s) continue;
+    slideLines.push(`SLIDE ${slideN++} — ${s.title.toUpperCase()}\n  ${s.description}`);
   }
-
-  // Custom slides (always before Actions)
   for (const c of customSlides) {
-    const desc = c.description ? c.description : 'Create a relevant slide using data from the analysis that supports the narrative.';
-    slideLines.push(`SLIDE ${slideN++} — ${c.title.toUpperCase()}
-  [CUSTOM SLIDE REQUESTED BY THE ACCOUNT MANAGER]
-  Description: ${desc}
-  Use ONLY real data from the analysis. Follow all design rules. Write a strong editorial headline (conclusion, not topic).`);
+    slideLines.push(`SLIDE ${slideN++} — ${c.title.toUpperCase()}\n  [CUSTOM] ${c.description || 'Create a relevant slide from the analysis.'}`);
   }
-
-  // Always-on: Actions and The Ask
-  slideLines.push(ACTIONS_DEF.replace(/\{\{N\}\}/g, String(slideN++)));
-  slideLines.push(ASK_DEF.replace(/\{\{N\}\}/g, String(slideN++)));
 
   const totalSlides = slideN - 1;
   const slidesText = slideLines.join('\n\n');
@@ -287,6 +176,8 @@ OUTPUT FORMAT — use exactly these delimiters for each slide:
 <HTML>complete slide HTML here</HTML>
 <SLIDE_END>`;
 
+  const b = tpl.brand;
+
   const userPrompt = `Create a QBR presentation for ${operator} using ONLY the data in the analysis text below.
 
 STORY BRIEF:
@@ -304,49 +195,49 @@ ${sectionContent}
 FIXED SLIDE TEMPLATE — generate ALL ${totalSlides} slides in order. Each slide must use the DESIGN RULES below.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DESIGN RULES (RubyPlay brand — apply to every slide):
+DESIGN RULES (brand — apply to every slide):
 
 Brand colours:
-  Red:      #CC0000  (accents, key numbers, signal badges, chart QBR bars)
-  Dark:     #1A1A1A  (table headers, card surfaces)
+  Primary:  ${b.primary}  (accents, key numbers, signal badges, chart QBR bars)
+  Dark:     ${b.highlight}  (table headers, card surfaces)
   Surface:  #161616  (even table rows on black bg)
   Surface2: #1E1E1E  (odd table rows on black bg)
-  Body:     #CBD5E1  (body text on dark bg)
+  Body:     ${b.text}  (body text on dark bg)
   Muted:    #64748B
   White:    #FFFFFF  (headlines, important text)
-  Positive: #16A34A  |  Negative: #CC0000
-  Chart palette (studios/lines): ['#CC0000','#60A5FA','#34D399','#FBBF24','#A78BFA','#F87171','#38BDF8']
+  Positive: #16A34A  |  Negative: ${b.primary}
+  Chart palette (studios/lines): ['${b.primary}','#60A5FA','#34D399','#FBBF24','#A78BFA','#F87171','#38BDF8']
 
 Outer div (every slide):
-  style='width:1280px;height:720px;box-sizing:border-box;background:#0D0D0D;color:#CBD5E1;font-family:Segoe UI,Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
+  style='width:1280px;height:720px;box-sizing:border-box;background:${b.background};color:${b.text};font-family:${b.fontBody},Inter,system-ui,sans-serif;position:relative;overflow:hidden;display:flex;flex-direction:column;'
 
 Logo bar (top of every slide):
   <div style='font-size:11px;color:#555;letter-spacing:2px;padding:10px 28px 0;text-transform:uppercase;'>RUBYPLAY × ${operator.toUpperCase()}</div>
 
 Editorial headline block (after logo bar, before body):
-  <div style='border-left:3px solid #CC0000;padding-left:12px;margin:8px 28px 0;'>
-    <span style='display:block;font-size:10px;color:#CC0000;letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;'>[SECTION LABEL]</span>
-    <span style='display:block;font-size:32px–40px;font-weight:800;color:#FFFFFF;line-height:1.2;'>[HEADLINE — a conclusion, not a topic]</span>
+  <div style='border-left:3px solid ${b.primary};padding-left:12px;margin:8px 28px 0;'>
+    <span style='display:block;font-size:10px;color:${b.primary};letter-spacing:2px;text-transform:uppercase;font-weight:700;margin-bottom:4px;'>[SECTION LABEL]</span>
+    <span style='display:block;font-size:32px–40px;font-weight:800;color:#FFFFFF;line-height:1.2;font-family:${b.fontHeading},Inter,system-ui,sans-serif;'>[HEADLINE — a conclusion, not a topic]</span>
   </div>
 
 Body area: <div style='padding:10px 28px;flex:1;overflow:hidden;'>
 
 Tables: border-collapse:collapse; width:100%;
-  Header: background:#1A1A1A; color:#fff; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:8px 12px;
-  Rows: alternating #161616 / #1E1E1E; font-size:12px; color:#CBD5E1; padding:7px 12px; border-bottom:1px solid #2D3748;
-  Key numbers: color:#CC0000; font-weight:700;
+  Header: background:${b.highlight}; color:#fff; font-size:10px; text-transform:uppercase; letter-spacing:0.5px; padding:8px 12px;
+  Rows: alternating #161616 / #1E1E1E; font-size:12px; color:${b.text}; padding:7px 12px; border-bottom:1px solid #2D3748;
+  Key numbers: color:${b.primary}; font-weight:700;
 
 Signal badges: display:inline-block; padding:2px 8px; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:1px;
-  CRITICAL → background:#CC0000; color:#fff
-  HIGH     → background:#1A1A1A; color:#fff
-  MEDIUM   → background:#374151; color:#CBD5E1
+  CRITICAL → background:${b.primary}; color:#fff
+  HIGH     → background:${b.highlight}; color:#fff
+  MEDIUM   → background:#374151; color:${b.text}
 
 Footer (bottom of every slide): <div style='font-size:10px;color:#555;padding:0 28px 8px;display:flex;justify-content:space-between;'><span>${operator} QBR</span><span>[SLIDE NUMBER]</span></div>
 
 SVG CHART RULES:
 - Use inline <svg> with a viewBox; set width="100%" and a fixed height in px
 - Bar charts: vertical bars, x-axis shows abbreviated month labels (Jan, Feb…), bars touching
-- QBR-period bars: fill #CC0000 | Non-QBR bars: fill #374151
+- QBR-period bars: fill ${b.primary} | Non-QBR bars: fill #374151
 - Axis labels: fill #888 | Tick lines: stroke #333
 - Line charts: multiple coloured lines, one per studio; dots at data points; x-axis = months
 - Horizontal bar charts: sorted descending; label on left, bar extends right, value label at end
@@ -401,9 +292,9 @@ async function streamSingleSlide({ slideTitle, slideDescription, brief, operator
 
 // Stream Claude's slide generation directly to an HTTP response.
 // The response is written as plain text chunks — client reads with ReadableStream.
-async function streamSlidesToResponse(sections, brief, operator, res, slidePlan) {
+async function streamSlidesToResponse(sections, brief, operator, res, slidePlan, template) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const { systemPrompt, userPrompt } = buildSlidesPrompt(sections, brief, operator, slidePlan);
+  const { systemPrompt, userPrompt } = buildSlidesPrompt(sections, brief, operator, slidePlan, template);
 
   const stream = await client.messages.create({
     model:      'claude-sonnet-4-6',
@@ -2153,7 +2044,8 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const { sections, brief, operator, slidePlan } = parsed;
+      const { sections, brief, operator, slidePlan, templateId } = parsed;
+      const template = _templates.find(t => t.id === templateId) || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
       if (!sections || !sections.length) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'No sections provided' }));
@@ -2180,7 +2072,7 @@ const server = http.createServer(async (req, res) => {
       }, 15000);
 
       try {
-        await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res, slidePlan || null);
+        await streamSlidesToResponse(sections, brief || {}, operator || 'Operator', res, slidePlan || null, template);
       } catch (e) {
         console.error('[generate-slides] Stream error:', e.message);
         res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
