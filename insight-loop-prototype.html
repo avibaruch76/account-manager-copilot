@@ -6057,6 +6057,7 @@ function _pptxDrawPreview(idx) {
       <div style="font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;">Slide ${_pptxActiveSlide+1} — Actions</div>
       <button onclick="_pptxEditSlideText(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">✏️ Edit text</button>
       <button onclick="_pptxShowRegenPanel(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">↺ Regenerate slide</button>
+      <button onclick="_pptxSaveSlideToTemplate(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F0FDF4;color:#16A34A;border:1.5px solid #86EFAC;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">💾 Save layout to template</button>
       <button onclick="_pptxRemoveSlide(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#FEF2F2;color:#CC0000;border:1.5px solid #FECACA;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">🗑 Remove slide</button>
       <div style="border-top:1px solid #E2E8F0;padding-top:8px;">
         <div style="font-size:10px;font-weight:700;color:#94A3B8;margin-bottom:4px;">Presenter Notes</div>
@@ -6093,6 +6094,24 @@ function _pptxDrawPreview(idx) {
 }
 
 // ── Task 11: Remove slide + drag-to-reorder helpers ───────────────
+async function _pptxSaveSlideToTemplate(idx) {
+  if (!_selectedTemplate) { showToast('No template selected', true); return; }
+  const slide = _pptxSlides[idx];
+  if (!slide || !slide.html) { showToast('No slide content to save', true); return; }
+  const tplSlide = _selectedTemplate.slides[idx];
+  if (!tplSlide) { showToast('Slide index not in template — cannot save', true); return; }
+  const updated = _selectedTemplate.slides.map((s, i) =>
+    i === idx ? { ...s, exampleHtml: slide.html } : s
+  );
+  await apiFetch(`/api/templates/${_selectedTemplate.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ slides: updated })
+  });
+  _selectedTemplate.slides = updated;
+  showToast(`💾 Layout saved to "${_selectedTemplate.name}" — slide ${idx + 1}`);
+}
+
 function _pptxRemoveSlide(idx) {
   if (!confirm('Remove this slide from the deck?')) return;
   _pptxSlides.splice(idx, 1);

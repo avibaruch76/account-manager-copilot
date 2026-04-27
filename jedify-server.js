@@ -137,7 +137,12 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   for (const idx of enabledIds) {
     const s = tpl.slides[idx];
     if (!s) continue;
-    slideLines.push(`SLIDE ${slideN++} — ${s.title.toUpperCase()}\n  ${s.description}`);
+    let entry = `SLIDE ${slideN++} — ${s.title.toUpperCase()}\n  ${s.description}`;
+    if (s.exampleHtml) {
+      const minified = s.exampleHtml.replace(/\s+/g, ' ').replace(/> </g, '><').slice(0, 2000);
+      entry += `\n  LAYOUT REFERENCE (replicate this HTML structure exactly, update all data/numbers with current analysis):\n  ${minified}`;
+    }
+    slideLines.push(entry);
   }
   for (const c of customSlides) {
     slideLines.push(`SLIDE ${slideN++} — ${c.title.toUpperCase()}\n  [CUSTOM] ${c.description || 'Create a relevant slide from the analysis.'}`);
