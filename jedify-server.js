@@ -1059,6 +1059,34 @@ async function checkPromoImpact(sf, df) {
     finding: `Promo rounds = ${promoShare}% of bets. Promo GGR: €${fmt(promo.GGR_EUR||0)}. ${promoShare > 30 ? 'High promo dependency.' : 'Healthy promo ratio.'}` };
 }
 
+async function checkVipBehavior(sf, df) {
+  const [top, totals] = await Promise.all([
+    runSQL(`SELECT s.PLAYER_ID, ROUND(SUM(s.GGR_EUR),2) AS GGR_EUR, `
+      + `ROUND(SUM(s.BETS_EUR),2) AS BETS_EUR, COUNT(*) AS ROUNDS `
+      + `FROM ${BASE_FROM} WHERE ${MF} AND ${sf} AND ${df.detail} `
+      + `GROUP BY s.PLAYER_ID HAVING SUM(s.GGR_EUR) > 0 ORDER BY GGR_EUR DESC LIMIT 50`),
+    runSQL(`SELECT ROUND(SUM(s.GGR_EUR),2) AS TOTAL_GGR, COUNT(DISTINCT s.PLAYER_ID) AS TOTAL_PLAYERS `
+      + `FROM ${BASE_FROM} WHERE ${MF} AND ${sf} AND ${df.detail}`)
+  ]);
+  if (!top.length) return { id: 'vip_behavior', name: 'VIP Player Behavior', status: 'warning', data: [], finding: 'No player data available.' };
+
+  const totalGgrAll = totals[0]?.TOTAL_GGR || 1;
+  const totalPlayers = totals[0]?.TOTAL_PLAYERS || top.length;
+  const top10 = top.slice(0, 10);
+  const top10Ggr = top10.reduce((s, r) => s + (r.GGR_EUR || 0), 0);
+  const top50Ggr = top.reduce((s, r) => s + (r.GGR_EUR || 0), 0);
+  const top10Share = Math.round(top10Ggr / totalGgrAll * 100);
+  const top50Share = Math.round(top50Ggr / totalGgrAll * 100);
+  const top10Rounds = top10.reduce((s, r) => s + (r.ROUNDS || 0), 0);
+  const top10Bets = top10.reduce((s, r) => s + (r.BETS_EUR || 0), 0);
+  const avgBetTop10 = top10Rounds > 0 ? Math.round(top10Bets / top10Rounds * 100) / 100 : 0;
+  const status = top10Share > 50 ? 'warning' : 'ok';
+  return {
+    id: 'vip_behavior', name: 'VIP Player Behavior', status, data: top,
+    finding: `Top 10 players = ${top10Share}% of GGR. Top 50 = ${top50Share}% of GGR. Avg bet/round (top 10): €${fmt(avgBetTop10)}. Total unique players: ${fmt(totalPlayers)}.`
+  };
+}
+
 // ── Check registry ────────────────────────────────────────────────────────
 
 const CHECK_REGISTRY = {
@@ -1072,10 +1100,11 @@ const CHECK_REGISTRY = {
   market_breakdown:  checkMarketBreakdown,
   device_split:      checkDeviceSplit,
   promo_impact:      checkPromoImpact,
+  vip_behavior:      checkVipBehavior,
 };
 
-// Checks that are skipped in prototype (need different data source)
-const SKIPPED_CHECKS = new Set(['vip_behavior', 'revenue_leakage']);
+// revenue_leakage needs billing/invoiced data not in the spins fact table
+const SKIPPED_CHECKS = new Set(['revenue_leakage']);
 
 async function runAnalysis(selection) {
   const sf = scopeFilter(selection);
