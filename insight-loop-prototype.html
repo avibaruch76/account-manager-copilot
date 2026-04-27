@@ -5976,11 +5976,11 @@ function _pptxRenderPreview() {
   _pptxDrawPreview();
 }
 
-function _pptxDrawPreview() {
+function _pptxDrawPreview(idx) {
+  if (idx !== undefined) _pptxActiveSlide = idx;
   const slides  = _pptxSlides;
   const content = document.getElementById('pptx-content');
   const active  = slides[_pptxActiveSlide];
-  const notes   = active.notes || '';
 
   // Thumbnail strip — named slides for 18-slot template
   const SLIDE_LABELS_FIXED = [
@@ -5988,44 +5988,62 @@ function _pptxDrawPreview() {
     'Retention','Regional','Studio Table','Player Seg','VIP',
     'Max Bet','Promos','Portfolio Gap','Growth Levers','KPI Gaps'
   ];
-  function _slideLabel(idx, total) {
-    if (idx < 15) return SLIDE_LABELS_FIXED[idx] || `Slide ${idx+1}`;
-    if (idx === total - 1) return 'The Ask';
-    if (idx === total - 2) return 'Actions';
-    return `Extra ${idx - 14}`;
+  function _slideLabel(i, total) {
+    if (i < 15) return SLIDE_LABELS_FIXED[i] || `Slide ${i+1}`;
+    if (i === total - 1) return 'The Ask';
+    if (i === total - 2) return 'Actions';
+    return `Extra ${i - 14}`;
   }
   const thumbs = slides.map((s, i) => {
+    const isActive = i === _pptxActiveSlide;
     const label = _slideLabel(i, slides.length);
-    const active = i === _pptxActiveSlide;
-    return `<div onclick="_pptxSetSlide(${i})" style="
-      flex-shrink:0;width:94px;height:54px;border-radius:4px;cursor:pointer;
-      border:2px solid ${active?'#CC0000':'#E2E8F0'};
-      background:${active?'#FFF5F5':'#F8FAFC'};
-      display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
-      font-family:Segoe UI,system-ui,sans-serif;transition:border-color 0.15s;
-    ">
-      <span style="font-size:10px;font-weight:700;color:${active?'#CC0000':'#94A3B8'};">${i+1}</span>
-      <span style="font-size:9px;font-weight:600;color:${active?'#1A1A1A':'#94A3B8'};text-align:center;line-height:1.2;max-width:84px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${label}</span>
+    return `<div onclick="_pptxSetSlide(${i})"
+      draggable="true"
+      ondragstart="_pptxDragStart(event,${i})"
+      ondragover="event.preventDefault()"
+      ondrop="_pptxDragDrop(event,${i})"
+      style="
+        flex-shrink:0;width:94px;height:54px;border-radius:4px;cursor:pointer;
+        border:2px solid ${isActive?'#CC0000':'#E2E8F0'};
+        background:${isActive?'#FFF5F5':'#F8FAFC'};
+        display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;
+        font-family:Segoe UI,system-ui,sans-serif;transition:border-color 0.15s;
+      ">
+      <span style="font-size:10px;font-weight:700;color:${isActive?'#CC0000':'#94A3B8'};">${i+1}</span>
+      <span style="font-size:9px;font-weight:600;color:${isActive?'#1A1A1A':'#94A3B8'};text-align:center;line-height:1.2;max-width:84px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;">${label}</span>
     </div>`;
   }).join('');
+
+  const actionPanel = `
+    <div id="pptx-action-panel" style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;">Slide ${_pptxActiveSlide+1} — Actions</div>
+      <button onclick="_pptxEditSlideText(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">✏️ Edit text</button>
+      <button onclick="_pptxShowRegenPanel(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">↺ Regenerate slide</button>
+      <button onclick="_pptxRemoveSlide(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#FEF2F2;color:#CC0000;border:1.5px solid #FECACA;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">🗑 Remove slide</button>
+      <div style="border-top:1px solid #E2E8F0;padding-top:8px;">
+        <div style="font-size:10px;font-weight:700;color:#94A3B8;margin-bottom:4px;">Presenter Notes</div>
+        <textarea style="width:100%;font-size:11px;border:1px solid #E2E8F0;border-radius:6px;padding:5px;resize:vertical;height:60px;box-sizing:border-box;"
+          onchange="_pptxSlides[${_pptxActiveSlide}].notes=this.value">${_pptxEsc(active?.notes||'')}</textarea>
+      </div>
+      <div id="pptx-edit-subpanel"></div>
+    </div>`;
 
   content.innerHTML = `
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;">
       ${thumbs}
     </div>
-    <div style="width:100%;aspect-ratio:16/9;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-      <div id="pptx-slide-canvas" style="width:100%;height:100%;">
-        ${active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>'}
+    <div style="display:flex;gap:14px;align-items:flex-start;">
+      <div style="flex:1;min-width:0;">
+        <div style="width:100%;aspect-ratio:16/9;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+          <div id="pptx-slide-canvas" style="width:100%;height:100%;">
+            ${active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>'}
+          </div>
+        </div>
+        <div style="text-align:center;margin-top:8px;font-size:11px;color:#94A3B8;">
+          Slide ${_pptxActiveSlide+1} of ${slides.length}
+        </div>
       </div>
-    </div>
-    ${notes ? `
-      <div style="margin-top:12px;background:#F8FAFC;border-radius:8px;padding:12px 16px;border-left:3px solid #7C3AED;">
-        <div style="font-size:10px;font-weight:700;color:#64748B;margin-bottom:4px;letter-spacing:1px;">PRESENTER NOTES</div>
-        <div style="font-size:12px;color:#475569;line-height:1.6;">${_pptxEsc(notes)}</div>
-      </div>
-    ` : ''}
-    <div style="text-align:center;margin-top:8px;font-size:11px;color:#94A3B8;">
-      Slide ${_pptxActiveSlide+1} of ${slides.length}
+      ${actionPanel}
     </div>
   `;
 
@@ -6034,6 +6052,131 @@ function _pptxDrawPreview() {
     <div style="flex:1"></div>
     <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
+}
+
+// ── Task 11: Remove slide + drag-to-reorder helpers ───────────────
+function _pptxRemoveSlide(idx) {
+  if (!confirm('Remove this slide from the deck?')) return;
+  _pptxSlides.splice(idx, 1);
+  _pptxRenderPreview();
+}
+
+let _pptxDragIdx = null;
+function _pptxDragStart(e, idx) { _pptxDragIdx = idx; e.dataTransfer.effectAllowed = 'move'; }
+function _pptxDragDrop(e, targetIdx) {
+  if (_pptxDragIdx === null || _pptxDragIdx === targetIdx) return;
+  const moved = _pptxSlides.splice(_pptxDragIdx, 1)[0];
+  _pptxSlides.splice(targetIdx, 0, moved);
+  _pptxDragIdx = null;
+  _pptxRenderPreview();
+}
+
+// ── Task 12: Edit text inline ─────────────────────────────────────
+function _pptxEditSlideText(idx) {
+  const html = _pptxSlides[idx].html || '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const textEls = Array.from(tmp.querySelectorAll('span, div, td, th, p, h1, h2, h3'))
+    .filter(el => el.children.length === 0 && el.textContent.trim().length > 3 && el.textContent.trim().length < 200);
+  const unique = [...new Map(textEls.map(el => [el.textContent.trim(), el])).values()].slice(0, 8);
+
+  const subpanel = document.getElementById('pptx-edit-subpanel');
+  if (!subpanel) return;
+  subpanel.innerHTML = `
+    <div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:8px;padding:10px;margin-top:4px;">
+      <div style="font-size:11px;font-weight:700;color:#92400E;margin-bottom:6px;">✏️ Edit text</div>
+      ${unique.map((el, i) => `
+        <div style="margin-bottom:5px;">
+          <div style="font-size:9px;color:#92400E;margin-bottom:2px;">Element ${i+1}</div>
+          <input id="pptx-text-edit-${i}" value="${el.textContent.trim().replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}"
+                 style="width:100%;font-size:11px;border:1px solid #FDE68A;border-radius:4px;padding:3px 6px;box-sizing:border-box;">
+        </div>`).join('')}
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <button onclick="_pptxApplyTextEdits(${idx})" style="padding:4px 10px;background:#7C3AED;color:white;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">Apply</button>
+        <button onclick="document.getElementById('pptx-edit-subpanel').innerHTML=''" style="padding:4px 8px;background:white;color:#64748B;border:1px solid #E2E8F0;border-radius:5px;font-size:11px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>`;
+  subpanel._origTexts = unique.map(el => el.textContent.trim());
+}
+
+function _pptxApplyTextEdits(idx) {
+  let html = _pptxSlides[idx].html || '';
+  const subpanel = document.getElementById('pptx-edit-subpanel');
+  if (!subpanel || !subpanel._origTexts) return;
+  subpanel._origTexts.forEach((orig, i) => {
+    const input = document.getElementById(`pptx-text-edit-${i}`);
+    if (input && input.value !== orig) {
+      html = html.split(orig).join(input.value);
+    }
+  });
+  _pptxSlides[idx].html = html;
+  _pptxDrawPreview(idx);
+}
+
+// ── Task 13: Regenerate single slide ─────────────────────────────
+function _pptxShowRegenPanel(idx) {
+  const subpanel = document.getElementById('pptx-edit-subpanel');
+  if (!subpanel) return;
+  subpanel.innerHTML = `
+    <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:8px;padding:10px;margin-top:4px;">
+      <div style="font-size:11px;font-weight:700;color:#166534;margin-bottom:6px;">↺ Regenerate Slide ${idx+1}</div>
+      <textarea id="pptx-regen-instructions" rows="3" placeholder="Instructions — e.g. 'Use a bar chart' or 'Make headline more urgent'"
+                style="width:100%;font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:5px;box-sizing:border-box;resize:none;"></textarea>
+      <div style="display:flex;gap:5px;margin-top:6px;">
+        <button id="pptx-regen-btn" onclick="_pptxRegenerateSlide(${idx})" style="padding:4px 12px;background:#16A34A;color:white;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">↺ Regenerate</button>
+        <button onclick="document.getElementById('pptx-edit-subpanel').innerHTML=''" style="padding:4px 8px;background:white;color:#64748B;border:1px solid #E2E8F0;border-radius:5px;font-size:11px;cursor:pointer;">Cancel</button>
+      </div>
+    </div>`;
+}
+
+async function _pptxRegenerateSlide(idx) {
+  const instructions = document.getElementById('pptx-regen-instructions')?.value || '';
+  const slideSource = (_selectedTemplate?.slides || [])[idx] || { title: `Slide ${idx+1}`, description: '' };
+  const sectionContent = (_pptxSections || []).map(s => `=== ${s.checkName||s.name||''} ===\n${s.content||''}`).join('\n\n').slice(0, 30000);
+
+  const btn = document.getElementById('pptx-regen-btn');
+  if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
+
+  try {
+    const token = getAuthToken();
+    const fetchHeaders = { 'Content-Type': 'application/json' };
+    if (token) fetchHeaders['Authorization'] = 'Bearer ' + token;
+    const baseUrl = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      ? 'http://localhost:3001' : '';
+
+    const res = await fetch(baseUrl + '/api/regenerate-slide', {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: JSON.stringify({
+        slideTitle: slideSource.title,
+        slideDescription: slideSource.description,
+        brief: _pptxBrief,
+        operator: document.getElementById('operator-select')?.value || 'Operator',
+        sectionContent,
+        instructions
+      })
+    });
+
+    let raw = '';
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      raw += decoder.decode(value, { stream: true });
+    }
+    raw += decoder.decode();
+
+    const parsed = parseSlidesFromStream(raw);
+    if (parsed.length > 0) {
+      _pptxSlides[idx] = { ..._pptxSlides[idx], ...parsed[0] };
+      _pptxDrawPreview(idx);
+    }
+  } catch (e) {
+    console.error('Regenerate failed:', e);
+  }
+  const subpanel = document.getElementById('pptx-edit-subpanel');
+  if (subpanel) subpanel.innerHTML = '';
 }
 
 function _pptxSetSlide(idx) {
