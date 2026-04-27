@@ -2115,6 +2115,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'POST' && req.url === '/api/preview-prompt') {
+    if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+    let body = '';
+    req.on('data', c => body += c);
+    req.on('end', () => {
+      const { sections, brief, operator, slidePlan, templateId } = JSON.parse(body);
+      const template = _templates.find(t => t.id === templateId) || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
+      const { systemPrompt, userPrompt } = buildSlidesPrompt(sections || [], brief || {}, operator || 'Operator', slidePlan || null, template);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ systemPrompt, userPrompt }));
+    });
+    return;
+  }
+
   if (req.method === 'POST' && req.url === '/api/regenerate-slide') {
     if (!process.env.ANTHROPIC_API_KEY) { res.writeHead(500); res.end(JSON.stringify({ error: 'ANTHROPIC_API_KEY not set' })); return; }
     if (!isAuthenticated(req)) { rejectUnauth(res); return; }
