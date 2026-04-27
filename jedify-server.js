@@ -366,14 +366,21 @@ async function streamSlidesToResponse(sections, brief, operator, res, slidePlan)
   });
 
   let totalChars = 0;
+  let inputTokens = 0;
+  let outputTokens = 0;
   for await (const chunk of stream) {
-    if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
+    if (chunk.type === 'message_start') {
+      inputTokens = chunk.message.usage?.input_tokens || 0;
+    } else if (chunk.type === 'message_delta') {
+      outputTokens = chunk.usage?.output_tokens || 0;
+    } else if (chunk.type === 'content_block_delta' && chunk.delta.type === 'text_delta') {
       const text = chunk.delta.text;
       res.write(text);
       totalChars += text.length;
     }
   }
-  console.log(`[generate-slides] Streamed ${totalChars} chars to client`);
+  const costUSD = (inputTokens / 1_000_000 * 3) + (outputTokens / 1_000_000 * 15);
+  console.log(`[generate-slides] Streamed ${totalChars} chars | tokens: ${inputTokens} in / ${outputTokens} out | cost: $${costUSD.toFixed(4)} USD`);
 }
 
 // ── Auth ─────────────────────────────────────────────────────────────────────
