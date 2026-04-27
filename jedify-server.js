@@ -1103,9 +1103,6 @@ const CHECK_REGISTRY = {
   vip_behavior:      checkVipBehavior,
 };
 
-// revenue_leakage needs billing/invoiced data not in the spins fact table
-const SKIPPED_CHECKS = new Set(['revenue_leakage']);
-
 async function runAnalysis(selection) {
   const sf = scopeFilter(selection);
   const df = buildDateFilters(selection);
@@ -1113,7 +1110,7 @@ async function runAnalysis(selection) {
   // Which checks to run — from client payload or default all mandatory
   const defaultChecks = ['ggr_trend', 'concentration', 'hidden_gems', 'benchmark_gap', 'new_launches', 'open_scan'];
   const enabledChecks = (selection.enabledChecks && selection.enabledChecks.length > 0)
-    ? selection.enabledChecks.filter(id => !SKIPPED_CHECKS.has(id))
+    ? selection.enabledChecks
     : defaultChecks;
 
   console.log(`[jedify] Running ${enabledChecks.length} checks for:`, JSON.stringify(selection.values));
