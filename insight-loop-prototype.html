@@ -5512,9 +5512,81 @@ function _pptxStep0Next() {
   _pptxRenderBrief();
 }
 
-function _pptxUploadTemplate(file) { /* Task 9 */ }
-function _pptxEditTemplate(id)     { /* Task 9 */ }
-function _pptxDeleteTemplate(id)   { /* Task 9 */ }
+async function _pptxUploadTemplate(file) {
+  if (!file || !file.name.endsWith('.pptx')) return;
+  await _pptxHandleFile(file);
+  const name = prompt('Name this template:', file.name.replace(/\.pptx$/i, '')) || file.name.replace(/\.pptx$/i, '');
+  const { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64, slides } = _pptxExtracted;
+  const res = await apiFetch('/api/templates', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, slides: slides || [], brand: { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 } })
+  });
+  const data = await res.json();
+  _selectedTemplateId = data.id;
+  _pptxLoadTemplateList();
+}
+
+async function _pptxDeleteTemplate(id) {
+  if (!confirm('Delete this template? This cannot be undone.')) return;
+  await apiFetch(`/api/templates/${id}`, { method: 'DELETE' });
+  if (_selectedTemplateId === id) _selectedTemplateId = 'default';
+  _pptxLoadTemplateList();
+}
+
+async function _pptxEditTemplate(id) {
+  const res = await apiFetch(`/api/templates/${id}`);
+  const tpl = await res.json();
+  const c = document.getElementById('pptx-content');
+  c.innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+      <button onclick="_pptxRenderStep0()" style="padding:4px 10px;background:#F1F5F9;border:none;border-radius:6px;cursor:pointer;font-size:12px;">← Back</button>
+      <span style="font-weight:700;font-size:13px;">Edit: ${tpl.name}</span>
+      ${!tpl.isDefault ? `<input id="pptx-tpl-rename" value="${tpl.name}" style="margin-left:auto;font-size:12px;border:1px solid #E2E8F0;border-radius:5px;padding:3px 8px;width:160px;">` : ''}
+    </div>
+    <div id="pptx-slide-editor" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;"></div>
+    <button onclick="_pptxAddEditorSlide()" style="margin-top:8px;width:100%;padding:6px;background:#F8FAFC;border:1.5px dashed #CBD5E1;border-radius:6px;font-size:12px;color:#64748B;cursor:pointer;">+ Add slide</button>
+    <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="_pptxSaveTemplateEdits('${id}')" style="padding:8px 18px;background:#7C3AED;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Save changes</button>
+    </div>`;
+  _pptxEditorSlides = tpl.slides.map(s => ({ ...s }));
+  _pptxRenderSlideEditorRows();
+}
+
+let _pptxEditorSlides = [];
+
+function _pptxRenderSlideEditorRows() {
+  const el = document.getElementById('pptx-slide-editor');
+  if (!el) return;
+  el.innerHTML = _pptxEditorSlides.map((s, i) => `
+    <div style="display:flex;gap:8px;align-items:flex-start;padding:8px;background:#F8FAFC;border-radius:6px;border:1px solid #E2E8F0;">
+      <span style="color:#94A3B8;font-size:11px;font-weight:700;width:18px;text-align:right;padding-top:6px;">${i+1}</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:4px;">
+        <input value="${(s.title||'').replace(/"/g,'&quot;')}" oninput="_pptxEditorSlides[${i}].title=this.value" placeholder="Slide title"
+               style="font-size:12px;font-weight:600;border:1px solid #E2E8F0;border-radius:4px;padding:4px 6px;">
+        <textarea oninput="_pptxEditorSlides[${i}].description=this.value" rows="2"
+                  style="font-size:11px;color:#64748B;border:1px solid #E2E8F0;border-radius:4px;padding:4px 6px;resize:none;">${s.description||''}</textarea>
+      </div>
+      <button onclick="_pptxEditorSlides.splice(${i},1);_pptxRenderSlideEditorRows()" style="padding:4px 6px;background:#FEF2F2;border:1px solid #FECACA;border-radius:5px;font-size:11px;color:#CC0000;cursor:pointer;flex-shrink:0;">×</button>
+    </div>`).join('');
+}
+
+function _pptxAddEditorSlide() {
+  _pptxEditorSlides.push({ title: 'New Slide', description: 'Describe what this slide should contain.' });
+  _pptxRenderSlideEditorRows();
+}
+
+async function _pptxSaveTemplateEdits(id) {
+  const nameInput = document.getElementById('pptx-tpl-rename');
+  const patch = { slides: _pptxEditorSlides };
+  if (nameInput) patch.name = nameInput.value;
+  await apiFetch(`/api/templates/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch)
+  });
+  _pptxRenderStep0();
+}
 
 function _pptxRenderBrief() {
   _pptxShowStep(1);
