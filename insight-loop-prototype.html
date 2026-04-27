@@ -6162,8 +6162,9 @@ function _pptxDrawPreview(idx) {
             ${active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>'}
           </div>
         </div>
-        <div style="text-align:center;margin-top:8px;font-size:11px;color:#94A3B8;">
-          Slide ${_pptxActiveSlide+1} of ${slides.length}
+        <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:8px;">
+          <span style="font-size:11px;color:#94A3B8;">Slide ${_pptxActiveSlide+1} of ${slides.length}</span>
+          <button onclick="_pptxEnlargeSlide(${_pptxActiveSlide})" style="padding:4px 12px;background:#F8FAFC;color:#475569;border:1.5px solid #E2E8F0;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">⛶ Enlarge</button>
         </div>
       </div>
       ${actionPanel}
@@ -6175,6 +6176,48 @@ function _pptxDrawPreview(idx) {
     <div style="flex:1"></div>
     <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
+}
+
+function _pptxEnlargeSlide(idx) {
+  const html = _pptxSlides[idx]?.html || '';
+  const existing = document.getElementById('pptx-enlarge-modal');
+  if (existing) existing.remove();
+  const modal = document.createElement('div');
+  modal.id = 'pptx-enlarge-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;box-sizing:border-box;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="position:relative;width:100%;max-width:1200px;">
+      <button onclick="document.getElementById('pptx-enlarge-modal').remove()"
+              style="position:absolute;top:-14px;right:-14px;width:32px;height:32px;background:#1E293B;color:white;border:none;border-radius:50%;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;z-index:1;line-height:1;">×</button>
+      <div style="width:100%;aspect-ratio:16/9;border-radius:8px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+        <iframe id="pptx-enlarge-frame" style="width:1280px;height:720px;border:none;transform-origin:top left;" srcdoc=""></iframe>
+      </div>
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:#94A3B8;">
+        Slide ${idx+1} of ${_pptxSlides.length} · click outside to close
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  // Scale the 1280×720 iframe to fill the container
+  const frame = modal.querySelector('#pptx-enlarge-frame');
+  const container = frame.parentElement;
+  function scaleFrame() {
+    const w = container.offsetWidth;
+    const scale = w / 1280;
+    frame.style.transform = `scale(${scale})`;
+    container.style.height = (720 * scale) + 'px';
+  }
+  frame.srcdoc = html;
+  scaleFrame();
+  window.addEventListener('resize', scaleFrame, { once: false });
+  // Clean up resize listener when modal closes
+  const observer = new MutationObserver(() => {
+    if (!document.getElementById('pptx-enlarge-modal')) {
+      window.removeEventListener('resize', scaleFrame);
+      observer.disconnect();
+    }
+  });
+  observer.observe(document.body, { childList: true });
 }
 
 // ── Task 11: Remove slide + drag-to-reorder helpers ───────────────
