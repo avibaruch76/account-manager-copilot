@@ -5551,6 +5551,7 @@ async function _pptxEditTemplate(id) {
     <div id="pptx-slide-editor" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;"></div>
     <button onclick="_pptxAddEditorSlide()" style="margin-top:8px;width:100%;padding:6px;background:#F8FAFC;border:1.5px dashed #CBD5E1;border-radius:6px;font-size:12px;color:#64748B;cursor:pointer;">+ Add slide</button>
     <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="_pptxDownloadTemplateFile('${id}')" style="padding:8px 14px;background:#F8FAFC;color:#475569;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">⬇ Download as .pptx</button>
       <button onclick="_pptxSaveTemplateEdits('${id}')" style="padding:8px 18px;background:#7C3AED;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Save changes</button>
     </div>`;
   _pptxEditorSlides = tpl.slides.map(s => ({ ...s }));
@@ -5590,6 +5591,31 @@ async function _pptxSaveTemplateEdits(id) {
     body: JSON.stringify(patch)
   });
   _pptxRenderStep0();
+}
+
+async function _pptxDownloadTemplateFile(id) {
+  const res = await apiFetch(`/api/templates/${id}`);
+  const tpl = await res.json();
+  const pptx = new PptxGenJS();
+  pptx.layout = 'LAYOUT_WIDE';
+  const bg = (tpl.brand.background || '#0D0D0D').replace('#', '');
+  const titleColor = (tpl.brand.primary || '#CC0000').replace('#', '');
+  const bodyColor = (tpl.brand.text || '#CBD5E1').replace('#', '');
+  const titleFont = tpl.brand.fontHeading || 'Segoe UI';
+  const bodyFont = tpl.brand.fontBody || 'Segoe UI';
+  for (const slide of tpl.slides) {
+    const s = pptx.addSlide();
+    s.background = { fill: bg };
+    s.addText(slide.title || '', {
+      x: 0.5, y: 0.4, w: 12.3, h: 1.0,
+      fontSize: 28, bold: true, color: titleColor, fontFace: titleFont
+    });
+    s.addText(slide.description || '', {
+      x: 0.5, y: 1.6, w: 12.3, h: 5.5,
+      fontSize: 13, color: bodyColor, fontFace: bodyFont, wrap: true, valign: 'top'
+    });
+  }
+  pptx.writeFile({ fileName: `${tpl.name.replace(/\s+/g, '_')}_template.pptx` });
 }
 
 function _pptxRenderBrief() {
