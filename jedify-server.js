@@ -216,9 +216,19 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   };
   const toneInstruction = toneMap[brief.tone] || toneMap.opportunity;
 
-  const sectionContent = sections.map(s =>
-    `=== ${s.checkName} ===\n${s.content}`
-  ).join('\n\n');
+  const sectionContent = sections.map(s => {
+    let block = `=== ${s.checkName} ===\n${s.content}`;
+    if (s.tables && s.tables.length > 0) {
+      const tableBlocks = s.tables.map(t => {
+        const labelLine = t.label ? `[${t.label}]` : `[Table]`;
+        const headerLine = t.headers && t.headers.length ? `Headers: ${t.headers.join(' | ')}` : '';
+        const rowLines = (t.rows || []).map((row, i) => `Row ${i + 1}: ${row.join(' | ')}`).join('\n');
+        return [labelLine, headerLine, rowLines].filter(Boolean).join('\n');
+      }).join('\n\n');
+      block += `\n\n[STRUCTURED TABLE DATA — copy these values character-for-character into table cells; do NOT use values from the narrative text above for table cells]\n${tableBlocks}\n[END STRUCTURED TABLE DATA]`;
+    }
+    return block;
+  }).join('\n\n');
 
   // Build dynamic slide list based on template + plan
   const enabledIds = (slidePlan && slidePlan.enabled) ? slidePlan.enabled : tpl.slides.map((_, i) => i);

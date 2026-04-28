@@ -5412,9 +5412,29 @@ async function openPresentationBuilder() {
     // Final fallback: use all enabled checks
     checkIds = _checks.filter(c => c.enabled !== false).map(c => c.id);
   }
+  // Extract tables from a card as structured rows — preserves column alignment Claude loses via innerText
+  function _extractCardTables(cardEl) {
+    const out = [];
+    cardEl.querySelectorAll('table').forEach(table => {
+      // Find the nearest preceding label (tier heading, section title, etc.)
+      let label = '';
+      let prev = table.previousElementSibling;
+      for (let i = 0; i < 5 && prev; i++, prev = prev.previousElementSibling) {
+        const t = (prev.innerText || prev.textContent || '').trim().replace(/\s+/g,' ');
+        if (t.length > 2 && t.length < 300) { label = t; break; }
+      }
+      const headers = Array.from(table.querySelectorAll('th')).map(th => (th.innerText||th.textContent||'').trim());
+      const rows = Array.from(table.querySelectorAll('tr')).map(tr => {
+        const cells = tr.querySelectorAll('td');
+        if (!cells.length) return null;
+        return Array.from(cells).map(td => (td.innerText||td.textContent||'').trim());
+      }).filter(r => r && r.some(c => c.length > 0));
+      if (rows.length) out.push({ label, headers, rows });
+    });
+    return out;
+  }
+
   // PRIMARY: Read from every individual check result card.
-  // These contain the raw data per check (game tables, benchmark gap details,
-  // per-player metrics, etc.) — exactly what Claude needs for accurate slides.
   const checkSections = checkIds.map(id => {
     const check = _checks.find(c => c.id === id);
     const name  = check ? check.name : id;
@@ -5422,7 +5442,8 @@ async function openPresentationBuilder() {
     if (!card) return null;
     const text = (card.innerText || card.textContent || '').trim();
     if (text.length < 30) return null;
-    return { checkId: id, checkName: name, content: text.slice(0, 10000), selected: true };
+    const tables = _extractCardTables(card);
+    return { checkId: id, checkName: name, content: text.slice(0, 10000), tables, selected: true };
   }).filter(Boolean);
 
   // SUPPLEMENT: also add persona panes for narrative context
@@ -5573,10 +5594,20 @@ async function _pptxRenderHistory() {
 async function _pptxViewHistory(id) {
   try {
     const res = await apiFetch('/api/presentations/' + id);
+    if (!res.ok) {
+      showToast('⚠️ Slides not available — server was restarted since this presentation was generated. Re-generate to view.', true);
+      return;
+    }
     const pres = await res.json();
-    _pptxSlides = pres.slides || [];
+    if (!pres.slides || pres.slides.length === 0) {
+      showToast('⚠️ No slide data found for this presentation.', true);
+      return;
+    }
+    _pptxSlides = pres.slides;
     _pptxRenderPreview();
-    showToast('📁 Loaded: ' + new Date(pres.date).toLocaleDateString() + ' — ' + pres.slideCount + ' slides');
+    const dateStr = pres.date ? new Date(pres.date).toLocaleDateString() : 'unknown date';
+    const slideStr = pres.slideCount || pres.slides.length;
+    showToast('📁 Loaded: ' + dateStr + ' — ' + slideStr + ' slides');
   } catch (e) {
     showToast('Failed to load presentation: ' + e.message, true);
   }
@@ -6239,7 +6270,7 @@ function _pptxConfirmAddCustomSlide() {
 }
 
 async function _pptxShowPromptPreview() {
-  const sections = _pptxSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content }));
+  const sections = _pptxSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content, tables: s.tables || [] }));
   const brief = {
     context: (document.getElementById('pptx-context')?.value || _pptxBrief.context || '').trim(),
     angle:   (document.getElementById('pptx-angle')?.value   || _pptxBrief.angle   || '').trim(),
@@ -6377,7 +6408,7 @@ async function _pptxGenerate() {
       headers: fetchHeaders,
       signal: _pptxGenAbortController.signal,
       body: JSON.stringify({
-        sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
+        sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content, tables: s.tables || [] })),
         brief: _pptxBrief,
         operator: entity,
         slidePlan: {
@@ -6545,11 +6576,11 @@ function _pptxWrapWithFooter(html) {
   if (!b) return html;
   const lineColor  = b.primary || b.accent || '#CC0000';
   const bgColor    = b.background || '#0D0D0D';
-  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:36px;object-fit:contain;display:block;">` : '';
+  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:108px;object-fit:contain;display:block;">` : '';
   const footer = `
     <div style="position:absolute;bottom:0;left:0;right:0;z-index:999;">
       <div style="height:2px;background:${lineColor};"></div>
-      <div style="background:${bgColor};display:flex;align-items:center;padding:0 24px;height:52px;">
+      <div style="background:${bgColor};display:flex;align-items:center;padding:0 24px;height:130px;">
         ${logoImg}
         <span style="margin-left:auto;font-size:10px;color:#94A3B8;font-family:Segoe UI,sans-serif;white-space:nowrap;">© 2025 RubyPlay Ltd. All Rights Reserved.</span>
       </div>
