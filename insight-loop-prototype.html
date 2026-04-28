@@ -5379,6 +5379,27 @@ function _pptxSetContext(id, value) {
   }
 }
 
+// Extract tables from a card as structured rows — global so both openPresentationBuilder and _pptxGenerate can call it
+function _extractCardTables(cardEl) {
+  const out = [];
+  cardEl.querySelectorAll('table').forEach(table => {
+    let label = '';
+    let prev = table.previousElementSibling;
+    for (let i = 0; i < 5 && prev; i++, prev = prev.previousElementSibling) {
+      const t = (prev.innerText || prev.textContent || '').trim().replace(/\s+/g,' ');
+      if (t.length > 2 && t.length < 300) { label = t; break; }
+    }
+    const headers = Array.from(table.querySelectorAll('th')).map(th => (th.innerText||th.textContent||'').trim());
+    const rows = Array.from(table.querySelectorAll('tr')).map(tr => {
+      const cells = tr.querySelectorAll('td');
+      if (!cells.length) return null;
+      return Array.from(cells).map(td => (td.innerText||td.textContent||'').trim());
+    }).filter(r => r && r.some(c => c.length > 0));
+    if (rows.length) out.push({ label, headers, rows });
+  });
+  return out;
+}
+
 // ── Open / Close ────────────────────────────────────────────────
 function _pptxGetOperator() {
   return (_runSession && _runSession.entity) ? _runSession.entity : '';
@@ -5412,28 +5433,6 @@ async function openPresentationBuilder() {
     // Final fallback: use all enabled checks
     checkIds = _checks.filter(c => c.enabled !== false).map(c => c.id);
   }
-  // Extract tables from a card as structured rows — preserves column alignment Claude loses via innerText
-  function _extractCardTables(cardEl) {
-    const out = [];
-    cardEl.querySelectorAll('table').forEach(table => {
-      // Find the nearest preceding label (tier heading, section title, etc.)
-      let label = '';
-      let prev = table.previousElementSibling;
-      for (let i = 0; i < 5 && prev; i++, prev = prev.previousElementSibling) {
-        const t = (prev.innerText || prev.textContent || '').trim().replace(/\s+/g,' ');
-        if (t.length > 2 && t.length < 300) { label = t; break; }
-      }
-      const headers = Array.from(table.querySelectorAll('th')).map(th => (th.innerText||th.textContent||'').trim());
-      const rows = Array.from(table.querySelectorAll('tr')).map(tr => {
-        const cells = tr.querySelectorAll('td');
-        if (!cells.length) return null;
-        return Array.from(cells).map(td => (td.innerText||td.textContent||'').trim());
-      }).filter(r => r && r.some(c => c.length > 0));
-      if (rows.length) out.push({ label, headers, rows });
-    });
-    return out;
-  }
-
   // PRIMARY: Read from every individual check result card.
   const checkSections = checkIds.map(id => {
     const check = _checks.find(c => c.id === id);
