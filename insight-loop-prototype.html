@@ -5594,11 +5594,22 @@ async function _pptxRenderHistory() {
 async function _pptxViewHistory(id) {
   try {
     const res = await apiFetch('/api/presentations/' + id);
-    if (!res.ok) {
-      showToast('⚠️ Slides not available — server was restarted since this presentation was generated. Re-generate to view.', true);
+    let pres = null;
+    if (res.ok) {
+      pres = await res.json();
+    }
+    // Fall back to localStorage when server restarted and lost in-memory slides
+    if (!pres || !pres.slides || !pres.slides.length) {
+      try {
+        const local = JSON.parse(localStorage.getItem('pptx_history') || '[]');
+        const localPres = local.find(p => p.id === id);
+        if (localPres && localPres.slides && localPres.slides.length) pres = localPres;
+      } catch {}
+    }
+    if (!pres || !pres.slides || !pres.slides.length) {
+      showToast('⚠️ Slides not available — this presentation was generated before local backup was added. Re-generate to view.', true);
       return;
     }
-    const pres = await res.json();
     if (!pres.slides || pres.slides.length === 0) {
       showToast('⚠️ No slide data found for this presentation.', true);
       return;
@@ -6489,11 +6500,11 @@ async function _pptxGenerate() {
         title: (_pptxBrief.context || _pptxBrief.angle || 'QBR').slice(0, 200),
         brief: { context: _pptxBrief.context || '', angle: _pptxBrief.angle || '', ask: _pptxBrief.ask || '' }
       };
-      // Always save metadata to localStorage (survives Render restarts)
+      // Save metadata + full slides to localStorage (survives Render restarts)
       try {
         const local = JSON.parse(localStorage.getItem('pptx_history') || '[]');
-        local.unshift(historyEntry);
-        localStorage.setItem('pptx_history', JSON.stringify(local.slice(0, 30)));
+        local.unshift({ ...historyEntry, slides: _pptxSlides.map(s => ({ html: s.html || '', notes: s.notes || '' })) });
+        localStorage.setItem('pptx_history', JSON.stringify(local.slice(0, 10)));
       } catch {}
       // Also save full slides to server (in-memory)
       await apiFetch('/api/presentations', {
