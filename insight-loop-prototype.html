@@ -3400,7 +3400,10 @@ function tryRestoreAnalysisCache() {
     // Clear sub-status placeholder text
     const sub = document.getElementById('check-results-sub');
     if (sub) sub.textContent = '';
-    console.log('[cache] Restored analysis result from:', payload.savedAtLabel);
+    // Migrate to history and remove from cache
+    _saveAnalysisHistory();
+    localStorage.removeItem(key);
+    console.log('[cache] Migrated to history and removed cache key:', key);
     return true;
   } catch (e) {
     console.warn('[cache] Restore failed:', e.message);
