@@ -305,7 +305,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const totalSlides = slideN - 1;
   const slidesText = slideLines.join('\n\n');
 
-  const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use for slides 6, 9, 11, 12 and any slide with no data available):
+  const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use ONLY for slides explicitly marked "PLACEHOLDER — Coming Soon" in the slide list above, and any slide with truly no data available — do NOT apply to Portfolio Gap, Growth Levers, KPI Gaps, Actions, or The Ask):
   <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
     <div style='width:40px;height:40px;border-radius:50%;background:#1A1A1A;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
     <div style='font-size:16px;font-weight:700;color:#FFFFFF;'>[TOPIC] — Coming Soon</div>
