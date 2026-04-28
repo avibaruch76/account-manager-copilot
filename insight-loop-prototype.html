@@ -5715,13 +5715,38 @@ async function _pptxExtractBrandOnly(file) {
     const bgHex = lt1 || dk1;
     if (bgHex) {
       background = '#' + bgHex;
-      // If background is dark, text should be light; if light, text dark
       text = _lum(bgHex) < 0.3 ? '#CBD5E1' : '#1E293B';
     }
-    if (dk1 && _lum(dk1) > 0.3) primary = '#' + dk1;   // only use dk1 as primary if it's actually light-ish (readable)
     if (acc1) accent = '#' + acc1;
-    if (acc2 && _lum(acc2) < 0.8) highlight = '#' + acc2;  // skip near-white accents as highlight
+    if (acc2 && _lum(acc2) < 0.8) highlight = '#' + acc2;
     else if (dk2) highlight = '#' + dk2;
+  }
+
+  // 1b. Scan all ppt XML files for the most-used non-neutral color.
+  // Brand reds/blues are often hardcoded in shapes, not in the theme palette.
+  {
+    const themeHexes = new Set([
+      ...[primary, accent, background, highlight, text].map(c => c.replace('#','').toUpperCase()),
+      '000000','FFFFFF','666666','333333','CCCCCC','999999'
+    ]);
+    const colorCount = {};
+    const xmlPaths = Object.keys(zip.files).filter(k =>
+      k.startsWith('ppt/') && k.endsWith('.xml') && !k.includes('/_rels/')
+    );
+    for (const p of xmlPaths) {
+      const f = zip.file(p);
+      if (!f) continue;
+      const xml2 = await f.async('text');
+      for (const m of xml2.matchAll(/srgbClr val="([A-Fa-f0-9]{6})"/g)) {
+        const h = m[1].toUpperCase();
+        if (themeHexes.has(h)) continue;
+        const lum = _lum(h);
+        if (lum > 0.80 || lum < 0.015) continue; // skip near-white and near-black
+        colorCount[h] = (colorCount[h] || 0) + 1;
+      }
+    }
+    const top = Object.entries(colorCount).sort((a, b) => b[1] - a[1])[0];
+    if (top) { primary = '#' + top[0]; accent = '#' + top[0]; }
   }
 
   // 2. Fonts from slide master
@@ -7264,12 +7289,11 @@ async function _pptxDownload() {
       const slide = _pptxSlides[i];
       if (btn) btn.textContent = `⏳ Slide ${i+1}/${_pptxSlides.length}…`;
 
-      container.innerHTML = slide.html || '';
+      container.innerHTML = _pptxWrapWithFooter(slide.html || '');
       // Wait three frames for CSS + SVG to fully paint before capture
       await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(r))));
 
-      // Force root slide div to fill the full 720px — height:100% CSS doesn't reliably
-      // compute in off-screen html2canvas contexts. This guarantees full-height capture.
+      // Force root slide div to fill the full 720px
       const slideRoot = container.firstElementChild;
       if (slideRoot) {
         slideRoot.style.width  = '1280px';
@@ -7279,10 +7303,11 @@ async function _pptxDownload() {
         slideRoot.style.overflow = 'hidden';
       }
 
+      const bgColor = _selectedTemplate?.brand?.background || '#0D0D0D';
       // scale:2 → captures at 2560×1440 → 192dpi in pptx → crisp text and fonts
       const canvas = await window.html2canvas(container, {
         width: 1280, height: 720, scale: 2,
-        useCORS: true, logging: false, backgroundColor: '#ffffff',
+        useCORS: true, logging: false, backgroundColor: bgColor,
         imageTimeout: 0, allowTaint: false
       });
       const imgData = canvas.toDataURL('image/png');
