@@ -5792,6 +5792,25 @@ function _pptxRenderStep0() {
     <button onclick="_pptxStep0Next()" style="padding:8px 20px;background:linear-gradient(135deg,#7C3AED,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Next: Story Brief →</button>`;
 }
 
+const _TPL_BACKUP_KEY = 'pptx_templates_backup';
+
+function _saveTplBackup(name, slides, brand) {
+  try {
+    const list = JSON.parse(localStorage.getItem(_TPL_BACKUP_KEY) || '[]');
+    const entry = { name, slides: slides || [], brand: { ...(brand||{}), logoBase64: null } };
+    const idx = list.findIndex(b => b.name === name);
+    if (idx >= 0) list[idx] = entry; else list.push(entry);
+    localStorage.setItem(_TPL_BACKUP_KEY, JSON.stringify(list));
+  } catch {}
+}
+
+function _removeTplBackup(name) {
+  try {
+    const list = JSON.parse(localStorage.getItem(_TPL_BACKUP_KEY) || '[]');
+    localStorage.setItem(_TPL_BACKUP_KEY, JSON.stringify(list.filter(b => b.name !== name)));
+  } catch {}
+}
+
 async function _pptxLoadTemplateList() {
   try {
     const res = await apiFetch('/api/templates');
@@ -5799,6 +5818,24 @@ async function _pptxLoadTemplateList() {
   } catch {
     _pptxTemplates = [{ id: 'default', name: 'RubyPlay Default', isDefault: true, slideCount: 15 }];
   }
+  // Re-upload any custom templates the server lost on restart
+  try {
+    const serverNames = new Set(_pptxTemplates.map(t => t.name));
+    const backups = JSON.parse(localStorage.getItem(_TPL_BACKUP_KEY) || '[]');
+    const missing = backups.filter(b => !serverNames.has(b.name));
+    if (missing.length > 0) {
+      for (const tpl of missing) {
+        await apiFetch('/api/templates', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tpl)
+        });
+      }
+      const res2 = await apiFetch('/api/templates');
+      _pptxTemplates = await res2.json();
+    }
+  } catch {}
+
   const list = document.getElementById('pptx-tpl-list');
   if (!list) return;
   list.innerHTML = _pptxTemplates.map(t => `
@@ -6048,12 +6085,15 @@ async function _pptxUploadTemplate(file) {
   });
   const data = await res.json();
   _selectedTemplateId = data.id;
+  _saveTplBackup(name, slides || [], { primary, accent, background, highlight, text, fontHeading, fontBody });
   _pptxLoadTemplateList();
 }
 
 async function _pptxDeleteTemplate(id) {
   if (!confirm('Delete this template? This cannot be undone.')) return;
+  const tpl = _pptxTemplates.find(t => t.id === id);
   await apiFetch(`/api/templates/${id}`, { method: 'DELETE' });
+  if (tpl) _removeTplBackup(tpl.name);
   if (_selectedTemplateId === id) {
     _selectedTemplateId = 'default';
     localStorage.setItem('pptx_selected_template', 'default');
@@ -6115,6 +6155,13 @@ async function _pptxSaveTemplateEdits(id) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch)
   });
+  const tpl = _pptxTemplates.find(t => t.id === id);
+  if (tpl && !tpl.isDefault) {
+    const oldName = tpl.name;
+    const newName = patch.name || oldName;
+    if (oldName !== newName) _removeTplBackup(oldName);
+    _saveTplBackup(newName, _pptxEditorSlides, tpl.brand);
+  }
   // Keep client cache in sync so Step 2 shows updated slide names/descriptions
   if (id === _selectedTemplateId && _selectedTemplate) {
     _selectedTemplate = { ..._selectedTemplate, ...patch };
