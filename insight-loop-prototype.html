@@ -5438,6 +5438,14 @@ async function openPresentationBuilder() {
   // Combine: check cards first (raw data), then persona panes (narrative context)
   _pptxSections = [...checkSections, ...personaSections];
 
+  // Final fallback if nothing found
+  if (_pptxSections.length === 0) {
+    _pptxSections = checkIds.map(id => {
+      const check = _checks.find(c => c.id === id);
+      return { checkId: id, checkName: check ? check.name : id, content: '(no content available)', selected: true };
+    });
+  }
+
   _pptxSectionConfidence = {};
   for (const s of _pptxSections) {
     const len = (s.content || '').length;
@@ -5448,14 +5456,6 @@ async function openPresentationBuilder() {
     else if (len < 2000)             conf = 'medium';
     else                             conf = 'high';
     _pptxSectionConfidence[s.checkId] = conf;
-  }
-
-  // Final fallback if nothing found
-  if (_pptxSections.length === 0) {
-    _pptxSections = checkIds.map(id => {
-      const check = _checks.find(c => c.id === id);
-      return { checkId: id, checkName: check ? check.name : id, content: '(no content available)', selected: true };
-    });
   }
 
   _pptxRenderStep0();
