@@ -364,7 +364,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const totalSlides = slideN - 1;
   const slidesText = slideLines.join('\n\n');
 
-  const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use ONLY for slides explicitly marked "PLACEHOLDER — Coming Soon" in the slide list above, and any slide with truly no data available — do NOT apply to Portfolio Gap, Growth Levers, KPI Gaps, Actions, or The Ask):
+  const PLACEHOLDER_DEF = `COMING SOON PLACEHOLDER (use ONLY for slides whose description contains the exact text "PLACEHOLDER — Coming Soon". NEVER use this for any other slide — if data seems sparse, still generate a real slide with what you have. Do NOT use placeholder for: New Games Launched, KPI Charts, Studio Summary, Studio Performance, VIP Analysis, Portfolio Gap, Growth Levers, KPI Gaps, Actions, The Ask, or ANY slide not explicitly marked PLACEHOLDER):
   <div style='flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;'>
     <div style='width:40px;height:40px;border-radius:50%;background:#1A1A1A;border:1px solid #333;display:flex;align-items:center;justify-content:center;font-size:20px;'>⏳</div>
     <div style='font-size:16px;font-weight:700;color:#FFFFFF;'>[TOPIC] — Coming Soon</div>
