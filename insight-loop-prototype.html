@@ -6991,10 +6991,31 @@ function _pptxApplyTextEdits(idx) {
 function _pptxShowRegenPanel(idx) {
   const subpanel = document.getElementById('pptx-edit-subpanel');
   if (!subpanel) return;
+
+  // Build data source options: current analysis + history entries
+  const history = (() => { try { return JSON.parse(localStorage.getItem('analysis_history') || '[]'); } catch { return []; } })();
+  const hasCurrentAnalysis = (document.getElementById('check-results')?.innerText || '').trim().length > 30;
+  let sourceOptions = '';
+  if (hasCurrentAnalysis) {
+    sourceOptions += `<option value="current">Current analysis (live)</option>`;
+  }
+  history.forEach(e => {
+    const d = new Date(e.timestamp);
+    const label = e.operator + ' · ' + d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    sourceOptions += `<option value="${e.id}">${label}</option>`;
+  });
+  if (!sourceOptions) sourceOptions = `<option value="current">No analysis data available</option>`;
+
   subpanel.innerHTML = `
     <div style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:8px;padding:10px;margin-top:4px;">
       <div style="font-size:11px;font-weight:700;color:#166534;margin-bottom:6px;">↺ Regenerate Slide ${idx+1}</div>
-      <textarea id="pptx-regen-instructions" rows="3" placeholder="Instructions — e.g. 'Use a bar chart' or 'Make headline more urgent'"
+      <div style="margin-bottom:6px;">
+        <div style="font-size:10px;color:#166534;font-weight:600;margin-bottom:3px;">Data source</div>
+        <select id="pptx-regen-source" style="width:100%;font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:4px 6px;box-sizing:border-box;background:white;">
+          ${sourceOptions}
+        </select>
+      </div>
+      <textarea id="pptx-regen-instructions" rows="2" placeholder="Instructions — e.g. 'Use a bar chart' or 'Make headline more urgent'"
                 style="width:100%;font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:5px;box-sizing:border-box;resize:none;"></textarea>
       <div style="display:flex;gap:5px;margin-top:6px;">
         <button id="pptx-regen-btn" onclick="_pptxRegenerateSlide(${idx})" style="padding:4px 12px;background:#16A34A;color:white;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">↺ Regenerate</button>
@@ -7006,13 +7027,30 @@ function _pptxShowRegenPanel(idx) {
 async function _pptxRegenerateSlide(idx) {
   const instructions = document.getElementById('pptx-regen-instructions')?.value || '';
   const slideSource = (_selectedTemplate?.slides || [])[idx] || { title: `Slide ${idx+1}`, description: '' };
-  // Always re-read from #check-results so regenerate uses real data, not stale/empty sections
-  const resultsElRegen = document.getElementById('check-results');
+
+  // Resolve data source: current DOM or a history entry
+  const sourceId = document.getElementById('pptx-regen-source')?.value || 'current';
   let regenSections = _pptxSections || [];
-  if (resultsElRegen && (resultsElRegen.innerText || '').trim().length > 30) {
-    const headingSecs = _splitResultsByHeadings(resultsElRegen);
-    regenSections = headingSecs.length > 0 ? headingSecs
-      : [{ checkId: 'full_analysis', checkName: 'Full Analysis', content: (resultsElRegen.innerText||'').trim().slice(0, 15000), tables: _extractCardTables(resultsElRegen) }];
+  if (sourceId !== 'current') {
+    // Load from analysis history
+    try {
+      const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+      const entry = history.find(e => e.id === sourceId);
+      if (entry && entry.html) {
+        const tmp = document.createElement('div');
+        tmp.innerHTML = entry.html;
+        const secs = _splitResultsByHeadings(tmp);
+        regenSections = secs.length > 0 ? secs
+          : [{ checkId: 'full_analysis', checkName: 'Full Analysis', content: (tmp.innerText||'').trim().slice(0, 15000), tables: _extractCardTables(tmp) }];
+      }
+    } catch {}
+  } else {
+    const resultsElRegen = document.getElementById('check-results');
+    if (resultsElRegen && (resultsElRegen.innerText || '').trim().length > 30) {
+      const headingSecs = _splitResultsByHeadings(resultsElRegen);
+      regenSections = headingSecs.length > 0 ? headingSecs
+        : [{ checkId: 'full_analysis', checkName: 'Full Analysis', content: (resultsElRegen.innerText||'').trim().slice(0, 15000), tables: _extractCardTables(resultsElRegen) }];
+    }
   }
 
   const btn = document.getElementById('pptx-regen-btn');
