@@ -41,7 +41,7 @@ function buildDefaultTemplate() {
       { title: 'The Portfolio Gap',   description: 'Table: Game | Key Fact | Market Rank | Market Share % | Signal badge. Max 8 rows.' },
       { title: 'Growth Levers',       description: 'Table: Game | Key Fact | Players | GGR/Player | Total GGR | Opportunity | ADD/EXPAND pill. Sort by Opportunity desc.' },
       { title: 'KPI Gaps',            description: 'Table: KPI | Our Value | Peer Benchmark | Gap | Trend arrows. Red gaps negative, green positive.' },
-      { title: 'Actions & Priorities',description: 'Up to 5 numbered action cards: priority badge, bold title, rationale, expected outcome.' },
+      { title: 'Actions & Priorities',description: 'Up to 5 numbered action cards in a 2-column CSS grid (last card spans full width if count is odd). Each card: circular red number badge, bold title, priority pill (CRITICAL/URGENT/HIGH/MEDIUM/MONITOR), 2-3 sentence rationale, optional expected outcome line in red italic. Dark card background (#1A1A1A), red left border accent on the #1 action. Cards must NOT be in a single horizontal row.' },
       { title: 'The Ask',             description: 'Full-bleed dark slide. Large headline = the specific ask. 3 bullet next steps. Red accent bar.' },
     ],
     brand: {
