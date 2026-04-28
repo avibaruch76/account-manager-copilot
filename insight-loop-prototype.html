@@ -5451,9 +5451,9 @@ async function openPresentationBuilder() {
     const len = (s.content || '').length;
     const isPlaceholder = /PLACEHOLDER|coming soon|no data|not available/i.test(s.content || '');
     let conf;
-    if (isPlaceholder || len < 100)  conf = 'none';
-    else if (len < 400)              conf = 'low';
-    else if (len < 2000)             conf = 'medium';
+    if (isPlaceholder || len < 80)   conf = 'none';
+    else if (len < 150)              conf = 'low';
+    else if (len < 600)              conf = 'medium';
     else                             conf = 'high';
     _pptxSectionConfidence[s.checkId] = conf;
   }
