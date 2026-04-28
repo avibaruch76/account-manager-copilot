@@ -6909,8 +6909,8 @@ function _pptxDrawPreview(idx) {
     </div>
     <div style="display:flex;gap:14px;align-items:flex-start;">
       <div style="flex:1;min-width:0;">
-        <div style="width:100%;aspect-ratio:16/9;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-          <div id="pptx-slide-canvas" style="width:100%;height:100%;">
+        <div id="pptx-slide-outer" style="width:100%;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+          <div id="pptx-slide-canvas" style="width:1280px;height:720px;transform-origin:top left;">
             ${_pptxWrapWithFooter(active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>')}
           </div>
         </div>
@@ -6929,6 +6929,17 @@ function _pptxDrawPreview(idx) {
     <button onclick="_pptxShare()" style="padding:9px 16px;background:#F8FAFC;color:#475569;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🔗 Share</button>
     <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
+
+  // Scale slide canvas to fit container (slides are authored at 1280×720)
+  requestAnimationFrame(() => {
+    const outer  = document.getElementById('pptx-slide-outer');
+    const canvas = document.getElementById('pptx-slide-canvas');
+    if (outer && canvas) {
+      const scale = outer.offsetWidth / 1280;
+      canvas.style.transform = `scale(${scale})`;
+      outer.style.height = Math.round(720 * scale) + 'px';
+    }
+  });
 }
 
 function _pptxEnlargeSlide(idx) {
