@@ -5718,6 +5718,15 @@ async function _pptxViewHistory(id) {
       return;
     }
     _pptxSlides = pres.slides;
+    // Restore brief so Regenerate has tone/context
+    if (pres.brief) _pptxBrief = { ...{ context:'', angle:'', tone:'opportunity', ask:'', include:'', exclude:'' }, ...pres.brief };
+    // Restore template so Regenerate knows slide definitions
+    const tplId = pres.templateId || 'default';
+    _selectedTemplateId = tplId;
+    try {
+      const tplRes = await apiFetch('/api/templates/' + tplId);
+      if (tplRes.ok) _selectedTemplate = await tplRes.json();
+    } catch {}
     _pptxRenderPreview();
     const dateStr = pres.date ? new Date(pres.date).toLocaleDateString() : 'unknown date';
     const slideStr = pres.slideCount || pres.slides.length;
@@ -6619,7 +6628,8 @@ async function _pptxGenerate() {
         date: new Date().toISOString(),
         slideCount: _pptxSlides.length,
         title: (_pptxBrief.context || _pptxBrief.angle || 'QBR').slice(0, 200),
-        brief: { context: _pptxBrief.context || '', angle: _pptxBrief.angle || '', ask: _pptxBrief.ask || '' }
+        templateId: _selectedTemplateId || 'default',
+        brief: { context: _pptxBrief.context || '', angle: _pptxBrief.angle || '', tone: _pptxBrief.tone || 'opportunity', ask: _pptxBrief.ask || '', include: _pptxBrief.include || '', exclude: _pptxBrief.exclude || '' }
       };
       // Save metadata + full slides to localStorage (survives Render restarts)
       try {
