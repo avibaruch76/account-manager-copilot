@@ -5611,10 +5611,18 @@ async function _pptxLoadTemplateList() {
         ${_selectedTemplateId===t.id?'<span style="font-size:10px;font-weight:700;color:#7C3AED;background:#EDE9FE;padding:2px 8px;border-radius:10px;">SELECTED</span>':''}
         <button onclick="event.stopPropagation();_pptxEditTemplate('${t.id}')" style="padding:3px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:5px;font-size:10px;color:#64748B;cursor:pointer;">Edit</button>
         <button onclick="event.stopPropagation();document.getElementById('pptx-brand-file-${t.id}').click()" title="Upload a branded slide to extract logo &amp; colours" style="padding:3px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:5px;font-size:10px;color:#64748B;cursor:pointer;">🎨 Brand</button>
-        <input type="file" id="pptx-brand-file-${t.id}" accept=".pptx" style="display:none" onchange="_pptxUpdateBrand('${t.id}',this.files[0]);this.value=''">
+        <input type="file" id="pptx-brand-file-${t.id}" accept=".pptx" style="display:none">
         ${!t.isDefault?`<button onclick="event.stopPropagation();_pptxDeleteTemplate('${t.id}')" style="padding:3px 8px;background:#FEF2F2;border:1px solid #FECACA;border-radius:5px;font-size:10px;color:#CC0000;cursor:pointer;">Delete</button>`:''}
       </div>
     </div>`).join('');
+  // Attach file listeners after innerHTML is set (inline onchange is unreliable)
+  _pptxTemplates.forEach(t => {
+    const inp = document.getElementById('pptx-brand-file-' + t.id);
+    if (inp) inp.addEventListener('change', function() {
+      if (this.files[0]) _pptxUpdateBrand(t.id, this.files[0]);
+      this.value = '';
+    });
+  });
 }
 
 function _pptxSelectTemplate(id) {
