@@ -6492,6 +6492,23 @@ function _pptxRenderPreview() {
   _pptxDrawPreview();
 }
 
+function _pptxWrapWithFooter(html) {
+  const b = _selectedTemplate?.brand;
+  if (!b) return html;
+  const lineColor  = b.primary || b.accent || '#CC0000';
+  const bgColor    = b.background || '#0D0D0D';
+  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:22px;object-fit:contain;display:block;">` : '';
+  const footer = `
+    <div style="position:absolute;bottom:0;left:0;right:0;z-index:999;">
+      <div style="height:2px;background:${lineColor};"></div>
+      <div style="background:${bgColor};display:flex;align-items:center;padding:0 20px;height:34px;">
+        ${logoImg}
+        <span style="margin-left:auto;font-size:9px;color:#94A3B8;font-family:Segoe UI,sans-serif;white-space:nowrap;">© 2025 RubyPlay Ltd. All Rights Reserved.</span>
+      </div>
+    </div>`;
+  return `<div style="position:relative;width:100%;height:100%;overflow:hidden;">${html}${footer}</div>`;
+}
+
 function _pptxDrawPreview(idx) {
   if (idx !== undefined) _pptxActiveSlide = idx;
   const slides  = _pptxSlides;
@@ -6553,7 +6570,7 @@ function _pptxDrawPreview(idx) {
       <div style="flex:1;min-width:0;">
         <div style="width:100%;aspect-ratio:16/9;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
           <div id="pptx-slide-canvas" style="width:100%;height:100%;">
-            ${active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>'}
+            ${_pptxWrapWithFooter(active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>')}
           </div>
         </div>
         <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:8px;">
@@ -6631,7 +6648,7 @@ function _pptxEnlargeSlide(idx) {
     applyZoom();
   };
 
-  frame.srcdoc = html;
+  frame.srcdoc = _pptxWrapWithFooter(html);
   requestAnimationFrame(applyZoom);
   window.addEventListener('resize', applyZoom);
 
