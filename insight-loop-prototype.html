@@ -5638,8 +5638,24 @@ async function _pptxLoadOperatorNotes() {
   try {
     const res = await apiFetch('/api/operator-notes/' + encodeURIComponent(op));
     const { notes } = await res.json();
-    _pptxOperatorNotes = notes || '';
-  } catch { _pptxOperatorNotes = ''; }
+    if (notes) {
+      _pptxOperatorNotes = notes;
+      try { localStorage.setItem('op_notes_' + op, notes); } catch {}
+    } else {
+      // Server has no notes (may have restarted) — fall back to localStorage
+      try { _pptxOperatorNotes = localStorage.getItem('op_notes_' + op) || ''; } catch { _pptxOperatorNotes = ''; }
+      // Re-sync server from localStorage if we have local notes
+      if (_pptxOperatorNotes) {
+        apiFetch('/api/operator-notes/' + encodeURIComponent(op), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notes: _pptxOperatorNotes })
+        }).catch(() => {});
+      }
+    }
+  } catch {
+    try { _pptxOperatorNotes = localStorage.getItem('op_notes_' + op) || ''; } catch { _pptxOperatorNotes = ''; }
+  }
 }
 
 async function _pptxSaveOperatorNotes() {
@@ -5647,6 +5663,11 @@ async function _pptxSaveOperatorNotes() {
   const val = document.getElementById('pptx-op-notes-ta')?.value || '';
   if (!op) return;
   _pptxOperatorNotes = val;
+  // Always persist to localStorage first (survives server restarts on Render free tier)
+  try {
+    if (val.trim()) { localStorage.setItem('op_notes_' + op, val); }
+    else { localStorage.removeItem('op_notes_' + op); }
+  } catch {}
   try {
     await apiFetch('/api/operator-notes/' + encodeURIComponent(op), {
       method: 'PUT',
@@ -5655,7 +5676,7 @@ async function _pptxSaveOperatorNotes() {
     });
     showToast('📋 Operator notes saved');
   } catch {
-    showToast('Failed to save notes', true);
+    showToast('📋 Notes saved locally', false);
   }
 }
 
