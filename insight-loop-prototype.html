@@ -5379,6 +5379,41 @@ function _pptxSetContext(id, value) {
   }
 }
 
+// Split a results container into sections by h2/h3/h4 headings, each with its own tables
+function _splitResultsByHeadings(containerEl) {
+  const sections = [];
+  const children = Array.from(containerEl.querySelectorAll('h1,h2,h3,h4,table,p,ul,ol,div'));
+  let currentHeading = null;
+  let currentNodes = [];
+
+  const flush = () => {
+    if (!currentHeading && currentNodes.length === 0) return;
+    const heading = currentHeading || 'Analysis';
+    // Build a temporary div to extract text + tables from collected nodes
+    const tmp = document.createElement('div');
+    currentNodes.forEach(n => tmp.appendChild(n.cloneNode(true)));
+    const text = (tmp.innerText || tmp.textContent || '').trim();
+    const tables = _extractCardTables(tmp);
+    if (text.length > 20 || tables.length > 0) {
+      sections.push({ checkId: heading.toLowerCase().replace(/\W+/g,'_'), checkName: heading, content: text.slice(0, 10000), tables, selected: true });
+    }
+    currentNodes = [];
+  };
+
+  for (const el of children) {
+    if (/^H[1-4]$/.test(el.tagName)) {
+      flush();
+      currentHeading = (el.innerText || el.textContent || '').trim().slice(0, 100);
+    } else {
+      // Only collect direct-ish content, skip deeply nested wrappers already captured
+      if (el.closest && el.closest('table')) continue;
+      currentNodes.push(el);
+    }
+  }
+  flush();
+  return sections;
+}
+
 // Extract tables from a card as structured rows — global so both openPresentationBuilder and _pptxGenerate can call it
 function _extractCardTables(cardEl) {
   const out = [];
@@ -5433,17 +5468,23 @@ async function openPresentationBuilder() {
     // Final fallback: use all enabled checks
     checkIds = _checks.filter(c => c.enabled !== false).map(c => c.id);
   }
-  // PRIMARY: Read from every individual check result card.
-  const checkSections = checkIds.map(id => {
-    const check = _checks.find(c => c.id === id);
-    const name  = check ? check.name : id;
-    const card  = document.querySelector(`[data-check-id="${id}"]`);
-    if (!card) return null;
-    const text = (card.innerText || card.textContent || '').trim();
-    if (text.length < 30) return null;
-    const tables = _extractCardTables(card);
-    return { checkId: id, checkName: name, content: text.slice(0, 10000), tables, selected: true };
-  }).filter(Boolean);
+  // PRIMARY: Read from #check-results — the actual analysis output (not the sidebar config rows)
+  const checkSections = [];
+  const resultsEl = document.getElementById('check-results');
+  if (resultsEl) {
+    const fullText = (resultsEl.innerText || resultsEl.textContent || '').trim();
+    const allTables = _extractCardTables(resultsEl);
+    if (fullText.length > 30) {
+      // Split into sections by h2/h3/h4 headings within the results HTML
+      const sections = _splitResultsByHeadings(resultsEl);
+      if (sections.length > 0) {
+        sections.forEach(s => checkSections.push(s));
+      } else {
+        // No headings — pass as one big section
+        checkSections.push({ checkId: 'full_analysis', checkName: 'Full Analysis', content: fullText.slice(0, 15000), tables: allTables, selected: true });
+      }
+    }
+  }
 
   // SUPPLEMENT: also add persona panes for narrative context
   const personaSections = [];
@@ -6355,15 +6396,20 @@ async function _pptxGenerate() {
       ? window._currentRunCheckIds
       : _checks.filter(c => c.enabled !== false).map(c => c.id);
 
-    const fresh = ids.map(id => {
-      const check = _checks.find(c => c.id === id);
-      const card  = document.querySelector(`[data-check-id="${id}"]`);
-      if (!card) return null;
-      const text = (card.innerText || card.textContent || '').trim();
-      if (text.length < 30) return null;
-      const tables = _extractCardTables(card);
-      return { checkId: id, checkName: check ? check.name : id, content: text.slice(0, 10000), tables, selected: true };
-    }).filter(Boolean);
+    // Read from #check-results (actual analysis output), not sidebar config rows
+    const fresh = [];
+    const resultsEl2 = document.getElementById('check-results');
+    if (resultsEl2) {
+      const fullText2 = (resultsEl2.innerText || resultsEl2.textContent || '').trim();
+      if (fullText2.length > 30) {
+        const headingSections = _splitResultsByHeadings(resultsEl2);
+        if (headingSections.length > 0) {
+          headingSections.forEach(s => fresh.push(s));
+        } else {
+          fresh.push({ checkId: 'full_analysis', checkName: 'Full Analysis', content: fullText2.slice(0, 15000), tables: _extractCardTables(resultsEl2), selected: true });
+        }
+      }
+    }
 
     const freshPersona = [];
     Object.entries(PERSONA_PANE_ID).forEach(([persona, paneId]) => {
