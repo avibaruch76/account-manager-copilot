@@ -1011,13 +1011,6 @@ async function previewPrompt() {
     return;
   }
 
-  // If cached results exist and are already displayed, confirm before burning tokens
-  if (document.getElementById('cache-banner')) {
-    const go = confirm('📂 Cached results are already loaded for this selection.\n\nRun a fresh analysis anyway? (uses Jedify tokens + Snowflake)');
-    if (!go) return;
-    // Remove banner so UI is fresh
-    document.getElementById('cache-banner').remove();
-  }
   const selection = buildSelectionPayload(pop);
   const entity = selection.entity || (selection.values && selection.values[0]) || selection.operator || 'Unknown';
   const scope = selection.scope || 'operator';
@@ -3395,8 +3388,6 @@ function tryRestoreAnalysisCache() {
       const dlBtns = document.getElementById('download-btns');
       if (dlBtns) dlBtns.style.display = 'flex';
     }
-    // Show cache banner
-    _showCacheBanner(payload.savedAtLabel, key);
     // Clear sub-status placeholder text
     const sub = document.getElementById('check-results-sub');
     if (sub) sub.textContent = '';
@@ -3411,28 +3402,6 @@ function tryRestoreAnalysisCache() {
   }
 }
 
-function _showCacheBanner(savedAtLabel, cacheKey) {
-  // Remove any existing banner
-  const existing = document.getElementById('cache-banner');
-  if (existing) existing.remove();
-
-  const banner = document.createElement('div');
-  banner.id = 'cache-banner';
-  banner.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;margin:8px 0 4px;font-size:12px;color:#1E40AF;';
-  banner.innerHTML = `
-    <span>📂 <strong>Cached results</strong> from ${savedAtLabel} — no need to re-run</span>
-    <button onclick="clearAnalysisCache('${cacheKey}')" style="background:none;border:none;cursor:pointer;color:#93C5FD;font-size:16px;line-height:1;padding:0 2px;" title="Clear cached results">×</button>
-  `;
-  const checkResults = document.getElementById('check-results');
-  if (checkResults) checkResults.before(banner);
-}
-
-function clearAnalysisCache(cacheKey) {
-  if (cacheKey) localStorage.removeItem(cacheKey);
-  const banner = document.getElementById('cache-banner');
-  if (banner) banner.remove();
-  showToast('Cached results cleared. Run Analysis to get fresh data.');
-}
 
 // ── Selection persistence (operator + date filters) ──────────────────────────
 // Saved separately from the analysis cache so the dropdowns refill on reload.
