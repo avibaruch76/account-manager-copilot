@@ -5317,14 +5317,43 @@ let _pptxEnabledSlides = (() => {
 let _pptxCustomSlides = (_pptxSavedPlan && Array.isArray(_pptxSavedPlan.custom))
   ? _pptxSavedPlan.custom
   : [];
+let _pptxSlideContext = (_pptxSavedPlan && _pptxSavedPlan.context && typeof _pptxSavedPlan.context === 'object')
+  ? _pptxSavedPlan.context
+  : {};
 
 function _pptxSavePlan() {
   try {
     localStorage.setItem('pptx_slide_plan', JSON.stringify({
       enabled: _pptxEnabledSlides,
-      custom:  _pptxCustomSlides
+      custom:  _pptxCustomSlides,
+      context: _pptxSlideContext
     }));
   } catch (e) { /* quota exceeded — silently ignore */ }
+}
+
+function _pptxToggleContext(id) {
+  const el = document.getElementById('pptx-ctx-' + id);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el.style.display === 'block') el.querySelector('textarea')?.focus();
+}
+
+function _pptxSetContext(id, value) {
+  if (value.trim()) {
+    _pptxSlideContext[String(id)] = value;
+  } else {
+    delete _pptxSlideContext[String(id)];
+  }
+  _pptxSavePlan();
+  // Update button indicator without full re-render
+  const btn = document.getElementById('pptx-ctx-btn-' + id);
+  if (btn) {
+    const has = !!_pptxSlideContext[String(id)];
+    btn.style.background = has ? '#FEF3C7' : '#F8FAFC';
+    btn.style.color       = has ? '#92400E' : '#64748B';
+    btn.style.borderColor = has ? '#FDE68A' : '#E2E8F0';
+    btn.textContent = has ? '📝 ✓' : '📝';
+  }
 }
 
 // ── Open / Close ────────────────────────────────────────────────
@@ -5760,7 +5789,9 @@ function _pptxRenderPlan() {
   const enabledRows = _pptxEnabledSlides
     .map((id, pos) => ({ s: slideSource.find(x => x.id === id), pos }))
     .filter(({ s }) => s)
-    .map(({ s, pos }) => `
+    .map(({ s, pos }) => {
+      const hasCtx = !!_pptxSlideContext[String(s.id)];
+      return `
       <div draggable="true"
            ondragstart="_pptxSlideRowDragStart(event,${pos})"
            ondragover="_pptxSlideRowDragOver(event)"
@@ -5774,7 +5805,17 @@ function _pptxRenderPlan() {
           <div style="font-size:12px;font-weight:700;color:#1A1A1A;">${s.name}${s.alwaysOn ? ' <span style="font-size:9px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:10px;">REQUIRED</span>' : ''}</div>
           <div style="font-size:10px;color:#94A3B8;margin-top:1px;">${s.desc || ''}</div>
         </div>
-      </div>`).join('');
+        <button id="pptx-ctx-btn-${s.id}" onclick="event.stopPropagation();_pptxToggleContext(${s.id})"
+                title="Add manual data for this slide"
+                style="flex-shrink:0;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:1.5px solid ${hasCtx?'#FDE68A':'#E2E8F0'};background:${hasCtx?'#FEF3C7':'#F8FAFC'};color:${hasCtx?'#92400E':'#64748B'};">${hasCtx?'📝 ✓':'📝'}</button>
+      </div>
+      <div id="pptx-ctx-${s.id}" style="display:${hasCtx?'block':'none'};background:#FFFBEB;border-left:3px solid #FDE68A;border-bottom:1px solid #F1F5F9;padding:8px 14px 10px 44px;">
+        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:4px;">Manual data for "${s.name}" — Claude uses this when Jedify has no data</div>
+        <textarea oninput="_pptxSetContext(${s.id}, this.value)" rows="3"
+                  placeholder="Paste numbers, segments, notes — anything you want on this slide."
+                  style="width:100%;box-sizing:border-box;font-size:11px;border:1px solid #FDE68A;border-radius:5px;padding:6px 8px;resize:vertical;font-family:inherit;">${_pptxEsc(_pptxSlideContext[String(s.id)]||'')}</textarea>
+      </div>`;
+    }).join('');
 
   // Disabled slides shown below without drag handles
   const disabledRows = slideSource
@@ -5870,7 +5911,7 @@ async function _pptxShowPromptPreview() {
         sections,
         brief,
         operator: document.getElementById('operator-select')?.value || 'Operator',
-        slidePlan: { enabled: _pptxEnabledSlides, custom: _pptxCustomSlides },
+        slidePlan: { enabled: _pptxEnabledSlides, custom: _pptxCustomSlides, context: _pptxSlideContext },
         templateId: _selectedTemplateId
       })
     });
@@ -5989,7 +6030,8 @@ async function _pptxGenerate() {
         operator: entity,
         slidePlan: {
           enabled: _pptxEnabledSlides,
-          custom:  _pptxCustomSlides
+          custom:  _pptxCustomSlides,
+          context: _pptxSlideContext
         },
         templateId: _selectedTemplateId
       })

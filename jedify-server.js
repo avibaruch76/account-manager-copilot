@@ -134,6 +134,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
 
   const slideLines = [];
   let slideN = 1;
+  const manualContext = (slidePlan && slidePlan.context) ? slidePlan.context : {};
   for (const idx of enabledIds) {
     const s = tpl.slides[idx];
     if (!s) continue;
@@ -141,6 +142,10 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
     if (s.exampleHtml) {
       const minified = s.exampleHtml.replace(/\s+/g, ' ').replace(/> </g, '><').slice(0, 2000);
       entry += `\n  LAYOUT REFERENCE (replicate this HTML structure exactly, update all data/numbers with current analysis):\n  ${minified}`;
+    }
+    const ctx = manualContext[String(idx)];
+    if (ctx) {
+      entry += `\n  MANUAL DATA (user-provided — use this as the primary data source for this slide, Jedify has no data for it):\n  ${ctx}`;
     }
     slideLines.push(entry);
   }
