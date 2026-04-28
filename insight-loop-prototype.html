@@ -5520,6 +5520,54 @@ function _pptxEsc(str) {
   return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Presentation History ─────────────────────────────────────────
+async function _pptxRenderHistory() {
+  _pptxShowStep(0);
+  const c = document.getElementById('pptx-content');
+  c.innerHTML = '<div style="color:#94A3B8;font-size:12px;padding:20px 0;">Loading history…</div>';
+  const footer = document.getElementById('pptx-footer');
+  if (footer) footer.innerHTML = `<button onclick="_pptxRenderStep0()" style="padding:8px 16px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">← Back</button>`;
+
+  const operator = document.getElementById('operator-select')?.value || '';
+  try {
+    const res = await apiFetch('/api/presentations' + (operator ? '?operator=' + encodeURIComponent(operator) : ''));
+    const list = await res.json();
+
+    if (list.length === 0) {
+      c.innerHTML = '<div style="color:#94A3B8;font-size:12px;padding:20px 0;text-align:center;">No presentations saved yet for this operator.</div>';
+      return;
+    }
+
+    c.innerHTML = `
+      <div style="font-size:13px;font-weight:700;color:#1E293B;margin-bottom:4px;">Presentation History</div>
+      <div style="font-size:11px;color:#64748B;margin-bottom:14px;">${operator ? 'Showing: ' + _pptxEsc(operator) : 'All operators'} · ${list.length} saved</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        ${list.map(p => `
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;background:white;cursor:pointer;" onclick="_pptxViewHistory('${p.id}')">
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:12px;font-weight:700;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_pptxEsc(p.brief?.context || p.brief?.angle || p.title || 'QBR')}</div>
+              <div style="font-size:10px;color:#94A3B8;margin-top:2px;">${_pptxEsc(p.operator)} · ${p.slideCount} slides · ${new Date(p.date).toLocaleDateString()}</div>
+            </div>
+            <button style="flex-shrink:0;padding:4px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">View</button>
+          </div>`).join('')}
+      </div>`;
+  } catch (e) {
+    c.innerHTML = '<div style="color:#CC0000;font-size:12px;padding:20px 0;">Failed to load history: ' + _pptxEsc(e.message) + '</div>';
+  }
+}
+
+async function _pptxViewHistory(id) {
+  try {
+    const res = await apiFetch('/api/presentations/' + id);
+    const pres = await res.json();
+    _pptxSlides = pres.slides || [];
+    _pptxRenderPreview();
+    showToast('📁 Loaded: ' + new Date(pres.date).toLocaleDateString() + ' — ' + pres.slideCount + ' slides');
+  } catch (e) {
+    showToast('Failed to load presentation: ' + e.message, true);
+  }
+}
+
 // ── Story Brief ─────────────────────────────────────────────────
 function _pptxRenderStep0() {
   _pptxShowStep(0);
@@ -5537,7 +5585,9 @@ function _pptxRenderStep0() {
   _pptxLoadTemplateList();
   const footer = document.getElementById('pptx-footer');
   if (footer) footer.innerHTML = `
-    <button onclick="_pptxStep0Next()" style="margin-left:auto;padding:8px 20px;background:linear-gradient(135deg,#7C3AED,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Next: Story Brief →</button>`;
+    <button onclick="_pptxRenderHistory()" style="padding:8px 16px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">📁 History</button>
+    <div style="flex:1"></div>
+    <button onclick="_pptxStep0Next()" style="padding:8px 20px;background:linear-gradient(135deg,#7C3AED,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Next: Story Brief →</button>`;
 }
 
 async function _pptxLoadTemplateList() {
@@ -6230,6 +6280,19 @@ async function _pptxGenerate() {
 
     _pptxSlides = slides;
     _pptxRenderPreview();
+    // Auto-save to history
+    try {
+      const operator = document.getElementById('operator-select')?.value || 'Operator';
+      await apiFetch('/api/presentations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operator,
+          slides: _pptxSlides.map(s => ({ html: s.html || '', notes: s.notes || '' })),
+          brief: _pptxBrief
+        })
+      });
+    } catch (e) { console.warn('[history] auto-save failed:', e.message); }
   } catch (e) {
     const isNetwork = /failed to fetch|network|aborted|load failed/i.test(e.message);
     content.innerHTML = `

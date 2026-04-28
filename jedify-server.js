@@ -154,6 +154,30 @@ async function persistShares() {
 
 loadShares();
 
+// ── Presentation History ──────────────────────────────────────────────────────
+let _presentationHistory = [];
+
+function loadHistory() {
+  try { _presentationHistory = process.env.HISTORY_JSON ? JSON.parse(process.env.HISTORY_JSON) : []; }
+  catch { _presentationHistory = []; }
+}
+
+async function persistHistory() {
+  const trimmed = _presentationHistory.slice(0, 50);
+  const json = JSON.stringify(trimmed);
+  if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
+    console.warn('[history] RENDER_API_KEY/SERVICE_ID not set');
+    return;
+  }
+  try {
+    await updateRenderEnvVar('HISTORY_JSON', json);
+  } catch (e) {
+    console.error('[history] Failed to persist:', e.message);
+  }
+}
+
+loadHistory();
+
 function escHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -2448,6 +2472,59 @@ goTo(0);
           res.end(JSON.stringify({ error: 'Invalid request' }));
         }
       });
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/api/presentations') {
+      if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+      let body = '';
+      req.on('data', c => {
+        body += c;
+        if (body.length > 10 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Too large' })); req.destroy(); }
+      });
+      req.on('end', async () => {
+        try {
+          const { operator, slides, brief } = JSON.parse(body);
+          const id = 'pres_' + Date.now();
+          const entry = {
+            id,
+            operator: (operator || 'Operator').slice(0, 200),
+            date: new Date().toISOString(),
+            slideCount: (slides || []).length,
+            title: (brief?.context || brief?.angle || 'QBR').slice(0, 200),
+            brief: { context: brief?.context || '', angle: brief?.angle || '', ask: brief?.ask || '' },
+            slides: (slides || []).map(s => ({ html: s.html || '', notes: s.notes || '' }))
+          };
+          _presentationHistory.unshift(entry);
+          if (_presentationHistory.length > 50) _presentationHistory = _presentationHistory.slice(0, 50);
+          await persistHistory();
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid request' }));
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'GET' && req.url.startsWith('/api/presentations')) {
+      if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+      const urlObj = new URL(req.url, 'http://localhost');
+      const operator = urlObj.searchParams.get('operator');
+      if (urlObj.pathname === '/api/presentations') {
+        const list = _presentationHistory
+          .filter(p => !operator || p.operator === operator)
+          .map(({ id, operator, date, slideCount, title, brief }) => ({ id, operator, date, slideCount, title, brief }));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(list));
+        return;
+      }
+      const id = urlObj.pathname.slice('/api/presentations/'.length);
+      const pres = _presentationHistory.find(p => p.id === id);
+      if (!pres) { res.writeHead(404); res.end(JSON.stringify({ error: 'Not found' })); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(pres));
       return;
     }
 
