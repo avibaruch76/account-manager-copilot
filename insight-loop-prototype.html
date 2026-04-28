@@ -6903,14 +6903,19 @@ function _pptxDrawPreview(idx) {
       <div id="pptx-edit-subpanel"></div>
     </div>`;
 
+  // Measure available width BEFORE changing innerHTML so layout is already resolved
+  const availableW = Math.max(200, content.offsetWidth - 218); // subtract action panel (190px) + gap (14px) + border (14px)
+  const slideScale = Math.round((availableW / 1280) * 1000) / 1000;
+  const slideH     = Math.round(720 * slideScale);
+
   content.innerHTML = `
     <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;">
       ${thumbs}
     </div>
     <div style="display:flex;gap:14px;align-items:flex-start;">
       <div style="flex:1;min-width:0;">
-        <div id="pptx-slide-outer" style="width:100%;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
-          <div id="pptx-slide-canvas" style="width:1280px;height:720px;transform-origin:top left;">
+        <div id="pptx-slide-outer" style="width:${availableW}px;height:${slideH}px;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+          <div id="pptx-slide-canvas" style="width:1280px;height:720px;transform-origin:top left;transform:scale(${slideScale});">
             ${_pptxWrapWithFooter(active.html || '<div style="padding:40px;color:#64748B;font-family:system-ui;">No slide content</div>')}
           </div>
         </div>
@@ -6930,16 +6935,6 @@ function _pptxDrawPreview(idx) {
     <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
 
-  // Scale slide canvas to fit container (slides are authored at 1280×720)
-  requestAnimationFrame(() => {
-    const outer  = document.getElementById('pptx-slide-outer');
-    const canvas = document.getElementById('pptx-slide-canvas');
-    if (outer && canvas) {
-      const scale = outer.offsetWidth / 1280;
-      canvas.style.transform = `scale(${scale})`;
-      outer.style.height = Math.round(720 * scale) + 'px';
-    }
-  });
 }
 
 function _pptxEnlargeSlide(idx) {
