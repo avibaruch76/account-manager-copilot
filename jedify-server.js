@@ -113,6 +113,26 @@ async function persistTemplates() {
 
 loadTemplates();
 
+// ── Operator Notes ────────────────────────────────────────────────────────────
+let _operatorNotes = {};
+
+function loadOperatorNotes() {
+  try {
+    _operatorNotes = process.env.OPERATOR_NOTES_JSON ? JSON.parse(process.env.OPERATOR_NOTES_JSON) : {};
+  } catch { _operatorNotes = {}; }
+}
+
+async function persistOperatorNotes() {
+  const json = JSON.stringify(_operatorNotes);
+  if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
+    console.warn('[notes] RENDER_API_KEY/SERVICE_ID not set — notes will reset on restart');
+    return;
+  }
+  await updateRenderEnvVar('OPERATOR_NOTES_JSON', json);
+}
+
+loadOperatorNotes();
+
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
@@ -192,6 +212,7 @@ OUTPUT FORMAT — use exactly these delimiters for each slide:
 
 STORY BRIEF:
 ${brief.context ? `AM's note: ${brief.context}` : ''}
+${brief.operatorNotes ? `OPERATOR CONTEXT (known about this client — always keep in mind):\n${brief.operatorNotes}\n` : ''}
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
@@ -2237,6 +2258,34 @@ const server = http.createServer(async (req, res) => {
     res.end(JSON.stringify(getTokenStatus()));
     return;
   }
+
+    // GET /api/operator-notes/:operator
+    if (req.method === 'GET' && req.url.startsWith('/api/operator-notes/')) {
+      const op = decodeURIComponent(req.url.slice('/api/operator-notes/'.length));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ notes: _operatorNotes[op] || '' }));
+      return;
+    }
+
+    // PUT /api/operator-notes/:operator
+    if (req.method === 'PUT' && req.url.startsWith('/api/operator-notes/')) {
+      if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+      const op = decodeURIComponent(req.url.slice('/api/operator-notes/'.length));
+      let body = '';
+      req.on('data', c => body += c);
+      req.on('end', async () => {
+        const { notes } = JSON.parse(body);
+        if (notes && notes.trim()) {
+          _operatorNotes[op] = notes.trim();
+        } else {
+          delete _operatorNotes[op];
+        }
+        await persistOperatorNotes();
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      });
+      return;
+    }
 
   res.writeHead(404); res.end('Not found');
 });

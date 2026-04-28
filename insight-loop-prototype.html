@@ -5274,6 +5274,7 @@ populateCompManualList();
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
 let _pptxBrief    = { context: '', angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
+let _pptxOperatorNotes = '';  // loaded from server per operator
 let _pptxTemplates      = [];
 let _selectedTemplateId = 'default';
 let _selectedTemplate   = null;
@@ -5539,6 +5540,29 @@ function _pptxSelectTemplate(id) {
   _pptxLoadTemplateList();
 }
 
+async function _pptxLoadOperatorNotes() {
+  const op = document.getElementById('operator-select')?.value || '';
+  if (!op) return;
+  try {
+    const res = await apiFetch('/api/operator-notes/' + encodeURIComponent(op));
+    const { notes } = await res.json();
+    _pptxOperatorNotes = notes || '';
+  } catch { _pptxOperatorNotes = ''; }
+}
+
+async function _pptxSaveOperatorNotes() {
+  const op  = document.getElementById('operator-select')?.value || '';
+  const val = document.getElementById('pptx-op-notes-ta')?.value || '';
+  if (!op) return;
+  _pptxOperatorNotes = val;
+  await apiFetch('/api/operator-notes/' + encodeURIComponent(op), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ notes: val })
+  });
+  showToast('📋 Operator notes saved');
+}
+
 async function _pptxUpdateBrand(id, file) {
   if (!file) return;
   showToast('Extracting brand from slide…');
@@ -5693,7 +5717,8 @@ async function _pptxDownloadTemplateFile(id) {
   pptx.writeFile({ fileName: `${tpl.name.replace(/\s+/g, '_')}_template.pptx` });
 }
 
-function _pptxRenderBrief() {
+async function _pptxRenderBrief() {
+  await _pptxLoadOperatorNotes();
   _pptxShowStep(1);
   const content = document.getElementById('pptx-content');
   const sectionCount = _pptxSections.length;
@@ -5708,6 +5733,20 @@ function _pptxRenderBrief() {
       Shape the story angle. Claude will read all <strong style="color:#1E2761;">${sectionCount} data section${sectionCount !== 1 ? 's' : ''}</strong> from the full analysis.
       ${sectionCount < 4 ? '<span style="color:#DC2626;font-weight:700;"> ⚠ Only ' + sectionCount + ' sections found — run the full analysis first.</span>' : ''}
     </p>
+
+    <div id="pptx-op-notes-panel" style="background:#F0FDF4;border:1.5px solid #86EFAC;border-radius:10px;padding:12px 14px;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <span style="font-size:13px;">📋</span>
+        <span style="font-size:11px;font-weight:700;color:#166534;">Operator Notes</span>
+        <span style="font-size:10px;color:#16A34A;margin-left:auto;">saved · auto-injected into every QBR</span>
+      </div>
+      <textarea id="pptx-op-notes-ta" rows="2"
+        placeholder="e.g. Contract renewal June 2026. Unhappy about VIP slot performance. AM relationship: strong. Key goal: expand into live casino."
+        style="width:100%;box-sizing:border-box;font-size:11px;border:1px solid #86EFAC;border-radius:6px;padding:6px 8px;font-family:inherit;resize:vertical;">${_pptxEsc(_pptxOperatorNotes)}</textarea>
+      <div style="margin-top:6px;display:flex;justify-content:flex-end;">
+        <button onclick="_pptxSaveOperatorNotes()" style="padding:4px 14px;background:#16A34A;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Save notes</button>
+      </div>
+    </div>
 
     <div style="margin-bottom:18px;">
       <label style="font-size:11px;font-weight:700;color:#1E293B;display:block;margin-bottom:6px;">DESCRIBE THIS QBR IN PLAIN ENGLISH</label>
@@ -5785,6 +5824,7 @@ function _pptxSaveBriefAndShowPlan() {
   _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
   _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
   _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
+  _pptxBrief.operatorNotes = _pptxOperatorNotes;
   _pptxRenderPlan();
 }
 
@@ -5948,7 +5988,8 @@ async function _pptxShowPromptPreview() {
     ask:     (document.getElementById('pptx-ask')?.value     || _pptxBrief.ask     || '').trim(),
     include: (document.getElementById('pptx-include')?.value || _pptxBrief.include || '').trim(),
     exclude: (document.getElementById('pptx-exclude')?.value || _pptxBrief.exclude || '').trim(),
-    tone:    _pptxBrief.tone
+    tone:    _pptxBrief.tone,
+    operatorNotes: _pptxOperatorNotes,
   };
   const btn = document.querySelector('[onclick="_pptxShowPromptPreview()"]');
   if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
