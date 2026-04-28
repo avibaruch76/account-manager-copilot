@@ -5294,7 +5294,13 @@ const _SLIDE_CHECK_MAP = {
   7: 'vip_behavior', 10: 'benchmark_gap', 11: 'hidden_gems', 12: 'benchmark_gap'
 };
 
-function _pptxSlideConf(slideId) {
+function _pptxSlideConf(slideId, slideName) {
+  // Try name-based lookup first (matches headings from analysis output)
+  if (slideName) {
+    const key = slideName.toLowerCase().replace(/\W+/g, '_');
+    if (_pptxSectionConfidence[key] !== undefined) return _pptxSectionConfidence[key];
+  }
+  // Fall back to hardcoded check map
   const checkId = _SLIDE_CHECK_MAP[slideId];
   if (!checkId) return null;
   return _pptxSectionConfidence[checkId] || 'none';
@@ -6406,7 +6412,7 @@ function _pptxRenderPlan() {
         </div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:12px;font-weight:700;color:#1A1A1A;display:flex;align-items:center;gap:6px;">
-            ${_pptxConfDot(_pptxSlideConf(s.id))}
+            ${_pptxConfDot(_pptxSlideConf(s.id, s.name))}
             ${s.name}${s.alwaysOn ? ' <span style="font-size:9px;font-weight:700;color:#CC0000;background:#FEF2F2;padding:1px 5px;border-radius:4px;vertical-align:middle;">REQUIRED</span>' : ''}
           </div>
           <div style="font-size:10px;color:#94A3B8;margin-top:1px;">${s.desc || ''}</div>
