@@ -5380,6 +5380,10 @@ function _pptxSetContext(id, value) {
 }
 
 // ── Open / Close ────────────────────────────────────────────────
+function _pptxGetOperator() {
+  return (_runSession && _runSession.entity) ? _runSession.entity : '';
+}
+
 async function openPresentationBuilder() {
   const overlay   = document.getElementById('pptx-overlay');
   const backdrop  = document.getElementById('pptx-backdrop');
@@ -5530,7 +5534,7 @@ async function _pptxRenderHistory() {
   const footer = document.getElementById('pptx-footer');
   if (footer) footer.innerHTML = `<button onclick="_pptxRenderStep0()" style="padding:8px 16px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;">← Back</button>`;
 
-  const operator = document.getElementById('operator-select')?.value || '';
+  const operator = _pptxGetOperator();
   try {
     const res = await apiFetch('/api/presentations' + (operator ? '?operator=' + encodeURIComponent(operator) : ''));
     const list = await res.json();
@@ -5633,7 +5637,7 @@ function _pptxSelectTemplate(id) {
 }
 
 async function _pptxLoadOperatorNotes() {
-  const op = document.getElementById('operator-select')?.value || '';
+  const op = _pptxGetOperator();
   if (!op) return;
   try {
     const res = await apiFetch('/api/operator-notes/' + encodeURIComponent(op));
@@ -5659,7 +5663,7 @@ async function _pptxLoadOperatorNotes() {
 }
 
 async function _pptxSaveOperatorNotes() {
-  const op  = document.getElementById('operator-select')?.value || '';
+  const op  = _pptxGetOperator();
   const val = document.getElementById('pptx-op-notes-ta')?.value || '';
   if (!op) return;
   _pptxOperatorNotes = val;
@@ -6181,7 +6185,7 @@ async function _pptxShowPromptPreview() {
       body: JSON.stringify({
         sections,
         brief,
-        operator: document.getElementById('operator-select')?.value || 'Operator',
+        operator: _pptxGetOperator() || 'Operator',
         slidePlan: { enabled: _pptxEnabledSlides, custom: _pptxCustomSlides, context: _pptxSlideContext },
         templateId: _selectedTemplateId
       })
@@ -6285,8 +6289,7 @@ async function _pptxGenerate() {
   `;
 
   try {
-    const entity = document.getElementById('operator-select')?.value ||
-                   document.querySelector('[id*="operator"]')?.value || 'Operator';
+    const entity = _pptxGetOperator() || 'Operator';
 
     // Use streaming fetch — server writes text chunks as Claude generates.
     // This keeps the connection alive so no proxy/client timeout fires (generation ~3-4 min).
@@ -6373,7 +6376,7 @@ async function _pptxGenerate() {
     _pptxRenderPreview();
     // Auto-save to history
     try {
-      const operator = document.getElementById('operator-select')?.value || 'Operator';
+      const operator = _pptxGetOperator() || 'Operator';
       await apiFetch('/api/presentations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6720,7 +6723,7 @@ async function _pptxRegenerateSlide(idx) {
         slideTitle: slideSource.title,
         slideDescription: slideSource.description,
         brief: _pptxBrief,
-        operator: document.getElementById('operator-select')?.value || 'Operator',
+        operator: _pptxGetOperator() || 'Operator',
         sectionContent,
         instructions
       })
@@ -7081,7 +7084,7 @@ function _pptxSlideLegacyResolution(s, t, accent) {
 
 // ── Share — POST slides to server, get back a shareable URL ──────
 async function _pptxShare() {
-  const operator = document.getElementById('operator-select')?.value || 'Operator';
+  const operator = _pptxGetOperator() || 'Operator';
   const btn = document.querySelector('[onclick="_pptxShare()"]');
   if (btn) { btn.textContent = 'Creating link…'; btn.disabled = true; }
   try {
@@ -7198,7 +7201,7 @@ async function _pptxDownload() {
     pptx.author  = 'Account Manager Copilot';
     pptx.company = 'RubyPlay';
 
-    const entity = document.getElementById('operator-select')?.value || 'Operator';
+    const entity = _pptxGetOperator() || 'Operator';
 
     for (let i = 0; i < _pptxSlides.length; i++) {
       const slide = _pptxSlides[i];
