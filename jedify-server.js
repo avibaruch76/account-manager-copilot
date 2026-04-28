@@ -128,7 +128,11 @@ async function persistOperatorNotes() {
     console.warn('[notes] RENDER_API_KEY/SERVICE_ID not set — notes will reset on restart');
     return;
   }
-  await updateRenderEnvVar('OPERATOR_NOTES_JSON', json);
+  try {
+    await updateRenderEnvVar('OPERATOR_NOTES_JSON', json);
+  } catch (e) {
+    console.error('[notes] Failed to persist:', e.message);
+  }
 }
 
 loadOperatorNotes();
@@ -149,7 +153,11 @@ async function persistShares() {
     console.warn('[shares] RENDER_API_KEY/SERVICE_ID not set — shares will reset on restart');
     return;
   }
-  await updateRenderEnvVar('SHARES_JSON', json);
+  try {
+    await updateRenderEnvVar('SHARES_JSON', json);
+  } catch (e) {
+    console.error('[shares] Failed to persist:', e.message);
+  }
 }
 
 loadShares();
