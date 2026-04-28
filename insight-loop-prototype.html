@@ -5275,6 +5275,7 @@ let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
 let _pptxBrief    = { context: '', angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
 let _pptxSectionConfidence = {};  // checkId → 'high'|'medium'|'low'|'none'
+let _pptxExtracted = null;
 
 const _SLIDE_CHECK_MAP = {
   1: 'ggr_trend', 2: 'concentration', 3: 'concentration', 4: 'new_launches',
@@ -7569,7 +7570,7 @@ async function _pptxHandleFile(file) {
 
     _pptxExtracted = { primary, accent, background, highlight, text, logoBase64, fontHeading, fontBody, slides: extractedSlides };
   } catch (e) {
-    showToast('❌ Could not parse .pptx: ' + e.message, true);
+    throw e;  // let caller handle and display the error
   }
 }
 
