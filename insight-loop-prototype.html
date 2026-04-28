@@ -5706,7 +5706,9 @@ async function _pptxExtractBrandOnly(file) {
     const ext = largest.key.split('.').pop().toLowerCase();
     const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml' };
     const mime = mimeMap[ext] || 'image/png';
-    logoBase64 = `data:${mime};base64,${btoa(String.fromCharCode(...largest.data))}`;
+    let binary = '';
+    for (let i = 0; i < largest.data.length; i++) binary += String.fromCharCode(largest.data[i]);
+    logoBase64 = `data:${mime};base64,${btoa(binary)}`;
   }
 
   return { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 };
@@ -7598,8 +7600,9 @@ async function _pptxHandleFile(file) {
       const ext = largest.key.split('.').pop().toLowerCase();
       const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml', emf:'image/x-emf' };
       const mime = mimeMap[ext] || 'image/png';
-      const b64 = btoa(String.fromCharCode(...largest.data));
-      logoBase64 = `data:${mime};base64,${b64}`;
+      let binary = '';
+      for (let i = 0; i < largest.data.length; i++) binary += String.fromCharCode(largest.data[i]);
+      logoBase64 = `data:${mime};base64,${btoa(binary)}`;
     }
 
     // ── 4. Extract slide definitions from ppt/slides/slide*.xml ──
