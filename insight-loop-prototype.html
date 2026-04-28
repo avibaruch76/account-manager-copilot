@@ -6203,10 +6203,11 @@ async function _pptxGenerate() {
   } catch { _selectedTemplate = null; }
   try {
   // Save brief state
-  _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
-  _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
-  _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
-  _pptxBrief.exclude = (document.getElementById('pptx-exclude')?.value || '').trim();
+  _pptxBrief.angle         = (document.getElementById('pptx-angle')?.value   || '').trim();
+  _pptxBrief.ask           = (document.getElementById('pptx-ask')?.value     || '').trim();
+  _pptxBrief.include       = (document.getElementById('pptx-include')?.value || '').trim();
+  _pptxBrief.exclude       = (document.getElementById('pptx-exclude')?.value || '').trim();
+  _pptxBrief.operatorNotes = _pptxOperatorNotes;
 
   // Re-build sections fresh — check cards first, persona panes as supplement
   {
