@@ -6588,11 +6588,11 @@ function _pptxWrapWithFooter(html) {
   if (!b) return html;
   const lineColor  = b.primary || b.accent || '#CC0000';
   const bgColor    = b.background || '#0D0D0D';
-  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:108px;object-fit:contain;display:block;">` : '';
+  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:72px;object-fit:contain;display:block;">` : '';
   const footer = `
     <div style="position:absolute;bottom:0;left:0;right:0;z-index:999;">
       <div style="height:2px;background:${lineColor};"></div>
-      <div style="background:${bgColor};display:flex;align-items:center;padding:0 24px;height:130px;">
+      <div style="background:${bgColor};display:flex;align-items:center;padding:0 24px;height:88px;">
         ${logoImg}
         <span style="margin-left:auto;font-size:10px;color:#94A3B8;font-family:Segoe UI,sans-serif;white-space:nowrap;">© 2025 RubyPlay Ltd. All Rights Reserved.</span>
       </div>

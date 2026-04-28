@@ -206,6 +206,32 @@ function escHtml(s) {
 }
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
+function _styledCell(cell, brand) {
+  const v = String(cell).trim();
+  const p = brand.primary;
+  // Priority / signal badges
+  if (/^critical$/i.test(v)) return `<span style='display:inline-block;padding:2px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:${p};color:#fff;border-radius:3px;'>CRITICAL</span>`;
+  if (/^high$/i.test(v))     return `<span style='display:inline-block;padding:2px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:#92400E;color:#FDE68A;border-radius:3px;'>HIGH</span>`;
+  if (/^moderate$/i.test(v)) return `<span style='display:inline-block;padding:2px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:#374151;color:#CBD5E1;border-radius:3px;'>MODERATE</span>`;
+  if (/^medium$/i.test(v))   return `<span style='display:inline-block;padding:2px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:#374151;color:#CBD5E1;border-radius:3px;'>MEDIUM</span>`;
+  if (/^low$/i.test(v))      return `<span style='display:inline-block;padding:2px 8px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;background:#1E3A2F;color:#6EE7B7;border-radius:3px;'>LOW</span>`;
+  // Rank values — top 3 in primary colour, others in gold
+  if (/^1st$/i.test(v)) return `<span style='color:${p};font-weight:700;'>${v}</span>`;
+  if (/^2nd$/i.test(v)) return `<span style='color:#FBBF24;font-weight:700;'>${v}</span>`;
+  if (/^3rd$/i.test(v)) return `<span style='color:#FBBF24;font-weight:700;'>${v}</span>`;
+  if (/^top\s*\d+$/i.test(v)) return `<span style='color:#60A5FA;font-weight:600;'>${v}</span>`;
+  // Absent / zero
+  if (/€0\s*\(absent\)/i.test(v) || /\(absent\)/i.test(v)) return `<span style='color:${p};font-weight:600;'>${v}</span>`;
+  // Euro amounts
+  if (/^€[\d,\.]+[KM]?$/.test(v)) return `<span style='color:#34D399;font-weight:600;'>${v}</span>`;
+  // Percentages with + or -
+  if (/^[+\-]\d+(\.\d+)?%$/.test(v)) {
+    const col = v.startsWith('-') ? p : '#34D399';
+    return `<span style='color:${col};font-weight:600;'>${v}</span>`;
+  }
+  return v;
+}
+
 function buildStyledTableHtml(table, brand) {
   const b = brand;
   const headers = table.headers || [];
@@ -215,7 +241,7 @@ function buildStyledTableHtml(table, brand) {
     : '';
   const rowsHtml = rows.map((row, i) => {
     const bg = i % 2 === 0 ? '#161616' : '#1E1E1E';
-    const cells = row.map(cell => `<td style='font-size:12px;color:${b.text};padding:7px 12px;border-bottom:1px solid #2D3748;'>${cell}</td>`).join('');
+    const cells = row.map(cell => `<td style='font-size:12px;color:${b.text};padding:7px 12px;border-bottom:1px solid #2D3748;'>${_styledCell(cell, b)}</td>`).join('');
     return `<tr style='background:${bg};'>${cells}</tr>`;
   }).join('');
   const caption = table.label
