@@ -5814,7 +5814,9 @@ function _pptxRenderPlan() {
         <textarea id="pptx-ctx-ta-${s.id}" rows="3"
                   placeholder="Paste numbers, segments, notes — anything you want on this slide."
                   style="width:100%;box-sizing:border-box;font-size:11px;border:1px solid #FDE68A;border-radius:5px;padding:6px 8px;resize:vertical;font-family:inherit;">${_pptxEsc(_pptxSlideContext[String(s.id)]||'')}</textarea>
-        <div style="margin-top:6px;display:flex;justify-content:flex-end;">
+        <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px;">
+          <button onclick="_pptxToggleContext(${s.id})"
+                  style="padding:5px 12px;background:white;color:#64748B;border:1.5px solid #E2E8F0;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">✕ Cancel</button>
           <button onclick="_pptxSetContext(${s.id}, document.getElementById('pptx-ctx-ta-${s.id}').value);_pptxToggleContext(${s.id})"
                   style="padding:5px 14px;background:#92400E;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Save</button>
         </div>
