@@ -5273,7 +5273,7 @@ populateCompManualList();
 
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
-let _pptxBrief    = { angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
+let _pptxBrief    = { context: '', angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
 let _pptxTemplates      = [];
 let _selectedTemplateId = 'default';
 let _selectedTemplate   = null;
@@ -5704,44 +5704,61 @@ function _pptxRenderBrief() {
     { id:'recovery',    label:'🔄 Recovery' }
   ];
   content.innerHTML = `
-    <p style="font-size:12px;color:#64748B;margin-bottom:4px;">
-      Shape the story angle. Claude will read all <strong style="color:#1E2761;">${sectionCount} data section${sectionCount !== 1 ? 's' : ''}</strong> from the full analysis and select the most impactful findings.
-      ${sectionCount < 4 ? `<span style="color:#DC2626;font-weight:700;"> ⚠ Only ${sectionCount} sections found — for best results, wait for the full analysis to complete before generating.</span>` : ''}
+    <p style="font-size:12px;color:#64748B;margin-bottom:12px;">
+      Shape the story angle. Claude will read all <strong style="color:#1E2761;">${sectionCount} data section${sectionCount !== 1 ? 's' : ''}</strong> from the full analysis.
+      ${sectionCount < 4 ? '<span style="color:#DC2626;font-weight:700;"> ⚠ Only ' + sectionCount + ' sections found — run the full analysis first.</span>' : ''}
     </p>
-    <p style="font-size:11px;color:#94A3B8;margin-bottom:20px;">All fields are optional — but even a brief angle makes the narrative much sharper.</p>
 
     <div style="margin-bottom:18px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">STORY ANGLE (optional)</label>
-      <textarea id="pptx-angle" rows="3" placeholder="e.g. Strong 14% growth but only 12% of market potential. Competitor PlayAGS is at 31%. Frame as an opportunity — we've proved the model, now we scale." style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;">${_pptxEsc(_pptxBrief.angle)}</textarea>
+      <label style="font-size:11px;font-weight:700;color:#1E293B;display:block;margin-bottom:6px;">DESCRIBE THIS QBR IN PLAIN ENGLISH</label>
+      <textarea id="pptx-context" rows="4"
+        placeholder="e.g. GGR is up 14% but we're losing share to PlayAGS. The operator is happy but complacent. I want to create urgency to expand the portfolio and approve 3 new studio launches this quarter."
+        style="width:100%;box-sizing:border-box;padding:10px 12px;border:2px solid #7C3AED;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;">${_pptxEsc(_pptxBrief.context)}</textarea>
+      <div style="font-size:10px;color:#94A3B8;margin-top:4px;">Write naturally — Claude reads this and shapes the whole narrative around it</div>
     </div>
 
-    <div style="margin-bottom:18px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:8px;">TONE</label>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        ${tones.map(t => `
-          <button class="pptx-tone-pill${_pptxBrief.tone===t.id?' active':''}" data-tone="${t.id}" onclick="_pptxSelectTone('${t.id}')">
-            ${t.label}
-          </button>
-        `).join('')}
+    <details style="margin-bottom:8px;">
+      <summary style="font-size:11px;font-weight:700;color:#64748B;cursor:pointer;padding:6px 0;user-select:none;">
+        ▶ Advanced options (angle, tone, ask, include/exclude)
+      </summary>
+      <div style="padding-top:12px;">
+
+        <div style="margin-bottom:18px;">
+          <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">STORY ANGLE (optional)</label>
+          <textarea id="pptx-angle" rows="2" placeholder="e.g. Strong 14% growth but only 12% of market potential."
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;resize:vertical;">${_pptxEsc(_pptxBrief.angle)}</textarea>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:8px;">TONE</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${tones.map(t => `<button class="pptx-tone-pill${_pptxBrief.tone===t.id?' active':''}" data-tone="${t.id}" onclick="_pptxSelectTone('${t.id}')">${t.label}</button>`).join('')}
+          </div>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">THE ASK</label>
+          <input id="pptx-ask" type="text" placeholder="e.g. Approve 3 studio launches this quarter"
+            value="${_pptxEsc(_pptxBrief.ask)}"
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">MUST-INCLUDE TOPICS</label>
+          <input id="pptx-include" type="text" placeholder="e.g. VIP segment, Top 5 games"
+            value="${_pptxEsc(_pptxBrief.include)}"
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+        </div>
+
+        <div style="margin-bottom:8px;">
+          <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">EXCLUDE</label>
+          <input id="pptx-exclude" type="text" placeholder="e.g. Max Bet, Device Split"
+            value="${_pptxEsc(_pptxBrief.exclude)}"
+            style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
+        </div>
+
       </div>
-    </div>
-
-    <div style="margin-bottom:18px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">THE ASK — what do you need from this meeting?</label>
-      <input id="pptx-ask" type="text" placeholder="e.g. Approve 3 studio launches this quarter" value="${_pptxEsc(_pptxBrief.ask)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
-    </div>
-
-    <div style="margin-bottom:14px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">MUST-INCLUDE TOPICS (optional)</label>
-      <input id="pptx-include" type="text" placeholder="e.g. Rounds per player vs peers, Top 5 games, VIP segment, Promo impact" value="${_pptxEsc(_pptxBrief.include)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
-      <div style="font-size:10px;color:#94A3B8;margin-top:4px;">Force specific slides — Claude will always include these if data exists</div>
-    </div>
-
-    <div style="margin-bottom:8px;">
-      <label style="font-size:11px;font-weight:700;color:#64748B;display:block;margin-bottom:6px;">EXCLUDE (optional)</label>
-      <input id="pptx-exclude" type="text" placeholder="e.g. Max Bet, Device Split, Promo Impact" value="${_pptxEsc(_pptxBrief.exclude)}" style="width:100%;box-sizing:border-box;padding:10px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:inherit;">
-      <div style="font-size:10px;color:#94A3B8;margin-top:4px;">Topics to remove entirely from the presentation</div>
-    </div>
+    </details>
   `;
 
   const footer = document.getElementById('pptx-footer');
@@ -5763,6 +5780,7 @@ function _pptxSelectTone(toneId) {
 
 function _pptxSaveBriefAndShowPlan() {
   // Save brief inputs before navigating away
+  _pptxBrief.context = (document.getElementById('pptx-context')?.value  || '').trim();
   _pptxBrief.angle   = (document.getElementById('pptx-angle')?.value   || '').trim();
   _pptxBrief.ask     = (document.getElementById('pptx-ask')?.value     || '').trim();
   _pptxBrief.include = (document.getElementById('pptx-include')?.value || '').trim();
@@ -5925,6 +5943,7 @@ function _pptxConfirmAddCustomSlide() {
 async function _pptxShowPromptPreview() {
   const sections = _pptxSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content }));
   const brief = {
+    context: (document.getElementById('pptx-context')?.value || _pptxBrief.context || '').trim(),
     angle:   (document.getElementById('pptx-angle')?.value   || _pptxBrief.angle   || '').trim(),
     ask:     (document.getElementById('pptx-ask')?.value     || _pptxBrief.ask     || '').trim(),
     include: (document.getElementById('pptx-include')?.value || _pptxBrief.include || '').trim(),

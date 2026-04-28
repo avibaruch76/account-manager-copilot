@@ -191,6 +191,7 @@ OUTPUT FORMAT — use exactly these delimiters for each slide:
   const userPrompt = `Create a QBR presentation for ${operator} using ONLY the data in the analysis text below.
 
 STORY BRIEF:
+${brief.context ? `AM's note: ${brief.context}` : ''}
 ${brief.angle ? `Angle: ${brief.angle}` : ''}
 Tone: ${toneInstruction}
 ${brief.ask ? `The Ask: ${brief.ask}` : ''}
