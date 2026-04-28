@@ -254,6 +254,21 @@ function buildStyledTableHtml(table, brand) {
   return `<table style='border-collapse:collapse;width:100%;'>${caption}${headerHtml}<tbody>${rowsHtml}</tbody></table>`;
 }
 
+function stripHtml(str) {
+  if (!str) return '';
+  return str
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/\s{3,}/g, '\n')
+    .trim();
+}
+
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
   if (!tpl.brand) tpl.brand = buildDefaultTemplate().brand;
@@ -266,7 +281,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const toneInstruction = toneMap[brief.tone] || toneMap.opportunity;
 
   const sectionContent = sections.map(s => {
-    let block = `=== ${s.checkName} ===\n${s.content}`;
+    let block = `=== ${s.checkName} ===\n${stripHtml(s.content)}`;
     if (s.tables && s.tables.length > 0) {
       const preBuilt = s.tables.map(t => {
         const html = buildStyledTableHtml(t, tpl.brand);
@@ -462,7 +477,7 @@ async function streamSingleSlide({ slideTitle, slideDescription, brief, operator
   if (!tpl.brand) tpl.brand = buildDefaultTemplate().brand;
   // Build section content with pre-built tables — same approach as buildSlidesPrompt
   const sectionContent = (sections || []).map(s => {
-    let block = `=== ${s.checkName} ===\n${s.content}`;
+    let block = `=== ${s.checkName} ===\n${stripHtml(s.content)}`;
     if (s.tables && s.tables.length > 0) {
       const preBuilt = s.tables.map(t => `<PRE_BUILT_TABLE>\n${buildStyledTableHtml(t, tpl.brand)}\n</PRE_BUILT_TABLE>`).join('\n\n');
       block += `\n\n${preBuilt}`;
