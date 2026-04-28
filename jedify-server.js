@@ -2272,17 +2272,29 @@ const server = http.createServer(async (req, res) => {
       if (!isAuthenticated(req)) { rejectUnauth(res); return; }
       const op = decodeURIComponent(req.url.slice('/api/operator-notes/'.length));
       let body = '';
-      req.on('data', c => body += c);
-      req.on('end', async () => {
-        const { notes } = JSON.parse(body);
-        if (notes && notes.trim()) {
-          _operatorNotes[op] = notes.trim();
-        } else {
-          delete _operatorNotes[op];
+      req.on('data', c => {
+        body += c;
+        if (body.length > 32768) {
+          res.writeHead(413, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Notes too large' }));
+          req.destroy();
         }
-        await persistOperatorNotes();
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ ok: true }));
+      });
+      req.on('end', async () => {
+        try {
+          const { notes } = JSON.parse(body);
+          if (notes && notes.trim()) {
+            _operatorNotes[op] = notes.trim();
+          } else {
+            delete _operatorNotes[op];
+          }
+          await persistOperatorNotes();
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
       });
       return;
     }

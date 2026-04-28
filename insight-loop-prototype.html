@@ -5555,12 +5555,16 @@ async function _pptxSaveOperatorNotes() {
   const val = document.getElementById('pptx-op-notes-ta')?.value || '';
   if (!op) return;
   _pptxOperatorNotes = val;
-  await apiFetch('/api/operator-notes/' + encodeURIComponent(op), {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ notes: val })
-  });
-  showToast('📋 Operator notes saved');
+  try {
+    await apiFetch('/api/operator-notes/' + encodeURIComponent(op), {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes: val })
+    });
+    showToast('📋 Operator notes saved');
+  } catch {
+    showToast('Failed to save notes', true);
+  }
 }
 
 async function _pptxUpdateBrand(id, file) {
