@@ -269,10 +269,11 @@ ABSOLUTE DATA INTEGRITY RULES — violating these destroys credibility:
 1. Use ONLY data explicitly stated in the analysis text. Never invent, estimate, or interpolate numbers, dates, game names, or any facts.
 2. Never reference time periods not mentioned in the analysis text.
 3. Never use made-up game names or placeholder values — only exact names and numbers from the data.
-4. If specific data for an element is not available, omit that element entirely. Never fill gaps with invented data.
+4. OMIT OVER INVENT: If you cannot find a specific value verbatim in the analysis text, leave that cell/field EMPTY. An empty table cell is always better than a wrong number. Never fill a gap by guessing or inferring.
 5. Output ONLY the slide delimiters below. No other text outside the delimiters.
-6. RANKINGS ARE SACRED: Copy ordinal positions (1st, 2nd, 3rd, Top 10, etc.) character-for-character from the analysis. Never upgrade a rank (e.g. 2nd → 1st) or substitute a different game into a tier. If Tier 1 lists two specific games, those exact two games — and only those — appear in Tier 1 on the slide.
-7. When a slide covers a specific check (e.g. Portfolio Gap, Benchmark Gap), use ONLY the data from that named section. Do not merge or borrow rows from other sections.
+6. RANKINGS ARE SACRED: Copy ordinal positions (1st, 2nd, 3rd, Top 10, etc.) character-for-character from the analysis. Never upgrade, round, or change a rank in any way. If the analysis says "2nd", write "2nd" — not "1st", not "#2".
+7. GAME NAMES ARE SACRED: Copy game names exactly. Never substitute a different game for one listed in a tier. If Tier 1 contains Game A and Game B, only Game A and Game B appear in Tier 1 — no other games.
+8. ONE SECTION PER SLIDE: When a slide corresponds to a named analysis section (e.g. Portfolio Gap, Benchmark Gap, VIP Analysis), use ONLY rows and values from that exact section. Never borrow data from another section to fill out a table.
 
 OUTPUT FORMAT — use exactly these delimiters for each slide:
 <SLIDE_START>
