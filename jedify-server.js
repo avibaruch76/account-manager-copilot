@@ -285,33 +285,6 @@ function buildStyledTableHtml(table, brand) {
   return `<table style='border-collapse:collapse;width:100%;'>${caption}${headerHtml}<tbody>${rowsHtml}</tbody></table>`;
 }
 
-function stripHtml(str) {
-  if (!str) return '';
-  return str
-    // Remove entire style/script blocks (big token savers)
-    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')
-    // Strip style/class attributes from ALL tags (keeps structure, removes CSS noise)
-    .replace(/\s(?:style|class|id|data-[^=]*)="[^"]*"/gi, '')
-    // Convert structural block elements to newlines for readability
-    .replace(/<\/(?:tr|p|div|li|h[1-6]|br)>/gi, '\n')
-    .replace(/<\/td>/gi, '\t')
-    .replace(/<\/th>/gi, '\t')
-    // Remove remaining tags but keep the text they wrap
-    .replace(/<[^>]+>/g, '')
-    // Decode entities
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#?\w+;/g, ' ')
-    // Clean up whitespace
-    .replace(/\t\t+/g, '\t')
-    .replace(/\n\s*\n\s*\n/g, '\n\n')
-    .trim();
-}
 
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
@@ -325,7 +298,7 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const toneInstruction = toneMap[brief.tone] || toneMap.opportunity;
 
   const sectionContent = sections.map(s => {
-    let block = `=== ${s.checkName} ===\n${stripHtml(s.content)}`;
+    let block = `=== ${s.checkName} ===\n${s.content || ''}`;
     if (s.tables && s.tables.length > 0) {
       const preBuilt = s.tables.map(t => {
         const html = buildStyledTableHtml(t, tpl.brand);
@@ -521,7 +494,7 @@ async function streamSingleSlide({ slideTitle, slideDescription, brief, operator
   if (!tpl.brand) tpl.brand = buildDefaultTemplate().brand;
   // Build section content with pre-built tables — same approach as buildSlidesPrompt
   const sectionContent = (sections || []).map(s => {
-    let block = `=== ${s.checkName} ===\n${stripHtml(s.content)}`;
+    let block = `=== ${s.checkName} ===\n${s.content || ''}`;
     if (s.tables && s.tables.length > 0) {
       const preBuilt = s.tables.map(t => `<PRE_BUILT_TABLE>\n${buildStyledTableHtml(t, tpl.brand)}\n</PRE_BUILT_TABLE>`).join('\n\n');
       block += `\n\n${preBuilt}`;
