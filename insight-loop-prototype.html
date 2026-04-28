@@ -5527,6 +5527,8 @@ async function _pptxLoadTemplateList() {
       <div style="display:flex;gap:6px;align-items:center;">
         ${_selectedTemplateId===t.id?'<span style="font-size:10px;font-weight:700;color:#7C3AED;background:#EDE9FE;padding:2px 8px;border-radius:10px;">SELECTED</span>':''}
         <button onclick="event.stopPropagation();_pptxEditTemplate('${t.id}')" style="padding:3px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:5px;font-size:10px;color:#64748B;cursor:pointer;">Edit</button>
+        <button onclick="event.stopPropagation();document.getElementById('pptx-brand-file-${t.id}').click()" title="Upload a branded slide to extract logo &amp; colours" style="padding:3px 8px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:5px;font-size:10px;color:#64748B;cursor:pointer;">🎨 Brand</button>
+        <input type="file" id="pptx-brand-file-${t.id}" accept=".pptx" style="display:none" onchange="_pptxUpdateBrand('${t.id}',this.files[0]);this.value=''">
         ${!t.isDefault?`<button onclick="event.stopPropagation();_pptxDeleteTemplate('${t.id}')" style="padding:3px 8px;background:#FEF2F2;border:1px solid #FECACA;border-radius:5px;font-size:10px;color:#CC0000;cursor:pointer;">Delete</button>`:''}
       </div>
     </div>`).join('');
@@ -5534,6 +5536,28 @@ async function _pptxLoadTemplateList() {
 
 function _pptxSelectTemplate(id) {
   _selectedTemplateId = id;
+  _pptxLoadTemplateList();
+}
+
+async function _pptxUpdateBrand(id, file) {
+  if (!file) return;
+  showToast('Extracting brand from slide…');
+  try {
+    await _pptxHandleFile(file);
+    const { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 } = _pptxExtracted;
+    const brand = { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 };
+    await apiFetch(`/api/templates/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ brand })
+    });
+    if (id === _selectedTemplateId && _selectedTemplate) {
+      _selectedTemplate = { ..._selectedTemplate, brand };
+    }
+    showToast('🎨 Brand updated — logo and colours applied');
+  } catch (e) {
+    showToast('Brand update failed: ' + e.message, true);
+  }
   _pptxLoadTemplateList();
 }
 
