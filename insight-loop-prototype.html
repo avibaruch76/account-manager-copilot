@@ -5617,7 +5617,8 @@ function _pptxEsc(str) {
 function _saveAnalysisHistory() {
   const cr = document.getElementById('check-results');
   if (!cr || !cr.innerHTML.trim()) return;
-  const operator = (window._lastDisplayName)
+  const operator = document.getElementById('persona-header-name')?.textContent?.trim()
+    || window._lastDisplayName
     || (_runSession && _runSession.entity)
     || 'Unknown Operator';
   const latestRun = _runSession?.runs?.length ? _runSession.runs[_runSession.runs.length - 1] : null;
