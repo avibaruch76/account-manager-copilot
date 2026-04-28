@@ -35,7 +35,7 @@ function buildDefaultTemplate() {
       { title: 'New Games Launched',  description: 'Table: Game | Studio | RTP | Total Bets 14d | Players 14d. Sort by Total Bets desc.' },
       { title: 'Retention Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Player Segmentation', description: 'PLACEHOLDER — Coming Soon.' },
-      { title: 'VIP Analysis',        description: 'ALWAYS open with one bold sentence: either "VIP player segmentation data is available" or "No VIP player segmentation data is available for this operator." Then: if individual player-level VIP data exists, show Table: Player | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If the section only has game/studio-level data (no per-player VIP breakdown), state this explicitly, show top 5 players by bets as a proxy table, and add "Enable VIP player segmentation" as an action card.' },
+      { title: 'VIP Analysis',        description: 'ALWAYS write one of these two sentences first: either "VIP player segmentation data is available" or "No VIP player segmentation data available for this operator." If data is available, show Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If no VIP player segmentation data exists, note it clearly, show the top 10 players and add it as an action item.' },
       { title: 'Max Bet Analysis',    description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Promotion Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'The Portfolio Gap',   description: 'Table: Game | Key Fact | Market Rank | Market Share % | Signal badge. Max 8 rows.' },
@@ -128,7 +128,7 @@ loadTemplates();
 // ── Template migrations ───────────────────────────────────────────────────────
 // Run once at startup to patch outdated slide descriptions across all templates.
 (function migrateTemplates() {
-  const NEW_VIP = 'ALWAYS open with one bold sentence: either "VIP player segmentation data is available" or "No VIP player segmentation data is available for this operator." Then: if individual player-level VIP data exists, show Table: Player | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If the section only has game/studio-level data (no per-player VIP breakdown), state this explicitly, show top 5 players by bets as a proxy table, and add "Enable VIP player segmentation" as an action card.';
+  const NEW_VIP = 'ALWAYS write one of these two sentences first: either "VIP player segmentation data is available" or "No VIP player segmentation data available for this operator." If data is available, show Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If no VIP player segmentation data exists, note it clearly, show the top 10 players and add it as an action item.';
   let changed = false;
   for (const tpl of _templates) {
     for (const slide of (tpl.slides || [])) {
