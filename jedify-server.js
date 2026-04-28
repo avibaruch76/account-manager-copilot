@@ -154,6 +154,15 @@ async function persistShares() {
 
 loadShares();
 
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
@@ -1642,7 +1651,10 @@ const server = http.createServer(async (req, res) => {
         res.end('<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0D0D0D;color:#fff;"><div style="text-align:center"><h2>Presentation not found</h2><p style="color:#64748B;">This link may have expired.</p></div></body></html>');
         return;
       }
-      const slidesJson = JSON.stringify(share.slides).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+      const slidesJson = JSON.stringify(share.slides)
+        .replace(/</g, '\\u003c')
+        .replace(/>/g, '\\u003e')
+        .replace(/\//g, '\\u002f');
       const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2425,7 +2437,7 @@ goTo(0);
         try {
           const { operator, slides } = JSON.parse(body);
           const id = Math.random().toString(36).slice(2, 10);
-          _shares[id] = { id, operator: operator || 'Operator', createdAt: new Date().toISOString(), slides: slides || [] };
+          _shares[id] = { id, operator: escHtml((operator || 'Operator').slice(0, 200)), createdAt: new Date().toISOString(), slides: slides || [] };
           await persistShares();
           const host = req.headers.host || 'localhost:3001';
           const protocol = req.headers['x-forwarded-proto'] || 'https';
