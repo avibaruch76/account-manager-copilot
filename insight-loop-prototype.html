@@ -2756,7 +2756,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
                 <div style="background:#F1F5F9;border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px;">
                   <div style="height:100%;width:${p.pct}%;background:#7C3AED;border-radius:6px;transition:width 0.5s;"></div>
                 </div>
-                <div style="font-size:11px;color:#64748B;">Jedify: check ${p.iter} of ${p.maxIter} · ${p.pct}% complete</div>
+                <div style="font-size:11px;color:#64748B;">Jedify: step ${p.iter} of ${p.maxIter} · ${p.pct}% complete</div>
               </div>`;
           }
         } catch (pollErr) {
