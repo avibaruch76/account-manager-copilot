@@ -5537,7 +5537,15 @@ async function _pptxRenderHistory() {
   const operator = _pptxGetOperator();
   try {
     const res = await apiFetch('/api/presentations' + (operator ? '?operator=' + encodeURIComponent(operator) : ''));
-    const list = await res.json();
+    let list = await res.json();
+
+    // Fall back to localStorage if server has nothing (lost on Render restart)
+    if (!list.length) {
+      try {
+        const local = JSON.parse(localStorage.getItem('pptx_history') || '[]');
+        list = operator ? local.filter(p => p.operator === operator) : local;
+      } catch {}
+    }
 
     if (list.length === 0) {
       c.innerHTML = '<div style="color:#94A3B8;font-size:12px;padding:20px 0;text-align:center;">No presentations saved yet for this operator.</div>';
@@ -6442,6 +6450,21 @@ async function _pptxGenerate() {
     // Auto-save to history
     try {
       const operator = _pptxGetOperator() || 'Operator';
+      const historyEntry = {
+        id: 'pres_' + Date.now(),
+        operator,
+        date: new Date().toISOString(),
+        slideCount: _pptxSlides.length,
+        title: (_pptxBrief.context || _pptxBrief.angle || 'QBR').slice(0, 200),
+        brief: { context: _pptxBrief.context || '', angle: _pptxBrief.angle || '', ask: _pptxBrief.ask || '' }
+      };
+      // Always save metadata to localStorage (survives Render restarts)
+      try {
+        const local = JSON.parse(localStorage.getItem('pptx_history') || '[]');
+        local.unshift(historyEntry);
+        localStorage.setItem('pptx_history', JSON.stringify(local.slice(0, 30)));
+      } catch {}
+      // Also save full slides to server (in-memory)
       await apiFetch('/api/presentations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -6522,13 +6545,13 @@ function _pptxWrapWithFooter(html) {
   if (!b) return html;
   const lineColor  = b.primary || b.accent || '#CC0000';
   const bgColor    = b.background || '#0D0D0D';
-  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:22px;object-fit:contain;display:block;">` : '';
+  const logoImg    = b.logoBase64 ? `<img src="${b.logoBase64}" style="height:36px;object-fit:contain;display:block;">` : '';
   const footer = `
     <div style="position:absolute;bottom:0;left:0;right:0;z-index:999;">
       <div style="height:2px;background:${lineColor};"></div>
-      <div style="background:${bgColor};display:flex;align-items:center;padding:0 20px;height:34px;">
+      <div style="background:${bgColor};display:flex;align-items:center;padding:0 24px;height:52px;">
         ${logoImg}
-        <span style="margin-left:auto;font-size:9px;color:#94A3B8;font-family:Segoe UI,sans-serif;white-space:nowrap;">© 2025 RubyPlay Ltd. All Rights Reserved.</span>
+        <span style="margin-left:auto;font-size:10px;color:#94A3B8;font-family:Segoe UI,sans-serif;white-space:nowrap;">© 2025 RubyPlay Ltd. All Rights Reserved.</span>
       </div>
     </div>`;
   return `<div style="position:relative;width:100%;height:100%;overflow:hidden;">${html}${footer}</div>`;
@@ -7178,7 +7201,13 @@ async function _pptxShare() {
         slides: _pptxSlides.map(s => ({ html: s.html || '', notes: s.notes || '' }))
       })
     });
-    const { url } = await res.json();
+    const shareData = await res.json();
+    if (!res.ok || !shareData.url) {
+      showToast('Share failed: ' + (shareData.error || `HTTP ${res.status}`), true);
+      if (btn) { btn.textContent = '🔗 Share'; btn.disabled = false; }
+      return;
+    }
+    const url = shareData.url;
     const existing = document.getElementById('pptx-share-modal');
     if (existing) existing.remove();
     const modal = document.createElement('div');
