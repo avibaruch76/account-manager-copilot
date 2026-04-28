@@ -5841,6 +5841,13 @@ async function _pptxLoadTemplateList() {
   try {
     const res = await apiFetch('/api/templates');
     _pptxTemplates = await res.json();
+    // Keep backup current — fetch full template data for all custom templates
+    for (const t of _pptxTemplates.filter(t => !t.isDefault)) {
+      try {
+        const r = await apiFetch('/api/templates/' + t.id);
+        if (r.ok) { const full = await r.json(); _saveTplBackup(full.name, full.slides, full.brand); }
+      } catch {}
+    }
   } catch {
     _pptxTemplates = [{ id: 'default', name: 'RubyPlay Default', isDefault: true, slideCount: 15 }];
   }
