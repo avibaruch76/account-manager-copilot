@@ -35,7 +35,7 @@ function buildDefaultTemplate() {
       { title: 'New Games Launched',  description: 'Table: Game | Studio | RTP | Total Bets 14d | Players 14d. Sort by Total Bets desc.' },
       { title: 'Retention Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Player Segmentation', description: 'PLACEHOLDER — Coming Soon.' },
-      { title: 'VIP Analysis',        description: 'Show Top Players table: Player ID | Total Bets (€) | GGR (€) | Sessions | Avg Bet (€) | Top Game. Sort by Total Bets desc. Max 10 rows. If individual player records are unavailable, show top games by GGR/Player as a proxy table instead. In both cases include a prominent amber callout box at the top: "⚠️ VIP player segmentation is not configured for this operator — data shows highest-value players ranked by betting volume."' },
+      { title: 'VIP Analysis',        description: 'Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€). Sort by VIP Bets desc. If no VIP player segmentation data exists, note it clearly and add it as an action item.' },
       { title: 'Max Bet Analysis',    description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Promotion Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'The Portfolio Gap',   description: 'Table: Game | Key Fact | Market Rank | Market Share % | Signal badge. Max 8 rows.' },
@@ -69,14 +69,6 @@ function loadTemplates() {
     }
     const hasDefault = saved.some(t => t.id === 'default');
     _templates = hasDefault ? saved : [buildDefaultTemplate(), ...saved];
-    // Migrate stored default template's VIP slide to latest description
-    const def = _templates.find(t => t.id === 'default');
-    if (def) {
-      const vip = def.slides.find(s => s.title === 'VIP Analysis');
-      if (vip && vip.description === 'Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€). Sort by VIP Bets desc.') {
-        vip.description = buildDefaultTemplate().slides.find(s => s.title === 'VIP Analysis').description;
-      }
-    }
   } catch {
     _templates = [buildDefaultTemplate()];
   }
