@@ -271,6 +271,8 @@ ABSOLUTE DATA INTEGRITY RULES — violating these destroys credibility:
 3. Never use made-up game names or placeholder values — only exact names and numbers from the data.
 4. If specific data for an element is not available, omit that element entirely. Never fill gaps with invented data.
 5. Output ONLY the slide delimiters below. No other text outside the delimiters.
+6. RANKINGS ARE SACRED: Copy ordinal positions (1st, 2nd, 3rd, Top 10, etc.) character-for-character from the analysis. Never upgrade a rank (e.g. 2nd → 1st) or substitute a different game into a tier. If Tier 1 lists two specific games, those exact two games — and only those — appear in Tier 1 on the slide.
+7. When a slide covers a specific check (e.g. Portfolio Gap, Benchmark Gap), use ONLY the data from that named section. Do not merge or borrow rows from other sections.
 
 OUTPUT FORMAT — use exactly these delimiters for each slide:
 <SLIDE_START>
