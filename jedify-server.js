@@ -125,6 +125,25 @@ async function persistTemplates() {
 
 loadTemplates();
 
+// ── Template migrations ───────────────────────────────────────────────────────
+// Run once at startup to patch outdated slide descriptions across all templates.
+(function migrateTemplates() {
+  const NEW_VIP = 'ALWAYS open with one bold sentence: either "VIP player segmentation data is available" or "No VIP player segmentation data is available for this operator." Then: if individual player-level VIP data exists, show Table: Player | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If the section only has game/studio-level data (no per-player VIP breakdown), state this explicitly, show top 5 players by bets as a proxy table, and add "Enable VIP player segmentation" as an action card.';
+  let changed = false;
+  for (const tpl of _templates) {
+    for (const slide of (tpl.slides || [])) {
+      if (slide.title === 'VIP Analysis' && slide.description !== NEW_VIP) {
+        slide.description = NEW_VIP;
+        changed = true;
+      }
+    }
+  }
+  if (changed) {
+    persistTemplates().catch(e => console.warn('[migrate] persist failed:', e.message));
+    console.log('[migrate] Updated VIP Analysis description in all templates');
+  }
+})();
+
 // ── Operator Notes ────────────────────────────────────────────────────────────
 let _operatorNotes = {};
 
