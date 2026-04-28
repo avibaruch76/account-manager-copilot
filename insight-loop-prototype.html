@@ -5274,6 +5274,26 @@ populateCompManualList();
 let _pptxSlides   = null;   // generated slide JSON
 let _pptxSections = [];     // selected sections [{checkId, checkName, content}]
 let _pptxBrief    = { context: '', angle: '', tone: 'opportunity', ask: '', include: '', exclude: '' };
+let _pptxSectionConfidence = {};  // checkId → 'high'|'medium'|'low'|'none'
+
+const _SLIDE_CHECK_MAP = {
+  1: 'ggr_trend', 2: 'concentration', 3: 'concentration', 4: 'new_launches',
+  7: 'vip_behavior', 10: 'benchmark_gap', 11: 'hidden_gems', 12: 'benchmark_gap'
+};
+
+function _pptxSlideConf(slideId) {
+  const checkId = _SLIDE_CHECK_MAP[slideId];
+  if (!checkId) return null;
+  return _pptxSectionConfidence[checkId] || 'none';
+}
+
+function _pptxConfDot(conf) {
+  if (!conf) return '';
+  const map   = { high: '#16A34A', medium: '#F59E0B', low: '#EF4444', none: '#CBD5E1' };
+  const label = { high: 'Rich data', medium: 'Some data', low: 'Sparse data', none: 'No Jedify data' };
+  const color = map[conf] || '#CBD5E1';
+  return `<span title="${label[conf]||''}" style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>`;
+}
 let _pptxOperatorNotes = '';  // loaded from server per operator
 let _pptxTemplates      = [];
 let _selectedTemplateId = 'default';
@@ -5417,6 +5437,18 @@ async function openPresentationBuilder() {
 
   // Combine: check cards first (raw data), then persona panes (narrative context)
   _pptxSections = [...checkSections, ...personaSections];
+
+  _pptxSectionConfidence = {};
+  for (const s of _pptxSections) {
+    const len = (s.content || '').length;
+    const isPlaceholder = /PLACEHOLDER|coming soon|no data|not available/i.test(s.content || '');
+    let conf;
+    if (isPlaceholder || len < 100)  conf = 'none';
+    else if (len < 400)              conf = 'low';
+    else if (len < 2000)             conf = 'medium';
+    else                             conf = 'high';
+    _pptxSectionConfidence[s.checkId] = conf;
+  }
 
   // Final fallback if nothing found
   if (_pptxSections.length === 0) {
@@ -5888,7 +5920,10 @@ function _pptxRenderPlan() {
           <svg width=10 height=8 viewBox='0 0 10 8'><polyline points='1,4 4,7 9,1' stroke='#fff' stroke-width='2' fill='none'/></svg>
         </div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:12px;font-weight:700;color:#1A1A1A;">${s.name}${s.alwaysOn ? ' <span style="font-size:9px;background:#FEF3C7;color:#92400E;padding:1px 6px;border-radius:10px;">REQUIRED</span>' : ''}</div>
+          <div style="font-size:12px;font-weight:700;color:#1A1A1A;display:flex;align-items:center;gap:6px;">
+            ${_pptxConfDot(_pptxSlideConf(s.id))}
+            ${s.name}${s.alwaysOn ? ' <span style="font-size:9px;font-weight:700;color:#CC0000;background:#FEF2F2;padding:1px 5px;border-radius:4px;vertical-align:middle;">REQUIRED</span>' : ''}
+          </div>
           <div style="font-size:10px;color:#94A3B8;margin-top:1px;">${s.desc || ''}</div>
         </div>
         <button id="pptx-ctx-btn-${s.id}" onclick="event.stopPropagation();_pptxToggleContext(${s.id})"
@@ -5942,10 +5977,16 @@ function _pptxRenderPlan() {
     <div style="font-size:11px;color:#64748B;margin-bottom:8px;">
       <strong style="color:#1A1A1A;">${enabledCount} slides</strong> selected · drag ⠿ to reorder · uncheck to exclude
     </div>
-    <div style="border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;max-height:380px;overflow-y:auto;margin-bottom:12px;">
+    <div style="border:1px solid #E2E8F0;border-radius:8px;overflow:hidden;max-height:380px;overflow-y:auto;margin-bottom:4px;">
       ${enabledRows}
       ${customRows}
       ${disabledRows}
+    </div>
+    <div style="display:flex;gap:12px;font-size:10px;color:#94A3B8;margin-top:6px;flex-wrap:wrap;margin-bottom:8px;">
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#16A34A;display:inline-block;"></span>Rich data</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#F59E0B;display:inline-block;"></span>Some data</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#EF4444;display:inline-block;"></span>Sparse</span>
+      <span style="display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:50%;background:#CBD5E1;display:inline-block;"></span>No Jedify data</span>
     </div>
     <div id="pptx-add-slide-form" style="display:none;background:#FFF5F5;border:1.5px solid #CC0000;border-radius:8px;padding:14px;margin-bottom:10px;">
       <div style="font-size:11px;font-weight:700;color:#CC0000;margin-bottom:10px;letter-spacing:1px;text-transform:uppercase;">New Custom Slide</div>
