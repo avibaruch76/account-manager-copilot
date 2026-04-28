@@ -5298,7 +5298,7 @@ function _pptxConfDot(conf) {
 let _pptxOperatorNotes = '';  // loaded from server per operator
 let _pptxGenAbortController = null;
 let _pptxTemplates      = [];
-let _selectedTemplateId = 'default';
+let _selectedTemplateId = localStorage.getItem('pptx_selected_template') || 'default';
 let _selectedTemplate   = null;
 
 // Slide plan state — which standard slides to include + custom additions
@@ -5737,6 +5737,7 @@ async function _pptxLoadTemplateList() {
 
 function _pptxSelectTemplate(id) {
   _selectedTemplateId = id;
+  localStorage.setItem('pptx_selected_template', id);
   _pptxLoadTemplateList();
 }
 
@@ -5961,7 +5962,10 @@ async function _pptxUploadTemplate(file) {
 async function _pptxDeleteTemplate(id) {
   if (!confirm('Delete this template? This cannot be undone.')) return;
   await apiFetch(`/api/templates/${id}`, { method: 'DELETE' });
-  if (_selectedTemplateId === id) _selectedTemplateId = 'default';
+  if (_selectedTemplateId === id) {
+    _selectedTemplateId = 'default';
+    localStorage.setItem('pptx_selected_template', 'default');
+  }
   _pptxLoadTemplateList();
 }
 
