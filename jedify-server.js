@@ -2434,8 +2434,10 @@ goTo(0);
 
   // GET /api/templates — list all templates (no auth required)
   if (req.method === 'GET' && req.url === '/api/templates') {
-    const list = _templates.map(({ id, name, isDefault, slides, createdAt, updatedAt }) => ({
-      id, name, isDefault, slideCount: slides.length, createdAt, updatedAt
+    const list = _templates.map(({ id, name, isDefault, slides, brand, createdAt, updatedAt }) => ({
+      id, name, isDefault, slideCount: slides.length, createdAt, updatedAt,
+      brandPrimary: brand?.primary || null,
+      brandLogoBase64: brand?.logoBase64 || null
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(list));
