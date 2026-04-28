@@ -5296,6 +5296,7 @@ function _pptxConfDot(conf) {
   return `<span title="${label[conf]||''}" style="width:8px;height:8px;border-radius:50%;background:${color};display:inline-block;flex-shrink:0;"></span>`;
 }
 let _pptxOperatorNotes = '';  // loaded from server per operator
+let _pptxGenAbortController = null;
 let _pptxTemplates      = [];
 let _selectedTemplateId = 'default';
 let _selectedTemplate   = null;
@@ -6258,7 +6259,9 @@ async function _pptxGenerate() {
     </div>
     <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
   `;
-  document.getElementById('pptx-footer').innerHTML = '';
+  document.getElementById('pptx-footer').innerHTML = `
+    <button onclick="_pptxCancelGenerate()" style="padding:9px 20px;background:#F1F5F9;color:#475569;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">✕ Cancel</button>
+  `;
 
   try {
     const entity = document.getElementById('operator-select')?.value ||
@@ -6270,10 +6273,12 @@ async function _pptxGenerate() {
     const fetchHeaders = { 'Content-Type': 'application/json' };
     if (token) fetchHeaders['Authorization'] = 'Bearer ' + token;
 
+    _pptxGenAbortController = new AbortController();
     const response = await fetch((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:3001' : '') + '/api/generate-slides', {
       method: 'POST',
       headers: fetchHeaders,
+      signal: _pptxGenAbortController.signal,
       body: JSON.stringify({
         sections: sections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content })),
         brief: _pptxBrief,
@@ -6359,6 +6364,19 @@ async function _pptxGenerate() {
       });
     } catch (e) { console.warn('[history] auto-save failed:', e.message); }
   } catch (e) {
+    _pptxGenAbortController = null;
+    if (e.name === 'AbortError') {
+      content.innerHTML = `
+        <div style="text-align:center;padding:40px 20px;">
+          <div style="font-size:32px;margin-bottom:12px;">🚫</div>
+          <div style="font-size:14px;font-weight:700;color:#475569;margin-bottom:20px;">Generation cancelled</div>
+        </div>`;
+      document.getElementById('pptx-footer').innerHTML = `
+        <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
+        <button onclick="_pptxRenderPlan()" style="padding:9px 18px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-left:8px;">↺ Try Again</button>
+      `;
+      return;
+    }
     const isNetwork = /failed to fetch|network|aborted|load failed/i.test(e.message);
     content.innerHTML = `
       <div style="text-align:center;padding:40px 20px;">
@@ -6385,6 +6403,13 @@ async function _pptxGenerate() {
       </div>`;
     const footer = document.getElementById('pptx-footer');
     if (footer) footer.innerHTML = `<button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Back to Brief</button>`;
+  }
+}
+
+function _pptxCancelGenerate() {
+  if (_pptxGenAbortController) {
+    _pptxGenAbortController.abort();
+    _pptxGenAbortController = null;
   }
 }
 
