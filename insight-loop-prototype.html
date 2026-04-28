@@ -3166,11 +3166,13 @@ function _refreshRunTabs(container) {
     const checkLabel = runData?.checkIds?.length
       ? runData.checkIds.map(id => _checks.find(c => c.id === id)?.name || id).join(', ')
       : null;
-    const label = `Run ${runNum}` + (runData ? ` · ${runData.timestamp}` : '') + (checkLabel ? ` (${checkLabel})` : '');
     const btn = document.createElement('button');
     btn.setAttribute('data-tab-run', runNum);
-    btn.title = label;
-    btn.textContent = `Run ${runNum}`;
+    const shortLabel = runNum === 1
+      ? `Run 1${runData ? ' · ' + runData.timestamp : ''}`
+      : `Run ${runNum}${runData ? ' · ' + runData.timestamp : ''}${checkLabel ? ' · ' + checkLabel : ''}`;
+    btn.title = shortLabel;
+    btn.textContent = shortLabel;
     btn.style.cssText = 'padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:none;';
     btn.onclick = () => _selectRunTab(container, runNum);
     tabBar.appendChild(btn);
@@ -5602,11 +5604,18 @@ function _pptxEsc(str) {
 function _saveAnalysisHistory() {
   const cr = document.getElementById('check-results');
   if (!cr || !cr.innerHTML.trim()) return;
-  const operator = (_runSession && _runSession.entity) ? _runSession.entity : 'Unknown Operator';
+  const operator = (_runSession && _runSession.entity)
+    ? _runSession.entity
+    : (document.getElementById('operator-select')?.value || document.getElementById('entity-select')?.value || 'Unknown Operator');
+  const latestRun = _runSession?.runs?.length ? _runSession.runs[_runSession.runs.length - 1] : null;
+  const checkNames = latestRun?.checkIds?.length
+    ? latestRun.checkIds.map(id => _checks.find(c => c.id === id)?.name || id)
+    : null;
   const entry = {
     id: 'ah_' + Date.now(),
     operator,
     timestamp: new Date().toISOString(),
+    checkNames,
     html: cr.innerHTML
   };
   try {
@@ -7082,8 +7091,9 @@ function _pptxShowRegenPanel(idx) {
   }
   history.forEach(e => {
     const d = new Date(e.timestamp);
-    const label = e.operator + ' · ' + d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
-    sourceOptions += `<option value="${e.id}">${label}</option>`;
+    const dateLabel = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' }) + ' ' + d.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+    const checksLabel = e.checkNames?.length ? ' · ' + e.checkNames.join(', ') : '';
+    sourceOptions += `<option value="${e.id}">${e.operator} · ${dateLabel}${checksLabel}</option>`;
   });
   if (!sourceOptions) sourceOptions = `<option value="current">No analysis data available</option>`;
 
