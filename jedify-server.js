@@ -133,6 +133,27 @@ async function persistOperatorNotes() {
 
 loadOperatorNotes();
 
+// ── Shared Presentations ──────────────────────────────────────────────────────
+let _shares = {};  // id → { id, operator, createdAt, slides: [{html, notes}] }
+
+function loadShares() {
+  try { _shares = process.env.SHARES_JSON ? JSON.parse(process.env.SHARES_JSON) : {}; }
+  catch { _shares = {}; }
+}
+
+async function persistShares() {
+  const entries = Object.values(_shares).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 30);
+  _shares = Object.fromEntries(entries.map(e => [e.id, e]));
+  const json = JSON.stringify(_shares);
+  if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
+    console.warn('[shares] RENDER_API_KEY/SERVICE_ID not set — shares will reset on restart');
+    return;
+  }
+  await updateRenderEnvVar('SHARES_JSON', json);
+}
+
+loadShares();
+
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
@@ -1613,6 +1634,100 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (req.method === 'GET' && req.url.startsWith('/share/')) {
+      const id = req.url.slice('/share/'.length).split('?')[0];
+      const share = _shares[id];
+      if (!share) {
+        res.writeHead(404, { 'Content-Type': 'text/html' });
+        res.end('<html><body style="font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;background:#0D0D0D;color:#fff;"><div style="text-align:center"><h2>Presentation not found</h2><p style="color:#64748B;">This link may have expired.</p></div></body></html>');
+        return;
+      }
+      const slidesJson = JSON.stringify(share.slides).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${share.operator} QBR — RubyPlay</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0A0A0A;font-family:system-ui,sans-serif;color:#fff;height:100vh;overflow:hidden;display:flex;flex-direction:column}
+  #toolbar{display:flex;align-items:center;gap:12px;padding:10px 20px;background:#111;border-bottom:1px solid #222;flex-shrink:0}
+  #toolbar h1{font-size:14px;font-weight:700;color:#fff;flex:1}
+  #toolbar span{font-size:12px;color:#64748B}
+  #nav-btn{padding:6px 14px;background:#CC0000;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer}
+  #viewer{flex:1;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:20px}
+  #slide-wrap{width:100%;max-width:1280px;position:relative}
+  #slide-frame{width:1280px;height:720px;border:none;display:block;transform-origin:top left}
+  #thumbs{display:flex;gap:6px;overflow-x:auto;padding:8px 20px;background:#111;border-top:1px solid #222;flex-shrink:0}
+  .thumb{flex-shrink:0;width:80px;height:45px;border-radius:4px;cursor:pointer;border:2px solid transparent;background:#1A1A1A;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#64748B;transition:border-color .15s}
+  .thumb.active{border-color:#CC0000;color:#CC0000}
+  #notes-bar{background:#1A1A1A;padding:8px 20px;font-size:11px;color:#64748B;border-top:1px solid #222;flex-shrink:0;min-height:32px;max-height:60px;overflow:hidden}
+</style>
+</head>
+<body>
+<div id="toolbar">
+  <h1>RubyPlay \xD7 ${share.operator.toUpperCase()}</h1>
+  <span id="slide-counter">1 / ${share.slides.length}</span>
+  <button id="nav-btn" onclick="nextSlide()">Next \u2192</button>
+</div>
+<div id="viewer">
+  <div id="slide-wrap">
+    <iframe id="slide-frame" srcdoc=""></iframe>
+  </div>
+</div>
+<div id="notes-bar"></div>
+<div id="thumbs"></div>
+<script>
+const slides = ${slidesJson};
+let cur = 0;
+const frame = document.getElementById('slide-frame');
+const wrap  = document.getElementById('slide-wrap');
+const counter = document.getElementById('slide-counter');
+const notesBar = document.getElementById('notes-bar');
+
+function scale() {
+  const w = wrap.offsetWidth;
+  const s = w / 1280;
+  frame.style.transform = 'scale(' + s + ')';
+  wrap.style.height = (720 * s) + 'px';
+}
+
+function goTo(i) {
+  cur = Math.max(0, Math.min(slides.length - 1, i));
+  frame.srcdoc = slides[cur].html || '';
+  notesBar.textContent = slides[cur].notes || '';
+  counter.textContent = (cur + 1) + ' / ' + slides.length;
+  document.getElementById('nav-btn').textContent = cur === slides.length - 1 ? 'Restart' : 'Next \u2192';
+  document.querySelectorAll('.thumb').forEach((t, idx) => t.classList.toggle('active', idx === cur));
+}
+
+function nextSlide() { goTo(cur === slides.length - 1 ? 0 : cur + 1); }
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') nextSlide();
+  if (e.key === 'ArrowLeft') goTo(cur - 1);
+});
+
+const thumbs = document.getElementById('thumbs');
+slides.forEach((_, i) => {
+  const t = document.createElement('div');
+  t.className = 'thumb' + (i === 0 ? ' active' : '');
+  t.textContent = i + 1;
+  t.onclick = () => goTo(i);
+  thumbs.appendChild(t);
+});
+
+window.addEventListener('resize', scale);
+scale();
+goTo(0);
+<\/script>
+</body>
+</html>`;
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+      return;
+    }
+
   // All other /api/* routes require authentication
   if (req.url.startsWith('/api/') && !isAuthenticated(req)) {
     return rejectUnauth(res);
@@ -2294,6 +2409,31 @@ const server = http.createServer(async (req, res) => {
         } catch {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: 'Invalid JSON' }));
+        }
+      });
+      return;
+    }
+
+    if (req.method === 'POST' && req.url === '/api/share') {
+      if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+      let body = '';
+      req.on('data', c => {
+        body += c;
+        if (body.length > 10 * 1024 * 1024) { res.writeHead(413); res.end(JSON.stringify({ error: 'Too large' })); req.destroy(); }
+      });
+      req.on('end', async () => {
+        try {
+          const { operator, slides } = JSON.parse(body);
+          const id = Math.random().toString(36).slice(2, 10);
+          _shares[id] = { id, operator: operator || 'Operator', createdAt: new Date().toISOString(), slides: slides || [] };
+          await persistShares();
+          const host = req.headers.host || 'localhost:3001';
+          const protocol = req.headers['x-forwarded-proto'] || 'https';
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ id, url: `${protocol}://${host}/share/${id}` }));
+        } catch {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Invalid request' }));
         }
       });
       return;

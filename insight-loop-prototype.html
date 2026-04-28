@@ -6351,6 +6351,7 @@ function _pptxDrawPreview(idx) {
   document.getElementById('pptx-footer').innerHTML = `
     <button onclick="_pptxRenderBrief()" style="padding:9px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">← Edit Brief</button>
     <div style="flex:1"></div>
+    <button onclick="_pptxShare()" style="padding:9px 16px;background:#F8FAFC;color:#475569;border:1.5px solid #E2E8F0;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;">🔗 Share</button>
     <button onclick="_pptxDownload()" style="padding:9px 20px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">⬇ Download .pptx</button>
   `;
 }
@@ -6902,6 +6903,49 @@ function _pptxSlideLegacyResolution(s, t, accent) {
       <div style="flex:1;">${actions}</div>
     </div>
   `;
+}
+
+// ── Share — POST slides to server, get back a shareable URL ──────
+async function _pptxShare() {
+  const operator = document.getElementById('operator-select')?.value || 'Operator';
+  const btn = document.querySelector('[onclick="_pptxShare()"]');
+  if (btn) { btn.textContent = 'Creating link…'; btn.disabled = true; }
+  try {
+    const res = await apiFetch('/api/share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operator,
+        slides: _pptxSlides.map(s => ({ html: s.html || '', notes: s.notes || '' }))
+      })
+    });
+    const { url } = await res.json();
+    const existing = document.getElementById('pptx-share-modal');
+    if (existing) existing.remove();
+    const modal = document.createElement('div');
+    modal.id = 'pptx-share-modal';
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px;';
+    modal.onclick = e => { if (e.target === modal) modal.remove(); };
+    modal.innerHTML = `
+      <div style="background:white;border-radius:12px;padding:24px;max-width:520px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,0.2);">
+        <div style="font-size:16px;font-weight:700;color:#1E293B;margin-bottom:6px;">🔗 Shareable link created</div>
+        <div style="font-size:12px;color:#64748B;margin-bottom:14px;">Anyone with this link can view the presentation. Link is active until the server restarts.</div>
+        <div style="display:flex;gap:8px;margin-bottom:16px;">
+          <input id="pptx-share-url" value="${url}" readonly
+                 style="flex:1;padding:9px 12px;border:1.5px solid #E2E8F0;border-radius:8px;font-size:12px;font-family:monospace;background:#F8FAFC;">
+          <button onclick="navigator.clipboard.writeText('${url}');this.textContent='Copied!';setTimeout(()=>this.textContent='Copy',2000)"
+                  style="padding:9px 16px;background:#CC0000;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Copy</button>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;">
+          <button onclick="window.open('${url}','_blank')" style="padding:7px 16px;background:#F1F5F9;color:#475569;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">Open preview ↗</button>
+          <button onclick="document.getElementById('pptx-share-modal').remove()" style="padding:7px 16px;background:#1E293B;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  } catch (e) {
+    showToast('Share failed: ' + e.message, true);
+  }
+  if (btn) { btn.textContent = '🔗 Share'; btn.disabled = false; }
 }
 
 // ── .pptx Download — html2canvas captures each slide as image ──────
