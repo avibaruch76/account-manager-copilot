@@ -156,6 +156,7 @@ loadShares();
 
 // ── Presentation History ──────────────────────────────────────────────────────
 let _presentationHistory = [];
+let _historyPersistPending = false;
 
 function loadHistory() {
   try { _presentationHistory = process.env.HISTORY_JSON ? JSON.parse(process.env.HISTORY_JSON) : []; }
@@ -163,16 +164,25 @@ function loadHistory() {
 }
 
 async function persistHistory() {
-  const trimmed = _presentationHistory.slice(0, 50);
-  const json = JSON.stringify(trimmed);
-  if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
-    console.warn('[history] RENDER_API_KEY/SERVICE_ID not set');
-    return;
-  }
+  if (_historyPersistPending) return;
+  _historyPersistPending = true;
   try {
+    const trimmed = _presentationHistory.slice(0, 50);
+    // Strip slide HTML — only persist metadata (slides live in memory only)
+    const metaOnly = trimmed.map(({ id, operator, date, slideCount, title, brief }) => ({
+      id, operator, date, slideCount, title, brief
+    }));
+    const json = JSON.stringify(metaOnly);
+    console.log(`[history] Persisting ${metaOnly.length} entries (${json.length} chars)`);
+    if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
+      console.warn('[history] RENDER_API_KEY/SERVICE_ID not set');
+      return;
+    }
     await updateRenderEnvVar('HISTORY_JSON', json);
   } catch (e) {
     console.error('[history] Failed to persist:', e.message);
+  } finally {
+    _historyPersistPending = false;
   }
 }
 

@@ -5543,7 +5543,7 @@ async function _pptxRenderHistory() {
       <div style="font-size:11px;color:#64748B;margin-bottom:14px;">${operator ? 'Showing: ' + _pptxEsc(operator) : 'All operators'} · ${list.length} saved</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${list.map(p => `
-          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;background:white;cursor:pointer;" onclick="_pptxViewHistory('${p.id}')">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;background:white;cursor:pointer;" data-pres-id="${_pptxEsc(p.id)}" onclick="_pptxViewHistory(this.dataset.presId)">
             <div style="flex:1;min-width:0;">
               <div style="font-size:12px;font-weight:700;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_pptxEsc(p.brief?.context || p.brief?.angle || p.title || 'QBR')}</div>
               <div style="font-size:10px;color:#94A3B8;margin-top:2px;">${_pptxEsc(p.operator)} · ${p.slideCount} slides · ${new Date(p.date).toLocaleDateString()}</div>
