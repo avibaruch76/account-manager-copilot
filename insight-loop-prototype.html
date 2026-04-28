@@ -3144,17 +3144,50 @@ function renderMarkdown(raw) {
 }
 
 function buildRunSectionHtml(runNumber, timestamp, checkNames, reportHtml) {
-  const isFirst = runNumber === 1;
-  const divider = isFirst ? '' : `<hr style="border:none;border-top:2px dashed #E2E8F0;margin:20px 0;">`;
-  const badge = isFirst
-    ? `<span style="background:#1E293B;color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;">Run 1</span>`
-    : `<span style="background:#2563EB;color:white;font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;">Run ${runNumber}</span>`;
-  const meta = `<span style="font-size:11px;color:#94A3B8;margin-left:8px;">${timestamp}${checkNames ? ' · ' + checkNames : ''}</span>`;
-  return `
-    ${divider}
-    <div style="display:flex;align-items:center;margin-bottom:12px;">${badge}${meta}</div>
-    ${reportHtml}
-  `;
+  const meta = checkNames ? `<div style="font-size:11px;color:#94A3B8;margin-bottom:12px;">Checks: ${checkNames}</div>` : '';
+  return `${meta}${reportHtml}`;
+}
+
+function _refreshRunTabs(container) {
+  container.querySelector('#run-tab-bar')?.remove();
+  const runSections = Array.from(container.querySelectorAll('[data-run]'));
+  if (runSections.length < 2) { runSections.forEach(s => s.style.display = ''); return; }
+  const tabBar = document.createElement('div');
+  tabBar.id = 'run-tab-bar';
+  tabBar.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap;align-items:center;';
+  const labelEl = document.createElement('span');
+  labelEl.style.cssText = 'font-size:11px;color:#94A3B8;margin-right:4px;';
+  labelEl.textContent = 'Showing:';
+  tabBar.appendChild(labelEl);
+  const latestRun = parseInt(runSections[runSections.length - 1].getAttribute('data-run'));
+  runSections.forEach((section, i) => {
+    const runNum = parseInt(section.getAttribute('data-run'));
+    const runData = _runSession?.runs?.find(r => r.runNumber === runNum);
+    const checkLabel = runData?.checkIds?.length
+      ? runData.checkIds.map(id => _checks.find(c => c.id === id)?.name || id).join(', ')
+      : null;
+    const label = `Run ${runNum}` + (runData ? ` · ${runData.timestamp}` : '') + (checkLabel ? ` (${checkLabel})` : '');
+    const btn = document.createElement('button');
+    btn.setAttribute('data-tab-run', runNum);
+    btn.title = label;
+    btn.textContent = `Run ${runNum}`;
+    btn.style.cssText = 'padding:4px 14px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:none;';
+    btn.onclick = () => _selectRunTab(container, runNum);
+    tabBar.appendChild(btn);
+  });
+  container.insertBefore(tabBar, container.firstChild);
+  _selectRunTab(container, latestRun);
+}
+
+function _selectRunTab(container, runNum) {
+  container.querySelectorAll('[data-run]').forEach(s => {
+    s.style.display = parseInt(s.getAttribute('data-run')) === runNum ? '' : 'none';
+  });
+  container.querySelectorAll('[data-tab-run]').forEach(btn => {
+    const active = parseInt(btn.getAttribute('data-tab-run')) === runNum;
+    btn.style.background = active ? '#1E2761' : '#F1F5F9';
+    btn.style.color = active ? 'white' : '#475569';
+  });
 }
 
 function buildReportHtml(data) {
@@ -3253,6 +3286,7 @@ function renderResearchReport(data) {
         }
         checkResults.appendChild(wrapper);
       }
+      _refreshRunTabs(checkResults);
       const sub = document.getElementById('check-results-sub');
       if (sub) sub.textContent = '';
       // Show download buttons
