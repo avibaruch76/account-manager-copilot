@@ -6749,11 +6749,11 @@ function _pptxDrawPreview(idx) {
 }
 
 function _pptxEnlargeSlide(idx) {
-  const html = _pptxSlides[idx]?.html || '';
   const existing = document.getElementById('pptx-enlarge-modal');
   if (existing) existing.remove();
 
-  let _enlargeZoom = 100; // percent of available width
+  let currentIdx = idx;
+  let _enlargeZoom = 100;
 
   const modal = document.createElement('div');
   modal.id = 'pptx-enlarge-modal';
@@ -6762,7 +6762,11 @@ function _pptxEnlargeSlide(idx) {
 
   modal.innerHTML = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-shrink:0;">
-      <span style="color:#94A3B8;font-size:12px;">Slide ${idx+1} of ${_pptxSlides.length}</span>
+      <button id="pptx-enlarge-prev" onclick="event.stopPropagation();_pptxEnlargeNav(-1)"
+              style="width:32px;height:32px;background:#334155;color:white;border:none;border-radius:6px;font-size:18px;cursor:pointer;">‹</button>
+      <span id="pptx-enlarge-label" style="color:#94A3B8;font-size:12px;min-width:90px;text-align:center;">Slide ${idx+1} of ${_pptxSlides.length}</span>
+      <button id="pptx-enlarge-next" onclick="event.stopPropagation();_pptxEnlargeNav(+1)"
+              style="width:32px;height:32px;background:#334155;color:white;border:none;border-radius:6px;font-size:18px;cursor:pointer;">›</button>
       <div style="display:flex;align-items:center;gap:4px;background:#1E293B;border-radius:8px;padding:4px 6px;">
         <button id="pptx-zoom-out" onclick="event.stopPropagation();_pptxZoomEnlarge(-25)"
                 style="width:28px;height:28px;background:#334155;color:white;border:none;border-radius:6px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
@@ -6778,7 +6782,7 @@ function _pptxEnlargeSlide(idx) {
         <iframe id="pptx-enlarge-frame" style="width:1280px;height:720px;border:none;display:block;transform-origin:top left;" srcdoc=""></iframe>
       </div>
     </div>
-    <div style="margin-top:8px;font-size:11px;color:#475569;flex-shrink:0;">ESC or click outside to close</div>`;
+    <div style="margin-top:8px;font-size:11px;color:#475569;flex-shrink:0;">← → arrow keys to navigate · ESC or click outside to close</div>`;
 
   document.body.appendChild(modal);
 
@@ -6791,7 +6795,6 @@ function _pptxEnlargeSlide(idx) {
     const maxH  = window.innerHeight - 90;
     const baseW = 1280 * (_enlargeZoom / 100);
     const baseH = 720  * (_enlargeZoom / 100);
-    // Fit within viewport if larger
     const scaleW = Math.min(1, maxW / baseW);
     const scaleH = Math.min(1, maxH / baseH);
     const scale  = Math.min(scaleW, scaleH) * (_enlargeZoom / 100);
@@ -6801,16 +6804,30 @@ function _pptxEnlargeSlide(idx) {
     document.getElementById('pptx-zoom-label').textContent = _enlargeZoom + '%';
   }
 
+  function loadSlide(i) {
+    currentIdx = Math.max(0, Math.min(_pptxSlides.length - 1, i));
+    frame.srcdoc = _pptxWrapWithFooter(_pptxSlides[currentIdx]?.html || '');
+    document.getElementById('pptx-enlarge-label').textContent = `Slide ${currentIdx+1} of ${_pptxSlides.length}`;
+    document.getElementById('pptx-enlarge-prev').style.opacity = currentIdx === 0 ? '0.3' : '1';
+    document.getElementById('pptx-enlarge-next').style.opacity = currentIdx === _pptxSlides.length - 1 ? '0.3' : '1';
+  }
+
   window._pptxZoomEnlarge = function(delta) {
     _enlargeZoom = Math.max(25, Math.min(150, _enlargeZoom + delta));
     applyZoom();
   };
 
-  frame.srcdoc = _pptxWrapWithFooter(html);
+  window._pptxEnlargeNav = function(delta) { loadSlide(currentIdx + delta); };
+
+  loadSlide(currentIdx);
   requestAnimationFrame(applyZoom);
   window.addEventListener('resize', applyZoom);
 
-  const escHandler = e => { if (e.key === 'Escape') { modal.remove(); } };
+  const escHandler = e => {
+    if (e.key === 'Escape') { modal.remove(); }
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { loadSlide(currentIdx + 1); }
+    else if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   { loadSlide(currentIdx - 1); }
+  };
   document.addEventListener('keydown', escHandler);
 
   const observer = new MutationObserver(() => {
