@@ -2592,6 +2592,16 @@ goTo(0);
       return;
     }
 
+    if (req.method === 'DELETE' && req.url.startsWith('/api/presentations/')) {
+      if (!isAuthenticated(req)) { rejectUnauth(res); return; }
+      const id = req.url.slice('/api/presentations/'.length);
+      _presentationHistory = _presentationHistory.filter(p => p.id !== id);
+      await persistHistory();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     if (req.method === 'GET' && req.url.startsWith('/api/presentations')) {
       if (!isAuthenticated(req)) { rejectUnauth(res); return; }
       const urlObj = new URL(req.url, 'http://localhost');

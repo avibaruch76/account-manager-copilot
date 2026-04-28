@@ -5618,17 +5618,30 @@ async function _pptxRenderHistory() {
       <div style="font-size:11px;color:#64748B;margin-bottom:14px;">${operator ? 'Showing: ' + _pptxEsc(operator) : 'All operators'} · ${list.length} saved</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         ${list.map(p => `
-          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;background:white;cursor:pointer;" data-pres-id="${_pptxEsc(p.id)}" onclick="_pptxViewHistory(this.dataset.presId)">
-            <div style="flex:1;min-width:0;">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border:1.5px solid #E2E8F0;border-radius:8px;background:white;" data-pres-id="${_pptxEsc(p.id)}">
+            <div style="flex:1;min-width:0;cursor:pointer;" onclick="_pptxViewHistory('${_pptxEsc(p.id)}')">
               <div style="font-size:12px;font-weight:700;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${_pptxEsc(p.brief?.context || p.brief?.angle || p.title || 'QBR')}</div>
               <div style="font-size:10px;color:#94A3B8;margin-top:2px;">${_pptxEsc(p.operator)} · ${p.slideCount} slides · ${new Date(p.date).toLocaleDateString()}</div>
             </div>
-            <button style="flex-shrink:0;padding:4px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">View</button>
+            <button onclick="_pptxViewHistory('${_pptxEsc(p.id)}')" style="flex-shrink:0;padding:4px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">View</button>
+            <button onclick="_pptxDeleteHistory('${_pptxEsc(p.id)}')" style="flex-shrink:0;padding:4px 10px;background:#FEF2F2;color:#CC0000;border:1.5px solid #FECACA;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;">Delete</button>
           </div>`).join('')}
       </div>`;
   } catch (e) {
     c.innerHTML = '<div style="color:#CC0000;font-size:12px;padding:20px 0;">Failed to load history: ' + _pptxEsc(e.message) + '</div>';
   }
+}
+
+async function _pptxDeleteHistory(id) {
+  if (!confirm('Delete this presentation from history?')) return;
+  // Remove from server
+  apiFetch('/api/presentations/' + id, { method: 'DELETE' }).catch(() => {});
+  // Remove from localStorage
+  try {
+    const local = JSON.parse(localStorage.getItem('pptx_history') || '[]');
+    localStorage.setItem('pptx_history', JSON.stringify(local.filter(p => p.id !== id)));
+  } catch {}
+  _pptxRenderHistory();
 }
 
 async function _pptxViewHistory(id) {
