@@ -960,10 +960,10 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
 
   <!-- Step indicator -->
   <div style="display:flex;background:#F8FAFC;border-bottom:1px solid #E2E8F0;flex-shrink:0;">
-    <div class="pptx-step-dot" id="pptx-dot-0" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:#1E2761;border-bottom:2px solid #7C3AED;">0 TEMPLATE</div>
-    <div class="pptx-step-dot" id="pptx-dot-1" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">1 STORY BRIEF</div>
-    <div class="pptx-step-dot" id="pptx-dot-2" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">2 SLIDE PLAN</div>
-    <div class="pptx-step-dot" id="pptx-dot-3" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;">3 PREVIEW</div>
+    <div class="pptx-step-dot" id="pptx-dot-0" onclick="_pptxNavToStep(0)" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:700;color:#1E2761;border-bottom:2px solid #7C3AED;cursor:pointer;">0 TEMPLATE</div>
+    <div class="pptx-step-dot" id="pptx-dot-1" onclick="_pptxNavToStep(1)" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;cursor:pointer;">1 STORY BRIEF</div>
+    <div class="pptx-step-dot" id="pptx-dot-2" onclick="_pptxNavToStep(2)" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;cursor:pointer;">2 SLIDE PLAN</div>
+    <div class="pptx-step-dot" id="pptx-dot-3" onclick="_pptxNavToStep(3)" style="flex:1;padding:10px;text-align:center;font-size:10px;font-weight:600;color:#94A3B8;border-bottom:2px solid transparent;cursor:pointer;">3 PREVIEW</div>
   </div>
 
   <!-- Scrollable content area -->
@@ -5564,8 +5564,21 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ── Step navigation ─────────────────────────────────────────────
+let _pptxCurrentStep = 0;
+
+function _pptxNavToStep(n) {
+  if (n > _pptxCurrentStep) return; // can't skip forward
+  if (n === 3 && !_pptxSlides.length) return; // can't go to preview with no slides
+  if (n === 0) _pptxRenderStep0();
+  else if (n === 1) _pptxRenderBrief();
+  else if (n === 2) _pptxRenderPlan();
+  else if (n === 3) _pptxRenderPreview();
+}
+
 // ── Step indicator ──────────────────────────────────────────────
 function _pptxShowStep(n) {
+  _pptxCurrentStep = n;
   const labels = ['Choose a template', 'Shape the story angle', 'Select & customise slides', 'Review and download'];
   document.getElementById('pptx-step-label').textContent = labels[n];
   [0,1,2,3].forEach(i => {
@@ -5604,13 +5617,14 @@ function _pptxEsc(str) {
 function _saveAnalysisHistory() {
   const cr = document.getElementById('check-results');
   if (!cr || !cr.innerHTML.trim()) return;
-  const operator = (_runSession && _runSession.entity)
-    ? _runSession.entity
-    : (document.getElementById('operator-select')?.value || document.getElementById('entity-select')?.value || 'Unknown Operator');
+  const operator = (window._lastDisplayName)
+    || (_runSession && _runSession.entity)
+    || 'Unknown Operator';
   const latestRun = _runSession?.runs?.length ? _runSession.runs[_runSession.runs.length - 1] : null;
   const checkNames = latestRun?.checkIds?.length
     ? latestRun.checkIds.map(id => _checks.find(c => c.id === id)?.name || id)
     : null;
+  const htmlSnippet = cr.innerHTML.slice(0, 300);
   const entry = {
     id: 'ah_' + Date.now(),
     operator,
@@ -5620,6 +5634,8 @@ function _saveAnalysisHistory() {
   };
   try {
     const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+    // Deduplicate: skip if last entry has same operator + same content start
+    if (history.length && history[0].operator === operator && history[0].html.slice(0, 300) === htmlSnippet) return;
     history.unshift(entry);
     localStorage.setItem('analysis_history', JSON.stringify(history.slice(0, 5)));
   } catch(e) {
