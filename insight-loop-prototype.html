@@ -6362,7 +6362,8 @@ async function _pptxGenerate() {
       if (!card) return null;
       const text = (card.innerText || card.textContent || '').trim();
       if (text.length < 30) return null;
-      return { checkId: id, checkName: check ? check.name : id, content: text.slice(0, 10000), selected: true };
+      const tables = _extractCardTables(card);
+      return { checkId: id, checkName: check ? check.name : id, content: text.slice(0, 10000), tables, selected: true };
     }).filter(Boolean);
 
     const freshPersona = [];

@@ -206,6 +206,24 @@ function escHtml(s) {
 }
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
+function buildStyledTableHtml(table, brand) {
+  const b = brand;
+  const headers = table.headers || [];
+  const rows = table.rows || [];
+  const headerHtml = headers.length
+    ? `<thead><tr>${headers.map(h => `<th style='background:${b.highlight};color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px;text-align:left;'>${h}</th>`).join('')}</tr></thead>`
+    : '';
+  const rowsHtml = rows.map((row, i) => {
+    const bg = i % 2 === 0 ? '#161616' : '#1E1E1E';
+    const cells = row.map(cell => `<td style='font-size:12px;color:${b.text};padding:7px 12px;border-bottom:1px solid #2D3748;'>${cell}</td>`).join('');
+    return `<tr style='background:${bg};'>${cells}</tr>`;
+  }).join('');
+  const caption = table.label
+    ? `<caption style='font-size:11px;font-weight:700;color:${b.primary};text-transform:uppercase;letter-spacing:1px;padding:0 0 6px;text-align:left;caption-side:top;'>${table.label}</caption>`
+    : '';
+  return `<table style='border-collapse:collapse;width:100%;'>${caption}${headerHtml}<tbody>${rowsHtml}</tbody></table>`;
+}
+
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
   const toneMap = {
@@ -219,13 +237,11 @@ function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const sectionContent = sections.map(s => {
     let block = `=== ${s.checkName} ===\n${s.content}`;
     if (s.tables && s.tables.length > 0) {
-      const tableBlocks = s.tables.map(t => {
-        const labelLine = t.label ? `[${t.label}]` : `[Table]`;
-        const headerLine = t.headers && t.headers.length ? `Headers: ${t.headers.join(' | ')}` : '';
-        const rowLines = (t.rows || []).map((row, i) => `Row ${i + 1}: ${row.join(' | ')}`).join('\n');
-        return [labelLine, headerLine, rowLines].filter(Boolean).join('\n');
+      const preBuilt = s.tables.map(t => {
+        const html = buildStyledTableHtml(t, tpl.brand);
+        return `<PRE_BUILT_TABLE>\n${html}\n</PRE_BUILT_TABLE>`;
       }).join('\n\n');
-      block += `\n\n[STRUCTURED TABLE DATA — copy these values character-for-character into table cells; do NOT use values from the narrative text above for table cells]\n${tableBlocks}\n[END STRUCTURED TABLE DATA]`;
+      block += `\n\n${preBuilt}`;
     }
     return block;
   }).join('\n\n');
@@ -275,9 +291,15 @@ STORYTELLING PRINCIPLES — apply these to every presentation:
 - The closing must feel inevitable — by the time The Ask arrives, the audience should already know what they need to do.
 - Presenter notes are a coaching tool: tell the speaker what emotion to project, what objection to pre-empt, and what the audience is thinking at that moment.
 
-SEPARATION OF STORYTELLING AND DATA — this is the most important rule:
+PRE-BUILT TABLES — the most important rule:
+Some sections contain <PRE_BUILT_TABLE> blocks. These are fully styled HTML tables built directly from the raw data source — they are 100% accurate.
+- Copy <PRE_BUILT_TABLE> HTML verbatim into the slide body. Do NOT change any cell text, add rows, remove rows, or reword values.
+- Your only job for slides with PRE_BUILT_TABLE: write the outer slide wrapper, logo bar, editorial headline, section label, and presenter notes.
+- The table itself is already done. Touch nothing inside <PRE_BUILT_TABLE>.
+
+SEPARATION OF STORYTELLING AND DATA:
 - Storytelling (headlines, narrative text, presenter notes, tone) = you have creative latitude.
-- Table data, rankings, game names, numbers, tiers = you are a COPY MACHINE. Copy exactly. No creativity allowed.
+- Table data, rankings, game names, numbers, tiers = copy verbatim from PRE_BUILT_TABLE. Zero creativity allowed.
 - A compelling headline on a slide with wrong table data is worse than a boring headline with correct data.
 
 ABSOLUTE DATA INTEGRITY RULES — violating these destroys credibility:
