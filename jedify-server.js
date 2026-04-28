@@ -57,9 +57,16 @@ function buildDefaultTemplate() {
 
 let _templates = [];
 
+const TEMPLATES_FILE = path.join(__dirname, 'templates.json');
+
 function loadTemplates() {
   try {
-    const saved = process.env.TEMPLATES_JSON ? JSON.parse(process.env.TEMPLATES_JSON) : [];
+    let saved = [];
+    if (process.env.TEMPLATES_JSON) {
+      saved = JSON.parse(process.env.TEMPLATES_JSON);
+    } else if (fs.existsSync(TEMPLATES_FILE)) {
+      saved = JSON.parse(fs.readFileSync(TEMPLATES_FILE, 'utf8'));
+    }
     const hasDefault = saved.some(t => t.id === 'default');
     _templates = hasDefault ? saved : [buildDefaultTemplate(), ...saved];
   } catch {
@@ -105,7 +112,12 @@ async function persistTemplates() {
   const json = JSON.stringify(stripped);
   console.log(`[templates] Persisting ${_templates.length} templates (${json.length} chars)`);
   if (!process.env.RENDER_API_KEY || !process.env.RENDER_SERVICE_ID) {
-    console.warn('[templates] RENDER_API_KEY/SERVICE_ID not set — templates will reset on restart');
+    try {
+      fs.writeFileSync(TEMPLATES_FILE, json, 'utf8');
+      console.log(`[templates] Saved to ${TEMPLATES_FILE}`);
+    } catch (e) {
+      console.warn('[templates] File save failed:', e.message);
+    }
     return;
   }
   await updateRenderEnvVar('TEMPLATES_JSON', json);
