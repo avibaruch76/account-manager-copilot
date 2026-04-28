@@ -206,6 +206,10 @@ function escHtml(s) {
 }
 
 // Build the prompt for slide generation — shared by streaming and non-streaming paths
+function _escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function _styledCell(cell, brand) {
   const v = String(cell).trim();
   const p = brand.primary;
@@ -229,15 +233,15 @@ function _styledCell(cell, brand) {
     const col = v.startsWith('-') ? p : '#34D399';
     return `<span style='color:${col};font-weight:600;'>${v}</span>`;
   }
-  return v;
+  return _escHtml(v);
 }
 
 function buildStyledTableHtml(table, brand) {
-  const b = brand;
+  const b = brand || buildDefaultTemplate().brand;
   const headers = table.headers || [];
   const rows = table.rows || [];
   const headerHtml = headers.length
-    ? `<thead><tr>${headers.map(h => `<th style='background:${b.highlight};color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px;text-align:left;'>${h}</th>`).join('')}</tr></thead>`
+    ? `<thead><tr>${headers.map(h => `<th style='background:${b.highlight};color:#fff;font-size:10px;text-transform:uppercase;letter-spacing:0.5px;padding:8px 12px;text-align:left;'>${_escHtml(h)}</th>`).join('')}</tr></thead>`
     : '';
   const rowsHtml = rows.map((row, i) => {
     const bg = i % 2 === 0 ? '#161616' : '#1E1E1E';
@@ -245,13 +249,14 @@ function buildStyledTableHtml(table, brand) {
     return `<tr style='background:${bg};'>${cells}</tr>`;
   }).join('');
   const caption = table.label
-    ? `<caption style='font-size:11px;font-weight:700;color:${b.primary};text-transform:uppercase;letter-spacing:1px;padding:0 0 6px;text-align:left;caption-side:top;'>${table.label}</caption>`
+    ? `<caption style='font-size:11px;font-weight:700;color:${b.primary};text-transform:uppercase;letter-spacing:1px;padding:0 0 6px;text-align:left;caption-side:top;'>${_escHtml(table.label)}</caption>`
     : '';
   return `<table style='border-collapse:collapse;width:100%;'>${caption}${headerHtml}<tbody>${rowsHtml}</tbody></table>`;
 }
 
 function buildSlidesPrompt(sections, brief, operator, slidePlan, template) {
   const tpl = template || _templates.find(t => t.id === 'default') || buildDefaultTemplate();
+  if (!tpl.brand) tpl.brand = buildDefaultTemplate().brand;
   const toneMap = {
     opportunity: 'Frame as an exciting opportunity — highlight upside, growth potential, and what is possible.',
     risk:        'Frame as a risk review — be measured, flag concerns clearly, recommend protective actions.',
@@ -453,6 +458,7 @@ function parseSlidesFromText(raw) {
 async function streamSingleSlide({ slideTitle, slideDescription, brief, operator, sections, instructions }, res) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
   const tpl = _templates.find(t => t.id === 'default') || buildDefaultTemplate();
+  if (!tpl.brand) tpl.brand = buildDefaultTemplate().brand;
   // Build section content with pre-built tables — same approach as buildSlidesPrompt
   const sectionContent = (sections || []).map(s => {
     let block = `=== ${s.checkName} ===\n${s.content}`;

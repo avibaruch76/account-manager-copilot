@@ -5382,14 +5382,16 @@ function _pptxSetContext(id, value) {
 // Split a results container into sections by h2/h3/h4 headings, each with its own tables
 function _splitResultsByHeadings(containerEl) {
   const sections = [];
-  const children = Array.from(containerEl.querySelectorAll('h1,h2,h3,h4,table,p,ul,ol,div'));
+  // Use only direct-child-level elements to avoid duplicate content from nested divs
+  const allEls = Array.from(containerEl.querySelectorAll('h1,h2,h3,h4,table,p,ul,ol,div'));
+  // Filter out elements that are descendants of other elements in the list (prevents duplication)
+  const children = allEls.filter(el => !allEls.some(other => other !== el && other.contains(el)));
   let currentHeading = null;
   let currentNodes = [];
 
   const flush = () => {
     if (!currentHeading && currentNodes.length === 0) return;
     const heading = currentHeading || 'Analysis';
-    // Build a temporary div to extract text + tables from collected nodes
     const tmp = document.createElement('div');
     currentNodes.forEach(n => tmp.appendChild(n.cloneNode(true)));
     const text = (tmp.innerText || tmp.textContent || '').trim();
@@ -5405,8 +5407,6 @@ function _splitResultsByHeadings(containerEl) {
       flush();
       currentHeading = (el.innerText || el.textContent || '').trim().slice(0, 100);
     } else {
-      // Only collect direct-ish content, skip deeply nested wrappers already captured
-      if (el.closest && el.closest('table')) continue;
       currentNodes.push(el);
     }
   }
@@ -5425,7 +5425,8 @@ function _extractCardTables(cardEl) {
       if (t.length > 2 && t.length < 300) { label = t; break; }
     }
     const headers = Array.from(table.querySelectorAll('th')).map(th => (th.innerText||th.textContent||'').trim());
-    const rows = Array.from(table.querySelectorAll('tr')).map(tr => {
+    // Query tbody rows only — avoids capturing header rows if they accidentally use <td>
+    const rows = Array.from(table.querySelectorAll('tbody tr')).map(tr => {
       const cells = tr.querySelectorAll('td');
       if (!cells.length) return null;
       return Array.from(cells).map(td => (td.innerText||td.textContent||'').trim());
@@ -5509,7 +5510,7 @@ async function openPresentationBuilder() {
   if (_pptxSections.length === 0) {
     _pptxSections = checkIds.map(id => {
       const check = _checks.find(c => c.id === id);
-      return { checkId: id, checkName: check ? check.name : id, content: '(no content available)', selected: true };
+      return { checkId: id, checkName: check ? check.name : id, content: '(no content available)', tables: [], selected: true };
     });
   }
 
