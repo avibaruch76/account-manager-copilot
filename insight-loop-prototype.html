@@ -5697,22 +5697,38 @@ async function _pptxExtractBrandOnly(file) {
   const buf = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(buf);
 
-  let primary='#1E2761', accent='#7C3AED', background='#FFFFFF', highlight='#F59E0B', text='#1E293B';
-  const themeFile = zip.file('ppt/theme/theme1.xml') ||
-                    zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/theme\/theme\d+\.xml/)) || '');
-  if (themeFile) {
-    const xml = await themeFile.async('text');
-    const allHex = [...xml.matchAll(/val="([A-Fa-f0-9]{6})"/g)].map(m => '#' + m[1]);
-    if (allHex[0]) primary    = allHex[0];
-    if (allHex[1]) text       = allHex[1];
-    if (allHex[2]) background = allHex[2];
-    if (allHex[4]) accent     = allHex[4];
-    if (allHex[6]) highlight  = allHex[6];
+  // Helper: luminance of a hex color
+  function _lum(hex) {
+    const r = parseInt(hex.slice(0,2),16)/255, g = parseInt(hex.slice(2,4),16)/255, b = parseInt(hex.slice(4,6),16)/255;
+    return 0.2126*r + 0.7152*g + 0.0722*b;
   }
 
+  let primary='#1E2761', accent='#7C3AED', background='#0D0D0D', highlight='#1A1A2E', text='#CBD5E1';
+
+  // 1. Parse theme by semantic role (not positional)
+  const themeFile = zip.file('ppt/theme/theme1.xml') ||
+                    zip.file(Object.keys(zip.files).find(k => /ppt\/theme\/theme\d+\.xml/.test(k)) || '');
+  if (themeFile) {
+    const xml = await themeFile.async('text');
+    const pick = tag => (xml.match(new RegExp('<a:' + tag + '>[^<]*<a:srgbClr val="([A-Fa-f0-9]{6})"')) || [])[1];
+    const dk1 = pick('dk1'), lt1 = pick('lt1'), dk2 = pick('dk2'), acc1 = pick('accent1'), acc2 = pick('accent2');
+    const bgHex = lt1 || dk1;
+    if (bgHex) {
+      background = '#' + bgHex;
+      // If background is dark, text should be light; if light, text dark
+      text = _lum(bgHex) < 0.3 ? '#CBD5E1' : '#1E293B';
+    }
+    if (dk1 && _lum(dk1) > 0.3) primary = '#' + dk1;   // only use dk1 as primary if it's actually light-ish (readable)
+    if (acc1) accent = '#' + acc1;
+    if (acc2 && _lum(acc2) < 0.8) highlight = '#' + acc2;  // skip near-white accents as highlight
+    else if (dk2) highlight = '#' + dk2;
+  }
+
+  // 2. Fonts from slide master
   let fontHeading = 'Calibri', fontBody = 'Calibri';
-  const masterFile = zip.file('ppt/slideMasters/slideMaster1.xml') ||
-                     zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/slideMasters\/slideMaster\d+\.xml/)) || '');
+  const masterPath = 'ppt/slideMasters/slideMaster1.xml';
+  const masterFile = zip.file(masterPath) ||
+                     zip.file(Object.keys(zip.files).find(k => /ppt\/slideMasters\/slideMaster\d+\.xml/.test(k)) || '');
   if (masterFile) {
     const xml = await masterFile.async('text');
     const latinMatches = [...xml.matchAll(/latin typeface="([^"]+)"/g)];
@@ -5720,21 +5736,45 @@ async function _pptxExtractBrandOnly(file) {
     if (latinMatches[1]) fontBody    = latinMatches[1][1];
   }
 
+  // 3. Logo: read from slide master rels (not largest file in media/)
+  //    The master rels point to background image (usually large JPEG) + logo (smaller PNG)
   let logoBase64 = null;
-  const mediaFiles = Object.entries(zip.files).filter(([k]) => k.startsWith('ppt/media/') && !zip.files[k].dir);
-  if (mediaFiles.length) {
-    const withSizes = await Promise.all(mediaFiles.map(async ([k, f]) => {
+  const masterRelsPath = masterPath.replace('ppt/', 'ppt/').replace('/slideMaster', '/slideMasters/_rels/slideMaster').replace('.xml', '.xml.rels')
+    .replace('ppt/slideMasters/_rels/', 'ppt/slideMasters/_rels/');
+  const relsFile = zip.file('ppt/slideMasters/_rels/slideMaster1.xml.rels') ||
+                   zip.file(Object.keys(zip.files).find(k => /ppt\/slideMasters\/_rels\/slideMaster\d+\.xml\.rels/.test(k)) || '');
+  if (relsFile) {
+    const relsXml = await relsFile.async('text');
+    const imageTargets = [...relsXml.matchAll(/Type="[^"]*\/image" Target="([^"]*)"/g)]
+      .map(m => 'ppt/' + m[1].replace(/^\.\.\//, ''));
+
+    const candidates = [];
+    for (const imgPath of imageTargets) {
+      const f = zip.file(imgPath);
+      if (!f) continue;
       const data = await f.async('uint8array');
-      return { key: k, data, size: data.length };
-    }));
-    withSizes.sort((a, b) => b.size - a.size);
-    const largest = withSizes[0];
-    const ext = largest.key.split('.').pop().toLowerCase();
-    const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml' };
-    const mime = mimeMap[ext] || 'image/png';
-    let binary = '';
-    for (let i = 0; i < largest.data.length; i++) binary += String.fromCharCode(largest.data[i]);
-    logoBase64 = `data:${mime};base64,${btoa(binary)}`;
+      const ext = imgPath.split('.').pop().toLowerCase();
+      const isJpeg = ext === 'jpg' || ext === 'jpeg';
+      // Skip large JPEGs — these are typically full-slide background images
+      if (isJpeg && data.length > 30000) continue;
+      candidates.push({ imgPath, data, ext });
+    }
+
+    if (candidates.length > 0) {
+      // Prefer PNG, then smallest file
+      candidates.sort((a, b) => {
+        const aPng = a.ext === 'png' ? 0 : 1;
+        const bPng = b.ext === 'png' ? 0 : 1;
+        if (aPng !== bPng) return aPng - bPng;
+        return a.data.length - b.data.length;
+      });
+      const logo = candidates[0];
+      const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml' };
+      const mime = mimeMap[logo.ext] || 'image/png';
+      let binary = '';
+      for (let i = 0; i < logo.data.length; i++) binary += String.fromCharCode(logo.data[i]);
+      logoBase64 = `data:${mime};base64,${btoa(binary)}`;
+    }
   }
 
   return { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 };
