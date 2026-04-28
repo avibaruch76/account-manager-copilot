@@ -6334,7 +6334,15 @@ function _pptxConfirmAddCustomSlide() {
 }
 
 async function _pptxShowPromptPreview() {
-  const sections = _pptxSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content, tables: s.tables || [] }));
+  // Re-read from #check-results so prompt preview reflects real data
+  let previewSections = _pptxSections;
+  const resultsElPreview = document.getElementById('check-results');
+  if (resultsElPreview && (resultsElPreview.innerText || '').trim().length > 30) {
+    const hs = _splitResultsByHeadings(resultsElPreview);
+    previewSections = hs.length > 0 ? hs
+      : [{ checkId: 'full_analysis', checkName: 'Full Analysis', content: (resultsElPreview.innerText||'').trim().slice(0, 15000), tables: _extractCardTables(resultsElPreview) }];
+  }
+  const sections = previewSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content, tables: s.tables || [] }));
   const brief = {
     context: (document.getElementById('pptx-context')?.value || _pptxBrief.context || '').trim(),
     angle:   (document.getElementById('pptx-angle')?.value   || _pptxBrief.angle   || '').trim(),
@@ -6910,7 +6918,14 @@ function _pptxShowRegenPanel(idx) {
 async function _pptxRegenerateSlide(idx) {
   const instructions = document.getElementById('pptx-regen-instructions')?.value || '';
   const slideSource = (_selectedTemplate?.slides || [])[idx] || { title: `Slide ${idx+1}`, description: '' };
-  const sectionContent = (_pptxSections || []).map(s => `=== ${s.checkName||s.name||''} ===\n${s.content||''}`).join('\n\n').slice(0, 30000);
+  // Always re-read from #check-results so regenerate uses real data, not stale/empty sections
+  const resultsElRegen = document.getElementById('check-results');
+  let regenSections = _pptxSections || [];
+  if (resultsElRegen && (resultsElRegen.innerText || '').trim().length > 30) {
+    const headingSecs = _splitResultsByHeadings(resultsElRegen);
+    regenSections = headingSecs.length > 0 ? headingSecs
+      : [{ checkId: 'full_analysis', checkName: 'Full Analysis', content: (resultsElRegen.innerText||'').trim().slice(0, 15000), tables: _extractCardTables(resultsElRegen) }];
+  }
 
   const btn = document.getElementById('pptx-regen-btn');
   if (btn) { btn.textContent = 'Generating...'; btn.disabled = true; }
@@ -6930,7 +6945,7 @@ async function _pptxRegenerateSlide(idx) {
         slideDescription: slideSource.description,
         brief: _pptxBrief,
         operator: _pptxGetOperator() || 'Operator',
-        sectionContent,
+        sections: regenSections.map(s => ({ checkId: s.checkId, checkName: s.checkName, content: s.content || '', tables: s.tables || [] })),
         instructions
       })
     });

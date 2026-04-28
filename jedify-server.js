@@ -450,9 +450,19 @@ function parseSlidesFromText(raw) {
   return slides;
 }
 
-async function streamSingleSlide({ slideTitle, slideDescription, brief, operator, sectionContent, instructions }, res) {
+async function streamSingleSlide({ slideTitle, slideDescription, brief, operator, sections, instructions }, res) {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-  const systemPrompt = `You are a world-class presentation designer. Generate exactly ONE slide following the RubyPlay brand design rules. Output only: <SLIDE_START><NOTES>notes</NOTES><HTML>html</HTML><SLIDE_END>`;
+  const tpl = _templates.find(t => t.id === 'default') || buildDefaultTemplate();
+  // Build section content with pre-built tables — same approach as buildSlidesPrompt
+  const sectionContent = (sections || []).map(s => {
+    let block = `=== ${s.checkName} ===\n${s.content}`;
+    if (s.tables && s.tables.length > 0) {
+      const preBuilt = s.tables.map(t => `<PRE_BUILT_TABLE>\n${buildStyledTableHtml(t, tpl.brand)}\n</PRE_BUILT_TABLE>`).join('\n\n');
+      block += `\n\n${preBuilt}`;
+    }
+    return block;
+  }).join('\n\n').slice(0, 30000);
+  const systemPrompt = `You are a world-class presentation designer. Generate exactly ONE slide following the RubyPlay brand design rules. When the analysis contains <PRE_BUILT_TABLE> blocks, copy that HTML verbatim — do not change any cell values. Output only: <SLIDE_START><NOTES>notes</NOTES><HTML>html</HTML><SLIDE_END>`;
   const userPrompt = `Slide: ${slideTitle}\nDescription: ${slideDescription}\n${instructions ? `Special instructions: ${instructions}\n` : ''}Analysis data:\n${sectionContent}\nOperator: ${operator}\nBrief tone: ${brief?.tone || 'opportunity'}`;
   const stream = await client.messages.create({ model: 'claude-sonnet-4-6', max_tokens: 8000, system: systemPrompt, messages: [{ role: 'user', content: userPrompt }], stream: true });
   for await (const chunk of stream) {
@@ -2403,11 +2413,11 @@ goTo(0);
     let body = '';
     req.on('data', c => body += c);
     req.on('end', async () => {
-      const { slideTitle, slideDescription, brief, operator, sectionContent, instructions } = JSON.parse(body);
+      const { slideTitle, slideDescription, brief, operator, sections, instructions } = JSON.parse(body);
       res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Transfer-Encoding': 'chunked', 'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no' });
       res.flushHeaders();
       try {
-        await streamSingleSlide({ slideTitle, slideDescription, brief, operator, sectionContent, instructions }, res);
+        await streamSingleSlide({ slideTitle, slideDescription, brief, operator, sections, instructions }, res);
       } catch (e) {
         res.write(`<GENERATION_ERROR>${e.message}</GENERATION_ERROR>`);
       }
