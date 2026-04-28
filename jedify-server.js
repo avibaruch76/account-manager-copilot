@@ -288,15 +288,28 @@ function buildStyledTableHtml(table, brand) {
 function stripHtml(str) {
   if (!str) return '';
   return str
+    // Remove entire style/script blocks (big token savers)
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
+    .replace(/<svg[^>]*>[\s\S]*?<\/svg>/gi, '')
+    // Strip style/class attributes from ALL tags (keeps structure, removes CSS noise)
+    .replace(/\s(?:style|class|id|data-[^=]*)="[^"]*"/gi, '')
+    // Convert structural block elements to newlines for readability
+    .replace(/<\/(?:tr|p|div|li|h[1-6]|br)>/gi, '\n')
+    .replace(/<\/td>/gi, '\t')
+    .replace(/<\/th>/gi, '\t')
+    // Remove remaining tags but keep the text they wrap
+    .replace(/<[^>]+>/g, '')
+    // Decode entities
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/\s{3,}/g, '\n')
+    .replace(/&#?\w+;/g, ' ')
+    // Clean up whitespace
+    .replace(/\t\t+/g, '\t')
+    .replace(/\n\s*\n\s*\n/g, '\n\n')
     .trim();
 }
 
