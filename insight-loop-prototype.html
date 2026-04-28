@@ -6765,7 +6765,7 @@ function _pptxEnlargeSlide(idx) {
       <button id="pptx-enlarge-prev" onclick="event.stopPropagation();_pptxEnlargeNav(-1)"
               style="width:32px;height:32px;background:#334155;color:white;border:none;border-radius:6px;font-size:18px;cursor:pointer;">‹</button>
       <div id="pptx-enlarge-nums" style="display:flex;gap:4px;flex-wrap:wrap;justify-content:center;max-width:600px;">
-        ${_pptxSlides.map((_, i) => `<button onclick="event.stopPropagation();_pptxEnlargeNav(${i - idx})" id="pptx-enum-${i}"
+        ${_pptxSlides.map((_, i) => `<button onclick="event.stopPropagation();_pptxEnlargeGoTo(${i})" id="pptx-enum-${i}"
           style="width:28px;height:28px;background:${i===idx?'#CC0000':'#334155'};color:white;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">${i+1}</button>`).join('')}
       </div>
       <button id="pptx-enlarge-next" onclick="event.stopPropagation();_pptxEnlargeNav(+1)"
@@ -6823,7 +6823,8 @@ function _pptxEnlargeSlide(idx) {
     applyZoom();
   };
 
-  window._pptxEnlargeNav = function(delta) { loadSlide(currentIdx + delta); };
+  window._pptxEnlargeNav  = function(delta) { loadSlide(currentIdx + delta); };
+  window._pptxEnlargeGoTo = function(i)     { loadSlide(i); };
 
   loadSlide(currentIdx);
   requestAnimationFrame(applyZoom);

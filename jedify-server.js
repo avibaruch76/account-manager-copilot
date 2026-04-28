@@ -419,6 +419,7 @@ SVG CHART RULES:
 - Always include axis tick lines and labels; no grid lines
 - Show up to 12 months of data — use whatever months are present in the analysis data
 - If only 1 or 2 months of data exist, show those bars/points; do not invent extra months
+- CRITICAL — bar label clearance: always reserve at least 30px of top padding inside the SVG viewBox above the tallest bar so value labels (e.g. "2.63M") are never clipped. The chart area must start at y≥30 and value labels must sit inside the viewBox, not above it.
 
 ATTRIBUTE QUOTES: Use ONLY single quotes for ALL HTML attribute values. No double quotes inside HTML strings.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
