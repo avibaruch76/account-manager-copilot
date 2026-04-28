@@ -5658,12 +5658,65 @@ async function _pptxSaveOperatorNotes() {
   }
 }
 
+async function _pptxExtractBrandOnly(file) {
+  if (!window.JSZip) {
+    await new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed to load JSZip'));
+      document.head.appendChild(s);
+    });
+  }
+  const buf = await file.arrayBuffer();
+  const zip = await JSZip.loadAsync(buf);
+
+  let primary='#1E2761', accent='#7C3AED', background='#FFFFFF', highlight='#F59E0B', text='#1E293B';
+  const themeFile = zip.file('ppt/theme/theme1.xml') ||
+                    zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/theme\/theme\d+\.xml/)) || '');
+  if (themeFile) {
+    const xml = await themeFile.async('text');
+    const allHex = [...xml.matchAll(/val="([A-Fa-f0-9]{6})"/g)].map(m => '#' + m[1]);
+    if (allHex[0]) primary    = allHex[0];
+    if (allHex[1]) text       = allHex[1];
+    if (allHex[2]) background = allHex[2];
+    if (allHex[4]) accent     = allHex[4];
+    if (allHex[6]) highlight  = allHex[6];
+  }
+
+  let fontHeading = 'Calibri', fontBody = 'Calibri';
+  const masterFile = zip.file('ppt/slideMasters/slideMaster1.xml') ||
+                     zip.file(Object.keys(zip.files).find(k => k.match(/ppt\/slideMasters\/slideMaster\d+\.xml/)) || '');
+  if (masterFile) {
+    const xml = await masterFile.async('text');
+    const latinMatches = [...xml.matchAll(/latin typeface="([^"]+)"/g)];
+    if (latinMatches[0]) fontHeading = latinMatches[0][1];
+    if (latinMatches[1]) fontBody    = latinMatches[1][1];
+  }
+
+  let logoBase64 = null;
+  const mediaFiles = Object.entries(zip.files).filter(([k]) => k.startsWith('ppt/media/') && !zip.files[k].dir);
+  if (mediaFiles.length) {
+    const withSizes = await Promise.all(mediaFiles.map(async ([k, f]) => {
+      const data = await f.async('uint8array');
+      return { key: k, data, size: data.length };
+    }));
+    withSizes.sort((a, b) => b.size - a.size);
+    const largest = withSizes[0];
+    const ext = largest.key.split('.').pop().toLowerCase();
+    const mimeMap = { png:'image/png', jpg:'image/jpeg', jpeg:'image/jpeg', gif:'image/gif', svg:'image/svg+xml' };
+    const mime = mimeMap[ext] || 'image/png';
+    logoBase64 = `data:${mime};base64,${btoa(String.fromCharCode(...largest.data))}`;
+  }
+
+  return { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 };
+}
+
 async function _pptxUpdateBrand(id, file) {
   if (!file) return;
   showToast('Extracting brand from slide…');
   try {
-    await _pptxHandleFile(file);
-    const { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 } = _pptxExtracted;
+    const { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 } = await _pptxExtractBrandOnly(file);
     const brand = { primary, accent, background, highlight, text, fontHeading, fontBody, logoBase64 };
     await apiFetch(`/api/templates/${id}`, {
       method: 'PUT',
