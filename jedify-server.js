@@ -30,7 +30,7 @@ function buildDefaultTemplate() {
     slides: [
       { title: 'Title',               description: 'Operator name, bold assertion headline, date range, QBR badge. Headline: strongest statement from data.' },
       { title: 'KPI Charts',          description: '2×2 grid SVG bar charts: Total Bets, GGR, Active Players, Rounds/Player. QBR bars red, prior months grey.' },
-      { title: 'Studio Summary Table',description: 'Table: Studio | Games Released | Total Bets | Bet Share % | Total GGR | Bets per Game. Sort by Total Bets desc.' },
+      { title: 'Studio Summary Table',description: 'Table with EXACTLY these 6 columns in this order: Studio | Games Released | Total Bets (€) | Bet Share % | Total GGR (€) | Bets per Game (€). Include ALL studios present in the data — do not filter or drop any. Bet Share % values across all rows MUST sum to ~100%. Sort by Total Bets desc. Do not add or rename columns.' },
       { title: 'Studio Performance',  description: 'Full-width SVG line chart, one line per studio over months. Legend below chart.' },
       { title: 'New Games Launched',  description: 'Table: Game | Studio | RTP | Total Bets 14d | Players 14d. Sort by Total Bets desc.' },
       { title: 'Retention Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
