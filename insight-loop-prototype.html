@@ -7670,7 +7670,148 @@ async function _pptxShare() {
   if (btn) { btn.textContent = '🔗 Share'; btn.disabled = false; }
 }
 
-// ── .pptx Download — html2canvas captures each slide as image ──────
+// ── Editable PPTX helpers ─────────────────────────────────────────────────────
+// LAYOUT_WIDE = 13.33in × 7.5in; slide canvas = 1280px × 720px
+const _PX_TO_IN = 13.33 / 1280;
+function _pxIn(px) { return Math.round(px * _PX_TO_IN * 1000) / 1000; }
+
+function _cssHex(c) {
+  if (!c || c === 'transparent') return null;
+  let m = c.match(/rgba\((\d+),\s*(\d+),\s*(\d+),\s*([0-9.]+)\)/);
+  if (m && parseFloat(m[4]) < 0.05) return null;
+  m = m || c.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (m) return [m[1],m[2],m[3]].map(n=>parseInt(n).toString(16).padStart(2,'0')).join('').toUpperCase();
+  const h6 = c.match(/#([0-9a-fA-F]{6})/); if (h6) return h6[1].toUpperCase();
+  const h3 = c.match(/#([0-9a-fA-F]{3})/); if (h3) return h3[1].split('').map(x=>x+x).join('').toUpperCase();
+  return null;
+}
+
+function _pxToPt(px) { return Math.max(6, Math.round(parseFloat(px||12) * 0.75)); }
+
+async function _svgToImgData(svgEl, bgHex) {
+  try {
+    const r = svgEl.getBoundingClientRect();
+    const w = Math.round(r.width) || 200, h = Math.round(r.height) || 150;
+    const str = new XMLSerializer().serializeToString(svgEl);
+    const blob = new Blob([str], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    return new Promise(res => {
+      const img = new Image();
+      img.onload = () => {
+        const cv = document.createElement('canvas');
+        cv.width = w*2; cv.height = h*2;
+        const ctx = cv.getContext('2d');
+        if (bgHex) { ctx.fillStyle = '#' + bgHex; ctx.fillRect(0,0,cv.width,cv.height); }
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        res(cv.toDataURL('image/png'));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+      img.src = url;
+    });
+  } catch { return null; }
+}
+
+function _addPptxTable(s, tableEl, cRect) {
+  const r = tableEl.getBoundingClientRect();
+  const rows = Array.from(tableEl.querySelectorAll('tr')).map(row =>
+    Array.from(row.querySelectorAll('td,th')).map(cell => {
+      const st = getComputedStyle(cell);
+      const bg = _cssHex(st.backgroundColor);
+      return { text: (cell.textContent||'').trim(), options: {
+        bold: parseFloat(st.fontWeight) >= 600,
+        fontSize: _pxToPt(st.fontSize),
+        color: _cssHex(st.color) || 'FFFFFF',
+        fill: bg ? { color: bg } : { type: 'none' },
+        align: st.textAlign === 'right' ? 'right' : st.textAlign === 'center' ? 'center' : 'left',
+        valign: 'middle', margin: [2,4,2,4]
+      }};
+    })
+  ).filter(r => r.length > 0);
+  if (!rows.length || !rows[0].length) return;
+  s.addTable(rows, {
+    x: _pxIn(r.left - cRect.left), y: _pxIn(r.top - cRect.top),
+    w: _pxIn(r.width),
+    border: { type: 'solid', color: '333333', pt: 0.5 }, autoPage: false
+  });
+}
+
+async function _buildEditableSlide(pptx, slideData, container) {
+  const s = pptx.addSlide();
+  const root = container.firstElementChild;
+  if (!root) { if (slideData.notes) s.addNotes(slideData.notes); return; }
+  const cRect = container.getBoundingClientRect();
+  const bgHex = _cssHex(getComputedStyle(root).backgroundColor)
+    || _cssHex(_selectedTemplate?.brand?.background || '#0D0D0D') || '0D0D0D';
+  s.background = { color: bgHex };
+  const skip = new Set();
+
+  // Pass 1 — background shapes
+  for (const el of root.querySelectorAll('div,section,header,footer,span')) {
+    if (skip.has(el)) continue;
+    const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility === 'hidden') continue;
+    const bg = _cssHex(st.backgroundColor);
+    if (!bg || bg === bgHex) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) continue;
+    const x = _pxIn(r.left - cRect.left), y = _pxIn(r.top - cRect.top);
+    const w = Math.max(0.1, _pxIn(r.width)), h = Math.max(0.05, _pxIn(r.height));
+    if (x < 0 || y < 0 || x > 13.5 || y > 7.6) continue;
+    s.addShape('rect', { x, y, w, h, fill: { color: bg }, line: { type: 'none' } });
+  }
+
+  // Pass 2 — SVG charts → image
+  for (const el of root.querySelectorAll('svg')) {
+    if (skip.has(el)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) { skip.add(el); continue; }
+    const imgData = await _svgToImgData(el, bgHex);
+    if (imgData) s.addImage({ data: imgData,
+      x: _pxIn(r.left - cRect.left), y: _pxIn(r.top - cRect.top),
+      w: _pxIn(r.width), h: _pxIn(r.height) });
+    el.querySelectorAll('*').forEach(d => skip.add(d));
+    skip.add(el);
+  }
+
+  // Pass 3 — native tables
+  for (const el of root.querySelectorAll('table')) {
+    if (skip.has(el)) continue;
+    _addPptxTable(s, el, cRect);
+    el.querySelectorAll('*').forEach(d => skip.add(d));
+    skip.add(el);
+  }
+
+  // Pass 4 — leaf text boxes
+  for (const el of root.querySelectorAll('*')) {
+    if (skip.has(el)) continue;
+    const text = (el.textContent||'').trim();
+    if (!text) continue;
+    const kidsWithText = Array.from(el.children).filter(c => !skip.has(c) && (c.textContent||'').trim());
+    if (kidsWithText.length > 0) continue;
+    const st = getComputedStyle(el);
+    if (st.display === 'none' || st.visibility === 'hidden') continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 4 || r.height < 4) continue;
+    const x = _pxIn(r.left - cRect.left), y = _pxIn(r.top - cRect.top);
+    const w = Math.max(0.3, _pxIn(r.width)), h = Math.max(0.12, _pxIn(r.height));
+    if (x < 0 || y < 0 || x > 13.5 || y > 7.6) continue;
+    s.addText(text, { x, y, w, h,
+      fontSize: _pxToPt(st.fontSize),
+      color: _cssHex(st.color) || 'FFFFFF',
+      bold: parseFloat(st.fontWeight) >= 600,
+      italic: st.fontStyle === 'italic',
+      align: st.textAlign === 'right' ? 'right' : st.textAlign === 'center' ? 'center' : 'left',
+      valign: 'middle', wrap: true,
+      line: { type: 'none' }, fill: { type: 'none' }
+    });
+    skip.add(el);
+  }
+
+  if (slideData.notes) s.addNotes(slideData.notes);
+}
+
+// ── .pptx Download — editable native shapes ──────────────────────────────────
 async function _pptxDownload() {
   if (!_pptxSlides || !_pptxSlides.length) return;
   const btn = document.querySelector('#pptx-footer button:last-child');
@@ -7728,18 +7869,7 @@ async function _pptxDownload() {
         slideRoot.style.overflow = 'hidden';
       }
 
-      const bgColor = _selectedTemplate?.brand?.background || '#0D0D0D';
-      // scale:2 → captures at 2560×1440 → 192dpi in pptx → crisp text and fonts
-      const canvas = await window.html2canvas(container, {
-        width: 1280, height: 720, scale: 2,
-        useCORS: true, logging: false, backgroundColor: bgColor,
-        imageTimeout: 0, allowTaint: false
-      });
-      const imgData = canvas.toDataURL('image/png');
-
-      const s = pptx.addSlide();
-      s.addImage({ data: imgData, x: 0, y: 0, w: '100%', h: '100%' });
-      if (slide.notes) s.addNotes(slide.notes);
+      await _buildEditableSlide(pptx, slide, container);
     }
 
     document.body.removeChild(container);
