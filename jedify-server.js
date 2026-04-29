@@ -1585,22 +1585,30 @@ const STAGE_POLL_AT = [0, 2, 5, 9, 14, 20, 28];
 let _activeInquiryId = null;
 
 async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken, onInquiryId) {
-  // Submit the research question
-  console.log(`[jedify-research] Submitting ask_a_research_question (prompt length: ${prompt.length})`);
-  const askRes = await sendMCP({
-    method: 'tools/call',
-    params: {
-      name: 'ask_a_research_question',
-      arguments: { question: prompt }
-    }
-  }, 120000);
+  // Submit the research question — retry up to 3 times on 408 timeout
+  let askParsed, inquiryId;
+  const maxAttempts = 3;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    console.log(`[jedify-research] Submitting ask_a_research_question (attempt ${attempt}/${maxAttempts}, prompt length: ${prompt.length})`);
+    const askRes = await sendMCP({
+      method: 'tools/call',
+      params: { name: 'ask_a_research_question', arguments: { question: prompt } }
+    }, 120000);
 
-  if (askRes.error) throw new Error('ask_a_research_question error: ' + (askRes.error.message || JSON.stringify(askRes.error)));
-  const askText = askRes.result?.content?.[0]?.text;
-  if (!askText) throw new Error('Empty response from ask_a_research_question');
-  const askParsed = JSON.parse(askText);
-  const inquiryId = askParsed.inquiry_id;
-  if (!inquiryId) throw new Error('No inquiry_id in response: ' + askText.slice(0, 200));
+    if (askRes.error) throw new Error('ask_a_research_question error: ' + (askRes.error.message || JSON.stringify(askRes.error)));
+    const askText = askRes.result?.content?.[0]?.text;
+    if (!askText) throw new Error('Empty response from ask_a_research_question');
+    askParsed = JSON.parse(askText);
+    inquiryId = askParsed.inquiry_id;
+    if (inquiryId) break;
+    // 408 timeout or other transient error — wait and retry
+    if (attempt < maxAttempts) {
+      const waitMs = attempt * 5000;
+      console.warn(`[jedify-research] No inquiry_id (attempt ${attempt}): ${askText.slice(0, 200)} — retrying in ${waitMs/1000}s`);
+      await new Promise(r => setTimeout(r, waitMs));
+    }
+  }
+  if (!inquiryId) throw new Error('No inquiry_id in response after ' + maxAttempts + ' attempts: ' + JSON.stringify(askParsed).slice(0, 200));
 
   _activeInquiryId = inquiryId;
   if (onInquiryId) onInquiryId(inquiryId); // notify caller so it can associate inquiry_id with bgRunId
