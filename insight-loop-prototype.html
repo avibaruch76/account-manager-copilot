@@ -6917,8 +6917,9 @@ function _pptxDrawPreview(idx) {
   const actionPanel = `
     <div id="pptx-action-panel" style="width:190px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;">
       <div style="font-size:10px;font-weight:700;color:#94A3B8;text-transform:uppercase;letter-spacing:1px;">Slide ${_pptxActiveSlide+1} — Actions</div>
-      <button onclick="_pptxEditSlideText(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">✏️ Edit text</button>
-      <button onclick="_pptxShowRegenPanel(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">↺ Regenerate slide</button>
+      <button onclick="_pptxShowRegenPanel(${_pptxActiveSlide})" style="width:100%;padding:9px 10px;background:linear-gradient(135deg,#16A34A,#15803D);color:white;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">↺ Fix / Rewrite slide</button>
+      <div style="font-size:9px;color:#64748B;margin-top:-4px;padding:0 2px;line-height:1.4;">Tell Claude what to change — headline, layout, a number, the tone</div>
+      <button onclick="_pptxEditSlideText(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F5F3FF;color:#7C3AED;border:1.5px solid #DDD6FE;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">✏️ Edit text manually</button>
       <button onclick="_pptxSaveSlideToTemplate(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#F0FDF4;color:#16A34A;border:1.5px solid #86EFAC;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">💾 Save layout to template</button>
       <button onclick="_pptxRemoveSlide(${_pptxActiveSlide})" style="width:100%;padding:8px 10px;background:#FEF2F2;color:#CC0000;border:1.5px solid #FECACA;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;text-align:left;">🗑 Remove slide</button>
       <div style="border-top:1px solid #E2E8F0;padding-top:8px;">
@@ -7168,7 +7169,7 @@ function _pptxShowRegenPanel(idx) {
           ${sourceOptions}
         </select>
       </div>
-      <textarea id="pptx-regen-instructions" rows="2" placeholder="Instructions — e.g. 'Use a bar chart' or 'Make headline more urgent'"
+      <textarea id="pptx-regen-instructions" rows="3" placeholder="What to fix — e.g. 'Change the headline to be more urgent', 'Remove the last row from the table', 'Show only top 5 games', 'The GGR number is wrong — use €2.5M', 'Switch to a bar chart'"
                 style="width:100%;font-size:11px;border:1px solid #86EFAC;border-radius:5px;padding:5px;box-sizing:border-box;resize:none;"></textarea>
       <div style="display:flex;gap:5px;margin-top:6px;">
         <button id="pptx-regen-btn" onclick="_pptxRegenerateSlide(${idx})" style="padding:4px 12px;background:#16A34A;color:white;border:none;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;">↺ Regenerate</button>
