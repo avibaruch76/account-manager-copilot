@@ -5405,6 +5405,29 @@ function _pptxToggleContext(id) {
   if (el.style.display === 'block') el.querySelector('textarea')?.focus();
 }
 
+function _pptxLoadCsv(event, slideId) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const text = e.target.result || '';
+    // Convert CSV to a readable table format Claude can use
+    const lines = text.split(/\r?\n/).filter(l => l.trim());
+    const formatted = lines.map(line => {
+      // Keep as-is but normalize separators for readability
+      return line.split(',').map(cell => cell.trim()).join(' | ');
+    }).join('\n');
+    const ta = document.getElementById('pptx-ctx-ta-' + slideId);
+    if (ta) {
+      ta.value = (ta.value ? ta.value + '\n\n' : '') + `[CSV: ${file.name}]\n${formatted}`;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(300, ta.scrollHeight) + 'px';
+    }
+  };
+  reader.readAsText(file);
+  event.target.value = ''; // allow re-loading same file
+}
+
 function _pptxSetContext(id, value) {
   if (value.trim()) {
     _pptxSlideContext[String(id)] = value;
@@ -6453,9 +6476,15 @@ function _pptxRenderPlan() {
                 style="flex-shrink:0;padding:3px 8px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;border:1.5px solid ${hasCtx?'#FDE68A':'#E2E8F0'};background:${hasCtx?'#FEF3C7':'#F8FAFC'};color:${hasCtx?'#92400E':'#64748B'};">${hasCtx?'📝 ✓':'📝'}</button>
       </div>
       <div id="pptx-ctx-${s.id}" style="display:${hasCtx?'block':'none'};background:#FFFBEB;border-left:3px solid #FDE68A;border-bottom:1px solid #F1F5F9;padding:8px 14px 10px 44px;">
-        <div style="font-size:10px;font-weight:700;color:#92400E;margin-bottom:4px;">Manual data for "${s.name}" — Claude uses this when Jedify has no data</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-size:10px;font-weight:700;color:#92400E;">Manual data for "${s.name}" — Claude uses this when Jedify has no data</div>
+          <label style="font-size:10px;font-weight:600;color:#92400E;cursor:pointer;padding:2px 8px;border:1px solid #FDE68A;border-radius:4px;background:white;white-space:nowrap;">
+            📎 Load CSV
+            <input type="file" accept=".csv" style="display:none" onchange="_pptxLoadCsv(event,${s.id})">
+          </label>
+        </div>
         <textarea id="pptx-ctx-ta-${s.id}" rows="3"
-                  placeholder="Paste numbers, segments, notes — anything you want on this slide."
+                  placeholder="Paste numbers, segments, notes — or load a CSV file above."
                   style="width:100%;box-sizing:border-box;font-size:11px;border:1px solid #FDE68A;border-radius:5px;padding:6px 8px;resize:vertical;font-family:inherit;">${_pptxEsc(_pptxSlideContext[String(s.id)]||'')}</textarea>
         <div style="margin-top:6px;display:flex;justify-content:flex-end;gap:6px;">
           <button onclick="_pptxToggleContext(${s.id})"
