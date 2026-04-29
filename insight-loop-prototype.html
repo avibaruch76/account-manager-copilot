@@ -6888,16 +6888,11 @@ function _pptxDrawPreview(idx) {
   const active  = slides[_pptxActiveSlide];
 
   // Thumbnail strip — named slides for 18-slot template
-  const SLIDE_LABELS_FIXED = [
-    'Title','KPI Trends','Studios','New Games','Studio Bets',
-    'Retention','Regional','Studio Table','Player Seg','VIP',
-    'Max Bet','Promos','Portfolio Gap','Growth Levers','KPI Gaps'
-  ];
   function _slideLabel(i, total) {
-    if (i < 15) return SLIDE_LABELS_FIXED[i] || `Slide ${i+1}`;
-    if (i === total - 1) return 'The Ask';
-    if (i === total - 2) return 'Actions';
-    return `Extra ${i - 14}`;
+    // Use actual template slide titles when available
+    const tplSlides = _selectedTemplate && _selectedTemplate.slides;
+    if (tplSlides && tplSlides[i]) return tplSlides[i].title;
+    return `Slide ${i + 1}`;
   }
   const thumbs = slides.map((s, i) => {
     const isActive = i === _pptxActiveSlide;
