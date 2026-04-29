@@ -5308,8 +5308,16 @@ let _pptxSectionConfidence = {};  // checkId → 'high'|'medium'|'low'|'none'
 let _pptxExtracted = null;
 
 const _SLIDE_CHECK_MAP = {
-  1: 'ggr_trend', 2: 'concentration', 3: 'concentration', 4: 'new_launches',
-  7: 'vip_behavior', 10: 'benchmark_gap', 11: 'hidden_gems', 12: 'benchmark_gap'
+  2:  'ggr_trend',     // KPI Trends
+  8:  'concentration', // Studio Summary
+  3:  'concentration', // Studio Performance
+  4:  'new_launches',  // New Games Table
+  6:  'retention',     // Retention
+  10: 'vip_behavior',  // VIP Analysis
+  12: 'promo_impact',  // Promotion Analysis
+  13: 'benchmark_gap', // Portfolio Gap
+  14: 'hidden_gems',   // Growth Levers
+  15: 'benchmark_gap', // KPI Gaps
 };
 
 function _pptxSlideConf(slideId, slideName) {
@@ -5560,6 +5568,11 @@ async function openPresentationBuilder() {
     else if (len < 600)              conf = 'medium';
     else                             conf = 'high';
     _pptxSectionConfidence[s.checkId] = conf;
+    // Also index by the original check id (e.g. 'ggr_trend') so _SLIDE_CHECK_MAP lookups work
+    const matchedCheck = _checks.find(c =>
+      c.name.toLowerCase().replace(/\W+/g, '_') === s.checkId || c.id === s.checkId
+    );
+    if (matchedCheck) _pptxSectionConfidence[matchedCheck.id] = conf;
   }
 
   _pptxRenderStep0();
