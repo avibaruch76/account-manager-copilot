@@ -402,6 +402,8 @@ ${sectionContent}
 
 FIXED SLIDE TEMPLATE — generate ALL ${totalSlides} slides in order. Each slide must use the DESIGN RULES below.
 
+CRITICAL — NEVER SKIP A SLIDE: You MUST output exactly ${totalSlides} slides. Do NOT drop, merge, or omit any slide for any reason — not for missing data, not for redundancy, not for brevity. If data is sparse, use what you have. Every slide in the list must appear in the output.
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 DESIGN RULES (brand — apply to every slide):
 
