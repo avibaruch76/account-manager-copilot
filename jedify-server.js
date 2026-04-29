@@ -34,7 +34,7 @@ function buildDefaultTemplate() {
       { title: 'New Games Launched',  description: 'Table: Game | Studio | RTP | Total Bets 14d | Players 14d. Sort by Total Bets desc.' },
       { title: 'Retention Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Player Segmentation', description: 'PLACEHOLDER — Coming Soon.' },
-      { title: 'VIP Analysis',        description: 'ALWAYS write one of these two sentences first: either "VIP player segmentation data is available" or "No VIP player segmentation data available for this operator." If data is available, show Table: Game | Studio | VIP Players | VIP Bets (€) | VIP GGR (€), sorted by VIP Bets desc. If no VIP player segmentation data exists, note it clearly, show the top 10 players and add it as an action item.' },
+      { title: 'VIP Analysis',        description: 'ALWAYS write one of these two sentences first: either "VIP player segmentation data is available" or "No VIP player segmentation data available for this operator." REGARDLESS of whether VIP data exists, ALWAYS show a table of the top 10 players by total bets or GGR — label the table "Top 10 Players (all segments)" if no VIP breakdown is available. Never leave this slide empty. If no VIP data: add a prominent action item recommending VIP tagging be implemented.' },
       { title: 'Max Bet Analysis',    description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'Promotion Analysis',  description: 'PLACEHOLDER — Coming Soon.' },
       { title: 'The Portfolio Gap',   description: 'Table: Game | Key Fact | Market Rank | Market Share % | Signal badge. Max 8 rows.' },
