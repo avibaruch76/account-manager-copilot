@@ -5889,14 +5889,32 @@ function _saveAnalysisHistory() {
     operator,
     timestamp: new Date().toISOString(),
     checkNames,
-    html: cr.innerHTML
+    html: cr.innerHTML,
+    // Persist the underlying analysis so restore can re-enable Generate Deck.
+    // Stored on a separate key so size limits affect only the data, not metadata.
+    dataKey: 'ah_data_' + Date.now()
   };
   try {
     const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
     // Deduplicate: skip if last entry has same operator + same content start
     if (history.length && history[0].operator === operator && history[0].html.slice(0, 300) === htmlSnippet) return;
     history.unshift(entry);
-    localStorage.setItem('analysis_history', JSON.stringify(history.slice(0, 5)));
+    // Trim to 5 entries; clean up orphaned data keys
+    const kept = history.slice(0, 5);
+    const dropped = history.slice(5);
+    dropped.forEach(d => { if (d.dataKey) localStorage.removeItem(d.dataKey); });
+    localStorage.setItem('analysis_history', JSON.stringify(kept));
+    // Save the full research result under the dedicated data key (best-effort)
+    if (window._lastResearchResult) {
+      try {
+        localStorage.setItem(entry.dataKey, JSON.stringify({
+          data: window._lastResearchResult,
+          displayName: window._lastDisplayName
+        }));
+      } catch (sizeErr) {
+        console.warn('[analysis history] data too large to save — Generate Deck will be unavailable on restore');
+      }
+    }
   } catch(e) {
     console.warn('[analysis history] localStorage full, skipping save');
   }
@@ -5945,12 +5963,46 @@ function _restoreAnalysisHistory(id) {
   const dlBtns = document.getElementById('download-btns');
   if (dlBtns) dlBtns.style.display = 'flex';
   document.getElementById('analysis-history-modal')?.remove();
+
+  // Restore the underlying analysis data + persona tabs (incl. Generate Deck button)
+  let restoredData = null;
+  if (entry.dataKey) {
+    try {
+      const blob = localStorage.getItem(entry.dataKey);
+      if (blob) {
+        const parsed = JSON.parse(blob);
+        if (parsed && parsed.data) {
+          window._lastResearchResult = parsed.data;
+          window._lastDisplayName = parsed.displayName || entry.operator;
+          restoredData = parsed.data;
+        }
+      }
+    } catch (err) {
+      console.warn('[analysis history] failed to restore data:', err);
+    }
+  }
+  if (restoredData && typeof renderPersonaTabs === 'function') {
+    try {
+      renderPersonaTabs(restoredData, window._lastDisplayName);
+      const op = document.getElementById('output-panel');
+      if (op) op.style.display = 'block';
+      const divider = document.querySelector('hr.div');
+      if (divider) divider.style.display = 'block';
+    } catch (err) {
+      console.warn('[analysis history] persona render failed:', err);
+    }
+  }
+
   document.getElementById('react-panel')?.scrollIntoView({ behavior: 'smooth' });
-  showToast('✅ Analysis restored — ' + entry.operator);
+  const note = restoredData ? '' : ' (older entry — re-run to enable Generate Deck)';
+  showToast('✅ Analysis restored — ' + entry.operator + note);
 }
 
 function _deleteAnalysisHistory(id) {
   const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+  const entry = history.find(e => e.id === id);
+  // Drop the orphaned data blob too
+  if (entry && entry.dataKey) localStorage.removeItem(entry.dataKey);
   localStorage.setItem('analysis_history', JSON.stringify(history.filter(e => e.id !== id)));
   _showAnalysisHistory();
 }
