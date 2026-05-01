@@ -4888,35 +4888,229 @@ function scrapeTablesFromDom() {
   return out;
 }
 
+// Parse text values like "€1,225,346", "24.1%", "€19.87" → number.
+function _toNum(v) {
+  if (v === null || v === undefined) return 0;
+  if (typeof v === 'number') return v;
+  const s = String(v).replace(/[€$,\s%]/g, '').replace(/[^\d.\-]/g, '');
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
+
+// Pick a value out of a row by trying multiple header substrings (case-insensitive).
+function _scrapedPick(row, ...needles) {
+  const keys = Object.keys(row);
+  for (const needle of needles) {
+    const k = keys.find(k => k.toLowerCase().includes(needle.toLowerCase()));
+    if (k && row[k] !== '' && row[k] !== undefined) return row[k];
+  }
+  return undefined;
+}
+
+// Classify a scraped table by its headers; return one of the deck-payload slots
+// or null for "send to appendix".
+function classifyScrapedTable(headers, data) {
+  const norm = headers.map(h => String(h || '').toLowerCase().trim());
+  const has = (...kws) => kws.every(kw => norm.some(h => h.includes(kw)));
+  const any = (...kws) => kws.some(kw => norm.some(h => h.includes(kw)));
+
+  if (has('month')   && any('bets') && any('ggr')) return 'monthly';
+  if (has('kpi')     && any('total','q1','q2','q3','q4','jan','feb','mar','value')) return 'kpis_summary';
+  if (has('kpi')     && any('gap','market leader','leader')) return 'kpi_gap';
+  if (any('round type') || any('free round') || any('promo')) return 'promo';
+  if (has('game')    && any('studio') && any('share')) return 'top_games';
+  if (has('game')    && any('benchmark','avg players','gap')) return 'growth_levers';
+  if (has('game')    && any('rank') && any('priority','tier','market')) return 'tier_gap';
+  if (has('game')    && any('launch','status')) return 'new_games';
+  if (any('player')  && any('bets') && any('rounds')) return 'top_players';
+  return null;
+}
+
+// Convert a row dict (header → string) into the structured shape the deck
+// service expects, based on classification.
+function _rowToMonthly(r, idx) {
+  return {
+    month:           _scrapedPick(r, 'month') ?? '',
+    bets:            _toNum(_scrapedPick(r, 'total bets', 'bets')),
+    mom_bets:        _scrapedPick(r, 'mom') ?? null,
+    ggr:             _toNum(_scrapedPick(r, 'ggr', 'total ggr')),
+    mom_ggr:         null,
+    players:         _toNum(_scrapedPick(r, 'players', 'active players')),
+    mom_players:     null,
+    ggr_per_player:  _toNum(_scrapedPick(r, 'ggr/player', 'ggr per player', 'rev/player')),
+  };
+}
+function _rowToTopGame(r, idx) {
+  return {
+    rank:           _toNum(_scrapedPick(r, '#', 'rank', 'position')) || (idx + 1),
+    game:           _scrapedPick(r, 'game') ?? '',
+    studio:         _scrapedPick(r, 'studio', 'provider') ?? '',
+    bets:           _toNum(_scrapedPick(r, 'bets')),
+    ggr:            _toNum(_scrapedPick(r, 'ggr')),
+    share_pct:      _toNum(_scrapedPick(r, 'share')),
+    players:        _toNum(_scrapedPick(r, 'players')),
+    ggr_per_player: _toNum(_scrapedPick(r, 'ggr/player', 'per player')),
+    rtp_pct:        _toNum(_scrapedPick(r, 'rtp')),
+  };
+}
+function _rowToGrowthLever(r) {
+  return {
+    game:           _scrapedPick(r, 'game') ?? '',
+    studio:         _scrapedPick(r, 'studio') ?? '',
+    ggr_per_player: _toNum(_scrapedPick(r, 'ggr/player', 'per player')),
+    players:        _toNum(_scrapedPick(r, 'players')),
+    benchmark:      String(_scrapedPick(r, 'benchmark', 'avg') ?? ''),
+    gap:            String(_scrapedPick(r, 'gap', 'under') ?? ''),
+    action:         String(_scrapedPick(r, 'action', 'recommendation') ?? 'Promote'),
+  };
+}
+function _rowToTierGap(r) {
+  return {
+    game:         _scrapedPick(r, 'game') ?? '',
+    studio:       _scrapedPick(r, 'studio') ?? '',
+    rank:         String(_scrapedPick(r, 'rank') ?? ''),
+    account_bets: String(_scrapedPick(r, 'account bets', 'bets', 'our') ?? '€0'),
+    priority:     String(_scrapedPick(r, 'priority', 'tier') ?? '').toUpperCase() || 'HIGH',
+  };
+}
+function _rowToNewGame(r) {
+  return {
+    game:         _scrapedPick(r, 'game') ?? '',
+    studio:       _scrapedPick(r, 'studio') ?? '',
+    launch:       String(_scrapedPick(r, 'launch', 'date') ?? ''),
+    account_bets: String(_scrapedPick(r, 'account bets', 'bets') ?? '€0'),
+    status:       String(_scrapedPick(r, 'status') ?? ''),
+  };
+}
+function _rowToTopPlayer(r, idx) {
+  return {
+    rank:          _toNum(_scrapedPick(r, 'rank')) || (idx + 1),
+    key:           _scrapedPick(r, 'player key', 'player id', 'key', 'player') ?? '',
+    bets:          _toNum(_scrapedPick(r, 'bets')),
+    ggr:           _toNum(_scrapedPick(r, 'ggr')),
+    rounds:        _toNum(_scrapedPick(r, 'rounds')),
+    play_days:     _toNum(_scrapedPick(r, 'days', 'play days')),
+    avg_bet_round: _toNum(_scrapedPick(r, 'avg bet', 'bet/round', 'per round')),
+  };
+}
+function _rowToKpiGap(r) {
+  return {
+    kpi:        _scrapedPick(r, 'kpi') ?? '',
+    ours:       String(_scrapedPick(r, 'codere', 'our value', 'our', 'value') ?? ''),
+    leader:     String(_scrapedPick(r, 'market leader', 'leader') ?? ''),
+    gap:        String(_scrapedPick(r, 'gap') ?? ''),
+    root_cause: String(_scrapedPick(r, 'root cause', 'cause', 'analysis') ?? ''),
+  };
+}
+
+// Build a deck payload from scraped tables (text-pipeline fallback).
+function buildScrapedPayload(scraped, displayName) {
+  const slots = {
+    monthly: [], top_games: [], growth_levers: [],
+    tier_buckets: [], new_games: [], top_players: [], kpi_gap: [],
+    kpis_summary: null, promo: null,
+  };
+  const unclassified = [];
+
+  scraped.forEach(t => {
+    const cat = classifyScrapedTable(t.columns || [], t.data);
+    switch (cat) {
+      case 'monthly':       slots.monthly       = t.data.map(_rowToMonthly); break;
+      case 'top_games':     slots.top_games     = t.data.map(_rowToTopGame); break;
+      case 'growth_levers': slots.growth_levers = t.data.map(_rowToGrowthLever); break;
+      case 'tier_gap':      slots.tier_buckets.push(t.data.map(_rowToTierGap)); break;
+      case 'new_games':     slots.new_games     = t.data.map(_rowToNewGame); break;
+      case 'top_players':   slots.top_players   = t.data.map(_rowToTopPlayer); break;
+      case 'kpi_gap':       slots.kpi_gap       = t.data.map(_rowToKpiGap); break;
+      case 'kpis_summary':  slots.kpis_summary  = t.data; break;
+      case 'promo':         slots.promo         = t.data; break;
+      default: unclassified.push(t);
+    }
+  });
+
+  // Tier 1 / Tier 2 split — first bucket (or critical-only) is tier1, rest is tier2.
+  let tier1 = [], tier2 = [];
+  if (slots.tier_buckets.length === 1) {
+    const all = slots.tier_buckets[0];
+    tier1 = all.filter(r => /critical|tier\s*1/i.test(r.priority));
+    tier2 = all.filter(r => !/critical|tier\s*1/i.test(r.priority));
+    if (!tier1.length && !tier2.length) tier1 = all;
+  } else if (slots.tier_buckets.length >= 2) {
+    tier1 = slots.tier_buckets[0]; tier2 = slots.tier_buckets[1];
+  }
+
+  // Aggregate KPIs from monthly when present
+  const totalBets    = slots.monthly.reduce((s, m) => s + m.bets,    0);
+  const totalGgr     = slots.monthly.reduce((s, m) => s + m.ggr,     0);
+  const totalPlayers = slots.monthly.reduce((s, m) => s + m.players, 0);
+  const period = slots.monthly.length
+    ? `${slots.monthly[0].month} – ${slots.monthly[slots.monthly.length - 1].month}`
+    : '';
+
+  return {
+    operator: displayName,
+    channel:  '',
+    period,
+    market:   '',
+    headline: { eyebrow: `QUARTERLY BUSINESS REVIEW · ${period} · ${displayName}` },
+    kpis: {
+      total_bets:      totalBets,
+      total_ggr:       totalGgr,
+      active_players:  totalPlayers,
+      ggr_margin_pct:  totalBets ? +(totalGgr / totalBets * 100).toFixed(1) : 0,
+      bets_per_player: totalPlayers ? +(totalBets / totalPlayers).toFixed(2) : 0,
+      ggr_per_player:  totalPlayers ? +(totalGgr / totalPlayers).toFixed(2) : 0,
+    },
+    monthly:        slots.monthly,
+    top_games:      slots.top_games,
+    growth_levers:  slots.growth_levers,
+    tier1_gap:      tier1,
+    tier2_gap:      tier2,
+    tier1_impact:   '',
+    new_games:      slots.new_games,
+    top_players:    slots.top_players,
+    vip_data_available: slots.top_players.length > 0,
+    kpi_gap:        slots.kpi_gap,
+    actions:        [],
+    next_30_days:   [],
+    appendix:       unclassified.map(t => ({
+      id: t.id, name: t.name, finding: t.finding, data: t.data, columns: t.columns,
+      explanation: 'Auto-extracted from rendered analysis page (no core-slide match).'
+    })),
+  };
+}
+
 async function generateDeck() {
   let data = window._lastResearchResult;
   const displayName = window._lastDisplayName || getOperatorNameFromDom();
 
-  // Fallback path — new (text-based) research pipeline doesn't populate
-  // _lastResearchResult. Scrape what's already rendered on the page.
-  let usedScrape = false;
-  if (!data || !Array.isArray(data.checks) || !data.checks.length) {
+  let payload;
+  let mode = 'structured';
+
+  if (data && Array.isArray(data.checks) && data.checks.length) {
+    payload = buildDeckPayload(data, displayName);
+  } else {
     const scraped = scrapeTablesFromDom();
     if (!scraped.length) {
       showToast('⚠️ No analysis to send. Run an analysis first.', true);
       return;
     }
-    data = { checks: scraped };  // present scraped tables as appendix-ready checks
-    usedScrape = true;
+    payload = buildScrapedPayload(scraped, displayName);
+    mode = 'scraped';
   }
 
-  const payload = buildDeckPayload(data, displayName);
-
-  // When scraped, every table becomes an appendix slide so nothing is lost,
-  // and the core deck still gets a title slide + actions placeholder.
-  if (usedScrape) {
-    payload.appendix = data.checks.map(c => ({
-      id: c.id, name: c.name, finding: c.finding, data: c.data, columns: c.columns,
-      explanation: 'Auto-extracted from the rendered analysis page (new pipeline did not expose structured fields).'
-    }));
+  if (window.console) {
+    console.log('Deck payload:', payload, '| mode:', mode);
+    if (mode === 'scraped') {
+      console.log('Slot counts:',
+        'monthly=' + payload.monthly.length,
+        'top_games=' + payload.top_games.length,
+        'tier1=' + payload.tier1_gap.length,
+        'tier2=' + payload.tier2_gap.length,
+        'top_players=' + payload.top_players.length,
+        'appendix=' + payload.appendix.length);
+    }
   }
-
-  if (window.console) console.log('Deck payload:', payload, '| usedScrape:', usedScrape);
 
   showToast('🎯 Generating deck — this takes ~10s on free tier (cold start)…');
 
