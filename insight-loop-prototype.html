@@ -4123,7 +4123,10 @@ function renderDataAnalystView(checks, data, displayName, dateStr) {
   html += `<p style="font-size:13px;font-weight:700;color:#4A235A;">📊 Full Data Analyst Report — ${displayName}</p>`;
   html += `<p style="font-size:11px;color:#64748B;margin-top:4px;">${dateStr} · ${checks.length} checks · Complete Jedify Research Output</p>`;
   html += `</div>`;
+  html += `<div style="display:flex;gap:8px;">`;
   html += `<button onclick="generateWordReport()" style="background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Download Word</button>`;
+  html += `<button onclick="generateDeck()" style="background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🎯 Generate Deck</button>`;
+  html += `</div>`;
   html += `</div>`;
 
   // Summary stats
@@ -4655,6 +4658,201 @@ async function generateWordReport() {
   } catch (e) {
     console.error('Word export error:', e);
     showToast('❌ Word export failed: ' + e.message, true);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DECK SERVICE INTEGRATION
+// POSTs the analysis to the standalone python-pptx service at
+//   https://rubyplay-deck-service.onrender.com/generate
+// and downloads the returned .pptx as a file.
+// ─────────────────────────────────────────────────────────────────────────────
+const DECK_SERVICE_URL = 'https://rubyplay-deck-service.onrender.com/generate';
+
+// Pull a value from a row using any of several possible field names
+function _pick(row, ...names) {
+  for (const n of names) {
+    if (row && row[n] !== undefined && row[n] !== null) return row[n];
+  }
+  return undefined;
+}
+
+// Build the deck-service JSON shape from window._lastResearchResult
+function buildDeckPayload(data, displayName) {
+  const checkById = {};
+  (data.checks || []).forEach(c => { checkById[c.id] = c; });
+  const arr = (id) => Array.isArray(checkById[id]?.data) ? checkById[id].data : [];
+
+  // ggr_trend → monthly + kpis
+  const trend = arr('ggr_trend');
+  const monthly = trend.map(r => ({
+    month:           _pick(r, 'month_label', 'month', 'period', 'date') ?? '',
+    bets:            Number(_pick(r, 'total_bets', 'bets', 'amount_bets')) || 0,
+    mom_bets:        _pick(r, 'mom_bets_pct', 'mom_bets', 'bets_mom') ?? null,
+    ggr:             Number(_pick(r, 'ggr', 'total_ggr')) || 0,
+    mom_ggr:         _pick(r, 'mom_ggr_pct', 'mom_ggr', 'ggr_mom') ?? null,
+    players:         Number(_pick(r, 'active_players', 'players', 'unique_players')) || 0,
+    mom_players:     _pick(r, 'mom_players_pct', 'mom_players', 'players_mom') ?? null,
+    ggr_per_player:  Number(_pick(r, 'ggr_per_player', 'ggr_pp', 'rev_per_player')) || 0,
+  }));
+  const totalBets    = monthly.reduce((s, m) => s + m.bets,    0);
+  const totalGgr     = monthly.reduce((s, m) => s + m.ggr,     0);
+  const totalPlayers = monthly.reduce((s, m) => s + m.players, 0);
+
+  // concentration → top_games
+  const conc = arr('concentration');
+  const top_games = conc.slice(0, 10).map((r, i) => ({
+    rank:           Number(_pick(r, 'rank', 'position')) || (i + 1),
+    game:           _pick(r, 'game_group', 'game', 'game_name') ?? '',
+    studio:         _pick(r, 'studio', 'studio_name', 'provider') ?? '',
+    bets:           Number(_pick(r, 'total_bets', 'bets')) || 0,
+    ggr:            Number(_pick(r, 'ggr', 'total_ggr')) || 0,
+    share_pct:      Number(_pick(r, 'ggr_share_pct', 'share_pct', 'share')) || 0,
+    players:        Number(_pick(r, 'players', 'active_players')) || 0,
+    ggr_per_player: Number(_pick(r, 'ggr_per_player', 'ggr_pp')) || 0,
+    rtp_pct:        Number(_pick(r, 'rtp_pct', 'rtp')) || 0,
+  }));
+
+  // hidden_gems → growth_levers
+  const gems = arr('hidden_gems');
+  const growth_levers = gems.slice(0, 5).map(r => ({
+    game:           _pick(r, 'game_group', 'game', 'game_name') ?? '',
+    studio:         _pick(r, 'studio', 'studio_name') ?? '',
+    ggr_per_player: Number(_pick(r, 'ggr_per_player', 'ggr_pp')) || 0,
+    players:        Number(_pick(r, 'players', 'active_players')) || 0,
+    benchmark:      String(_pick(r, 'avg_players_benchmark', 'benchmark', 'benchmark_players') ?? ''),
+    gap:            String(_pick(r, 'gap', 'gap_label', 'penetration_gap') ?? ''),
+    action:         String(_pick(r, 'action', 'recommendation') ?? 'Promote'),
+  }));
+
+  // benchmark_gap → tier1_gap, tier2_gap
+  // benchmark_gap may have shape { globalTop: [...], tier1: [...], tier2: [...] } OR a flat array
+  const bench = checkById['benchmark_gap']?.data;
+  const benchTier1 = (bench && bench.tier1)
+    ? bench.tier1
+    : (Array.isArray(bench) ? bench.filter(r => /critical|tier\s*1/i.test(_pick(r, 'priority', 'tier') ?? '')) : []);
+  const benchTier2 = (bench && bench.tier2)
+    ? bench.tier2
+    : (Array.isArray(bench) ? bench.filter(r => /high|moderate|tier\s*2/i.test(_pick(r, 'priority', 'tier') ?? '')) : []);
+  const mapTier = (r) => ({
+    game:         _pick(r, 'game_group', 'game', 'game_name') ?? '',
+    studio:       _pick(r, 'studio', 'studio_name') ?? '',
+    rank:         String(_pick(r, 'market_rank', 'rank') ?? ''),
+    account_bets: String(_pick(r, 'account_bets', 'bets', 'our_bets') ?? '€0'),
+    priority:     String(_pick(r, 'priority', 'severity') ?? 'HIGH').toUpperCase(),
+  });
+  const tier1_gap = (benchTier1 || []).slice(0, 5).map(mapTier);
+  const tier2_gap = (benchTier2 || []).slice(0, 5).map(mapTier);
+
+  // new_launches → new_games
+  const launches = arr('new_launches');
+  const new_games = launches.slice(0, 5).map(r => ({
+    game:         _pick(r, 'game_group', 'game', 'game_name') ?? '',
+    studio:       _pick(r, 'studio', 'studio_name') ?? '',
+    launch:       String(_pick(r, 'launch_date', 'launch', 'date') ?? ''),
+    account_bets: String(_pick(r, 'account_bets', 'bets', 'our_bets') ?? '€0'),
+    status:       String(_pick(r, 'status', 'state') ?? 'Pending'),
+  }));
+
+  // vip_behavior → top_players
+  const vips = arr('vip_behavior');
+  const top_players = vips.slice(0, 5).map((r, i) => ({
+    rank:          Number(_pick(r, 'rank', 'position')) || (i + 1),
+    key:           _pick(r, 'player_key', 'player_id', 'key') ?? '',
+    bets:          Number(_pick(r, 'bets', 'total_bets')) || 0,
+    ggr:           Number(_pick(r, 'ggr', 'total_ggr')) || 0,
+    rounds:        Number(_pick(r, 'rounds', 'total_rounds')) || 0,
+    play_days:     Number(_pick(r, 'play_days', 'days')) || 0,
+    avg_bet_round: Number(_pick(r, 'avg_bet_round', 'avg_bet_per_round')) || 0,
+  }));
+
+  // Period — derive from monthly range if not provided
+  const period = monthly.length
+    ? `${monthly[0].month} – ${monthly[monthly.length - 1].month}`
+    : '';
+
+  // Action items — pull from check findings (fallback: empty)
+  const findings = (data.checks || [])
+    .filter(c => c.finding && (c.status === 'critical' || c.status === 'warning'))
+    .slice(0, 5)
+    .map(c => ({
+      title:     c.name || c.id,
+      priority:  c.status === 'critical' ? 'CRITICAL' : 'HIGH',
+      rationale: c.finding,
+    }));
+
+  // Build the payload
+  return {
+    operator: displayName,
+    channel:  '',
+    period:   period,
+    market:   '',
+    headline: {
+      eyebrow: `QUARTERLY BUSINESS REVIEW · ${period} · ${displayName}`,
+      // Leave main/subline blank — deck service will use safe defaults
+    },
+    kpis: {
+      total_bets:       totalBets,
+      total_ggr:        totalGgr,
+      active_players:   totalPlayers,
+      ggr_margin_pct:   totalBets ? +(totalGgr / totalBets * 100).toFixed(1) : 0,
+      bets_per_player:  totalPlayers ? +(totalBets / totalPlayers).toFixed(2) : 0,
+      ggr_per_player:   totalPlayers ? +(totalGgr / totalPlayers).toFixed(2) : 0,
+    },
+    monthly,
+    top_games,
+    growth_levers,
+    tier1_gap,
+    tier2_gap,
+    tier1_impact: '',
+    new_games,
+    top_players,
+    vip_data_available: vips.length > 0,
+    kpi_gap: [],          // not produced by current checks — deck service will skip / use defaults
+    actions: findings,
+    next_30_days: [],     // user fills in separately for now
+  };
+}
+
+async function generateDeck() {
+  const data = window._lastResearchResult;
+  const displayName = window._lastDisplayName || 'Account';
+  if (!data || !data.checks) {
+    showToast('⚠️ No analysis to send. Run an analysis first.', true);
+    return;
+  }
+
+  const payload = buildDeckPayload(data, displayName);
+  if (window.console) console.log('Deck payload:', payload);
+
+  showToast('🎯 Generating deck — this takes ~10s on free tier (cold start)…');
+
+  try {
+    const res = await fetch(DECK_SERVICE_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${displayName.replace(/[^a-zA-Z0-9]/g, '-')}_QBR_${new Date().toISOString().slice(0,10)}.pptx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('✅ Deck downloaded: ' + a.download);
+  } catch (e) {
+    console.error('Deck generation error:', e);
+    showToast('❌ Deck generation failed: ' + e.message, true);
   }
 }
 
