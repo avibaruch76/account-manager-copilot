@@ -4815,16 +4815,108 @@ function buildDeckPayload(data, displayName) {
   };
 }
 
+// Read the operator name from anywhere it might live (new pipeline doesn't
+// populate persona-header-name, so check several fallbacks).
+function getOperatorNameFromDom() {
+  const persona = document.getElementById('persona-header-name')?.textContent?.trim();
+  if (persona) return persona;
+  if (window._lastDisplayName) return window._lastDisplayName;
+
+  // Filter chip (operator selection)
+  const chip = document.querySelector('#operator-chips .chip, .filter-chip, [class*="chip"]');
+  if (chip) {
+    const t = chip.textContent.trim().replace(/\s*\(\d+[^)]*\)/, '').replace(/[✕×]/g, '').trim();
+    if (t) return t;
+  }
+  // First heading of the rendered check results — pattern "Operator — Title"
+  const cr = document.getElementById('check-results');
+  if (cr) {
+    const heading = cr.querySelector('h1, h2, h3, h4');
+    if (heading) {
+      const text = heading.textContent.trim();
+      const m = text.match(/^([^—–\-:|]+?)\s*[—–\-:|]/);
+      if (m && m[1].length < 80) return m[1].trim();
+    }
+  }
+  // Operator selector dropdown current value
+  const sel = document.querySelector('select[id*="operator" i], select[name*="operator" i]');
+  if (sel && sel.options[sel.selectedIndex]?.text) {
+    return sel.options[sel.selectedIndex].text.trim();
+  }
+  return 'Account';
+}
+
+// Walk #check-results HTML and extract every <table> as a structured object.
+// Used as a fallback when the new (text-based) research pipeline didn't
+// populate window._lastResearchResult.
+function scrapeTablesFromDom() {
+  const cr = document.getElementById('check-results');
+  if (!cr) return [];
+  const out = [];
+  cr.querySelectorAll('table').forEach((t, i) => {
+    const rows = Array.from(t.querySelectorAll('tr'));
+    if (rows.length < 2) return;
+    const headers = Array.from(rows[0].querySelectorAll('th,td')).map(c => c.textContent.trim());
+    if (!headers.some(h => h)) return;
+    const data = rows.slice(1).map(r => {
+      const cells = Array.from(r.querySelectorAll('td,th'));
+      const obj = {};
+      headers.forEach((h, idx) => { obj[h || `col${idx}`] = cells[idx]?.textContent.trim() ?? ''; });
+      return obj;
+    }).filter(r => Object.values(r).some(v => v));
+    if (!data.length) return;
+
+    // Try to find a contextual title — nearest preceding heading or strong/h-element
+    let title = '';
+    let prev = t.previousElementSibling;
+    while (prev && !title) {
+      if (/^H[1-6]$/.test(prev.tagName) || prev.tagName === 'STRONG') {
+        title = prev.textContent.trim().slice(0, 80);
+      }
+      prev = prev.previousElementSibling;
+    }
+    if (!title) title = `Table ${i + 1}`;
+
+    out.push({
+      id:   'scraped_' + i,
+      name: title,
+      data: data,
+      columns: headers,
+      finding: title,
+    });
+  });
+  return out;
+}
+
 async function generateDeck() {
-  const data = window._lastResearchResult;
-  const displayName = window._lastDisplayName || 'Account';
-  if (!data || !data.checks) {
-    showToast('⚠️ No analysis to send. Run an analysis first.', true);
-    return;
+  let data = window._lastResearchResult;
+  const displayName = window._lastDisplayName || getOperatorNameFromDom();
+
+  // Fallback path — new (text-based) research pipeline doesn't populate
+  // _lastResearchResult. Scrape what's already rendered on the page.
+  let usedScrape = false;
+  if (!data || !Array.isArray(data.checks) || !data.checks.length) {
+    const scraped = scrapeTablesFromDom();
+    if (!scraped.length) {
+      showToast('⚠️ No analysis to send. Run an analysis first.', true);
+      return;
+    }
+    data = { checks: scraped };  // present scraped tables as appendix-ready checks
+    usedScrape = true;
   }
 
   const payload = buildDeckPayload(data, displayName);
-  if (window.console) console.log('Deck payload:', payload);
+
+  // When scraped, every table becomes an appendix slide so nothing is lost,
+  // and the core deck still gets a title slide + actions placeholder.
+  if (usedScrape) {
+    payload.appendix = data.checks.map(c => ({
+      id: c.id, name: c.name, finding: c.finding, data: c.data, columns: c.columns,
+      explanation: 'Auto-extracted from the rendered analysis page (new pipeline did not expose structured fields).'
+    }));
+  }
+
+  if (window.console) console.log('Deck payload:', payload, '| usedScrape:', usedScrape);
 
   showToast('🎯 Generating deck — this takes ~10s on free tier (cold start)…');
 
