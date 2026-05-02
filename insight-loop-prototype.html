@@ -5085,6 +5085,11 @@ function classifyScrapedTable(headers, data, headingLower) {
 
   // ---- Heading-based PRIMARY classification (most reliable) ----
   // Generous regexes so the classifier catches naming variations.
+  // Per-studio monthly table feeds the stacked bars on Slide 2 — match it
+  // BEFORE the plain "monthly" rule so the studio variant wins routing.
+  if (/monthly\s*studio|studio\s*monthly|monthly.*by\s*studio|studio.*monthly\s*performance/.test(h)) {
+    return 'monthly_by_studio';
+  }
   if (/executive\s*summary|brand\s*growing|performance\s*review|monthly\s*performance|is\s*the\s*brand/.test(h)) {
     return 'monthly';
   }
@@ -5133,6 +5138,17 @@ function _rowToMonthly(r, idx) {
     ggr_per_player:  _toNum(_scrapedPick(r, 'ggr/player', 'ggr per player', 'rev/player')),
   };
 }
+function _rowToMonthlyByStudio(r) {
+  return {
+    month:           _scrapedPick(r, 'month') ?? '',
+    studio:          _scrapedPick(r, 'studio') ?? '',
+    bets:            _toNum(_scrapedPick(r, 'total bets', 'bets')),
+    ggr:             _toNum(_scrapedPick(r, 'ggr', 'total ggr')),
+    players:         _toNum(_scrapedPick(r, 'players', 'active players')),
+    ggr_per_player:  _toNum(_scrapedPick(r, 'ggr/player', 'ggr per player')),
+  };
+}
+
 function _rowToStudioSummary(r) {
   // Per-studio aggregate row (from a "Studio analysis" custom check).
   return {
@@ -5222,7 +5238,8 @@ function buildScrapedPayload(scraped, displayName) {
   const slots = {
     monthly: [], top_games: [], growth_levers: [],
     tier_buckets: [], new_games: [], top_players: [], kpi_gap: [],
-    studio_summary: [],   // per-studio aggregate from "Studio analysis" check
+    studio_summary: [],         // per-studio aggregate from "Studio analysis" check
+    monthly_by_studio: [],      // per-month × per-studio breakdown for slide 2 stacked bars
     kpis_summary: null, promo: null, retention: null, segments: null, max_bet: null,
   };
   const claimed = {};   // slot → true once filled (so first match wins)
@@ -5247,6 +5264,7 @@ function buildScrapedPayload(scraped, displayName) {
       case 'monthly':       slots.monthly       = cleanRows.map(_rowToMonthly); break;
       case 'top_games':     slots.top_games     = cleanRows.map(_rowToTopGame); break;
       case 'studio_summary':slots.studio_summary= cleanRows.map(_rowToStudioSummary); break;
+      case 'monthly_by_studio': slots.monthly_by_studio = cleanRows.map(_rowToMonthlyByStudio); break;
       case 'growth_levers': slots.growth_levers = cleanRows.map(_rowToGrowthLever); break;
       case 'tier_gap':      slots.tier_buckets.push(cleanRows.map(_rowToTierGap)); claimed[cat] = false; break;
       case 'new_games':     slots.new_games     = cleanRows.map(_rowToNewGame); break;
@@ -5294,9 +5312,10 @@ function buildScrapedPayload(scraped, displayName) {
       bets_per_player: totalPlayers ? +(totalBets / totalPlayers).toFixed(2) : 0,
       ggr_per_player:  totalPlayers ? +(totalGgr / totalPlayers).toFixed(2) : 0,
     },
-    monthly:        slots.monthly,
-    studio_summary: slots.studio_summary,
-    top_games:      slots.top_games,
+    monthly:           slots.monthly,
+    monthly_by_studio: slots.monthly_by_studio,
+    studio_summary:    slots.studio_summary,
+    top_games:         slots.top_games,
     growth_levers:  slots.growth_levers,
     tier1_gap:      tier1,
     tier2_gap:      tier2,
