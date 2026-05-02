@@ -5413,6 +5413,9 @@ async function generateDeck() {
     a.remove();
     URL.revokeObjectURL(url);
     showToast('✅ Deck downloaded: ' + a.download);
+    // Auto-save to presentations history (metadata only — file is regenerated
+    // on demand when the user clicks Regenerate in the history modal).
+    try { _saveDeckHistory(displayName, payload); } catch (_) {}
   } catch (e) {
     console.error('Deck generation error:', e);
     showToast('❌ Deck generation failed: ' + e.message, true);
@@ -6487,36 +6490,135 @@ function _saveAnalysisHistory() {
   }
 }
 
-function _showAnalysisHistory() {
+function _fmtDateTime(ts) {
+  const d = new Date(ts);
+  const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  const timeStr = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+  return `${dateStr} · ${timeStr}`;
+}
+function _renderAnalysesTab() {
+  const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+  if (!history.length) {
+    return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No analysis history yet — run an analysis to save it here.</div>';
+  }
+  return history.map(e => `
+    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:8px;">
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:700;font-size:13px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.operator}</div>
+        <div style="font-size:11px;color:#64748B;margin-top:2px;">${_fmtDateTime(e.timestamp)}</div>
+      </div>
+      <button onclick="_restoreAnalysisHistory('${e.id}')" style="padding:5px 12px;background:#1E2761;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Restore</button>
+      <button onclick="_deleteAnalysisHistory('${e.id}')" style="padding:5px 8px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>
+    </div>`).join('');
+}
+function _renderPresentationsTab() {
+  const history = JSON.parse(localStorage.getItem('deck_history') || '[]');
+  if (!history.length) {
+    return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No presentations yet — click 🎯 Generate Deck to save one here.</div>';
+  }
+  const byOp = {};
+  history.forEach(e => { const k = e.operator || 'Unknown Operator'; (byOp[k] = byOp[k] || []).push(e); });
+  const operators = Object.keys(byOp).sort((a, b) => {
+    const ta = Math.max(...byOp[a].map(e => new Date(e.timestamp).getTime()));
+    const tb = Math.max(...byOp[b].map(e => new Date(e.timestamp).getTime()));
+    return tb - ta;
+  });
+  return operators.map(op => {
+    const items = byOp[op].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const itemHtml = items.map(e => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;">
+        <div style="flex:1;min-width:0;font-size:12px;color:#475569;">${_fmtDateTime(e.timestamp)}</div>
+        <button onclick="_regenerateDeckHistory('${e.id}')" style="padding:5px 10px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">↻ Regenerate</button>
+        <button onclick="_deleteDeckHistory('${e.id}')" style="padding:5px 8px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>
+      </div>`).join('');
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 6px;border-bottom:1.5px solid #E2E8F0;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:800;color:#1E293B;">${op}</div>
+          <div style="font-size:11px;color:#94A3B8;">${items.length} deck${items.length === 1 ? '' : 's'}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">${itemHtml}</div>
+      </div>`;
+  }).join('');
+}
+function _showAnalysisHistory(initialTab) {
   const existing = document.getElementById('analysis-history-modal');
   if (existing) { existing.remove(); return; }
-  const history = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+  const tab = initialTab || 'analyses';
+  const analysisCount = JSON.parse(localStorage.getItem('analysis_history') || '[]').length;
+  const deckCount     = JSON.parse(localStorage.getItem('deck_history')     || '[]').length;
+  const tabBtn = (id, label, count, active) => `<button onclick="_showHistoryTab('${id}')" id="hist-tab-${id}" style="flex:1;padding:10px 14px;background:${active?'#1E2761':'#F1F5F9'};color:${active?'white':'#475569'};border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">${label} <span style="opacity:.7;font-weight:600;">(${count})</span></button>`;
   const modal = document.createElement('div');
   modal.id = 'analysis-history-modal';
   modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:8000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
   modal.onclick = e => { if (e.target === modal) modal.remove(); };
-  const entries = history.length ? history.map(e => {
-    const d = new Date(e.timestamp);
-    const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
-    const timeStr = d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
-    return `<div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:8px;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:13px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.operator}</div>
-        <div style="font-size:11px;color:#64748B;margin-top:2px;">${dateStr} · ${timeStr}</div>
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;padding:24px;width:100%;max-width:560px;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:800;color:#1E293B;">📋 History</div>
+        <button onclick="document.getElementById('analysis-history-modal').remove()" style="background:none;border:none;font-size:18px;color:#64748B;cursor:pointer;line-height:1;">✕</button>
       </div>
-      <button onclick="_restoreAnalysisHistory('${e.id}')" style="padding:5px 12px;background:#1E2761;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Restore</button>
-      <button onclick="_deleteAnalysisHistory('${e.id}')" style="padding:5px 8px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        ${tabBtn('analyses',     'Analyses',      analysisCount, tab === 'analyses')}
+        ${tabBtn('presentations','Presentations', deckCount,     tab === 'presentations')}
+      </div>
+      <div id="hist-body" style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;">
+        ${tab === 'analyses' ? _renderAnalysesTab() : _renderPresentationsTab()}
+      </div>
     </div>`;
-  }).join('') : '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No analysis history yet — run an analysis to save it here.</div>';
-  modal.innerHTML = `<div style="background:white;border-radius:14px;padding:24px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:17px;font-weight:800;color:#1E293B;">📋 Analysis History</div>
-      <button onclick="document.getElementById('analysis-history-modal').remove()" style="background:none;border:none;font-size:18px;color:#64748B;cursor:pointer;line-height:1;">✕</button>
-    </div>
-    <div style="font-size:11px;color:#94A3B8;margin-bottom:14px;">Last 5 analyses · Restore loads results back into the panel</div>
-    <div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;">${entries}</div>
-  </div>`;
   document.body.appendChild(modal);
+}
+function _showHistoryTab(which) {
+  const body = document.getElementById('hist-body');
+  if (!body) return;
+  body.innerHTML = which === 'presentations' ? _renderPresentationsTab() : _renderAnalysesTab();
+  ['analyses', 'presentations'].forEach(id => {
+    const btn = document.getElementById('hist-tab-' + id);
+    if (!btn) return;
+    const active = id === which;
+    btn.style.background = active ? '#1E2761' : '#F1F5F9';
+    btn.style.color      = active ? 'white'   : '#475569';
+  });
+}
+const _DECK_HISTORY_LIMIT = 10;
+function _saveDeckHistory(operator, payload) {
+  try {
+    const list = JSON.parse(localStorage.getItem('deck_history') || '[]');
+    const ah = JSON.parse(localStorage.getItem('analysis_history') || '[]');
+    const linkedAnalysis = ah.find(a => a.operator === operator) || ah[0] || null;
+    const entry = {
+      id: 'dh_' + Date.now(),
+      operator,
+      timestamp: new Date().toISOString(),
+      analysisId:  linkedAnalysis ? linkedAnalysis.id : null,
+      dataKey:     linkedAnalysis ? linkedAnalysis.dataKey : null,
+      slotCounts: {
+        monthly:    payload.monthly?.length || 0,
+        top_games:  payload.top_games?.length || 0,
+        actions:    payload.actions?.length || 0,
+        appendix:   payload.appendix?.length || 0,
+      }
+    };
+    list.unshift(entry);
+    localStorage.setItem('deck_history', JSON.stringify(list.slice(0, _DECK_HISTORY_LIMIT)));
+  } catch (e) { console.warn('[deck history] save failed:', e); }
+}
+async function _regenerateDeckHistory(id) {
+  const list = JSON.parse(localStorage.getItem('deck_history') || '[]');
+  const entry = list.find(e => e.id === id);
+  if (!entry) { showToast('Entry not found', true); return; }
+  if (entry.analysisId && typeof _restoreAnalysisHistory === 'function') {
+    _restoreAnalysisHistory(entry.analysisId);
+  }
+  document.getElementById('analysis-history-modal')?.remove();
+  await new Promise(r => setTimeout(r, 200));
+  if (typeof generateDeck === 'function') generateDeck();
+  else showToast('Generate Deck function not available', true);
+}
+function _deleteDeckHistory(id) {
+  const list = JSON.parse(localStorage.getItem('deck_history') || '[]');
+  localStorage.setItem('deck_history', JSON.stringify(list.filter(e => e.id !== id)));
+  _showHistoryTab('presentations');
 }
 
 function _restoreAnalysisHistory(id) {
