@@ -521,7 +521,7 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 <div class="run-overlay" id="run-overlay">
   <div class="run-modal">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-      <h3 style="margin:0">🔄 Running Analysis</h3>
+      <h3 style="margin:0">🔄 Running Analysis <span id="run-agent-suffix" style="font-weight:500;color:#94A3B8;font-size:13px;"></span></h3>
       <button onclick="minimiseRunOverlay()" title="Minimise — analysis keeps running" style="background:none;border:1px solid #E2E8F0;border-radius:6px;padding:4px 10px;font-size:12px;color:#64748B;cursor:pointer;line-height:1.4;">⊟ Minimise</button>
     </div>
     <p class="brand-label" id="run-brand-label"></p>
@@ -2304,7 +2304,11 @@ async function runAnalysis(customPrompt, partialCheckIds) {
     }
   }
 
-  // Update modal
+  // Update modal — including the agent name in the title
+  const agentSuffix = document.getElementById('run-agent-suffix');
+  if (agentSuffix && typeof _activeAgentName === 'function') {
+    agentSuffix.textContent = '· agent: ' + _activeAgentName();
+  }
   const labelEl = document.getElementById('run-brand-label');
   if (pop.scope === 'all') {
     labelEl.textContent = 'All Portfolio — ' + TOTAL_ACCOUNTS + ' accounts across ' + ACCOUNT_MANAGERS.length + ' AMs';
@@ -2683,7 +2687,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
   async function fireBackground(persona, attempt = 0) {
     const checkResults = document.getElementById('check-results');
     if (attempt === 0 && checkResults) checkResults.innerHTML =
-      `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis running...</div>`;
+      `<div style="padding:20px;color:#94A3B8;font-size:13px">⏳ Full analysis with agent ${typeof _activeAgentName === 'function' ? _activeAgentName() : ''} running...</div>`;
 
     // Show spinner on the Analysis Results nav link
     const navLink = document.querySelector('.nav a[href="#react"]');
@@ -2782,7 +2786,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
               <div style="padding:20px 20px 12px;">
                 <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
                   <div style="width:14px;height:14px;border:2px solid #E2E8F0;border-top-color:#7C3AED;border-radius:50%;animation:spin 1s linear infinite;flex-shrink:0;"></div>
-                  <span style="font-size:13px;font-weight:700;color:#1A1A1A;">Full analysis running…</span>
+                  <span style="font-size:13px;font-weight:700;color:#1A1A1A;">Full analysis with agent ${typeof _activeAgentName === 'function' ? _activeAgentName() : ''} running…</span>
                   <span style="font-size:11px;color:#94A3B8;margin-left:auto;">${elapsedStr}</span>
                 </div>
                 <div style="background:#F1F5F9;border-radius:6px;height:6px;overflow:hidden;margin-bottom:8px;">
