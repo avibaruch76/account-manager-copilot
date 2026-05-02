@@ -4941,8 +4941,12 @@ function scrapeActionsFromDom() {
 
   const actions = [];
   flat.forEach(item => {
+    // Skip prelude lines that are NOT numbered (e.g. "For your call with X:" / colon endings).
+    if (!/^\d+\.\s/.test(item.trim())) return;
     let cleaned = item.replace(/^\d+\.\s*/, '').trim();
     if (!cleaned) return;
+    // Skip cleaned items that look like a heading (end in colon, no real content)
+    if (/^[^.!?]{2,80}:\s*$/.test(cleaned)) return;
     // Split on first em/en dash (or " - ") into title vs rationale
     const m = cleaned.match(/^(.+?)\s*[—–\-]\s*(.+)$/);
     let title, rationale;
@@ -4978,7 +4982,10 @@ function scrapeSectionFindingsFromDom() {
     let cur = h.nextElementSibling;
     while (cur && !/^H[1-6]$/.test(cur.tagName)) {
       const tag = cur.tagName;
-      if (tag === 'P' || tag === 'UL' || tag === 'OL' || tag === 'DIV') {
+      // Skip elements that contain a <table> — the table is captured separately
+      // by scrapeTablesFromDom and its textContent shouldn't pollute the findings.
+      const containsTable = cur.querySelector ? !!cur.querySelector('table') : false;
+      if ((tag === 'P' || tag === 'UL' || tag === 'OL' || tag === 'DIV') && !containsTable) {
         const t = cur.textContent.trim();
         if (t) parts.push(t);
       }
@@ -5223,9 +5230,31 @@ function _rowToTopPlayer(r, idx) {
   };
 }
 function _rowToKpiGap(r) {
+  // The operator's own value column is named after the operator itself (e.g.
+  // "Codere MX", "SilverSocial via Patrianna"). Pick the column that is NOT
+  // 'kpi'/'leader'/'gap'/'trend'/'root cause' as the operator value.
+  const operName = (typeof _activeAgentName === 'function') ? _activeAgentName() : '';
+  const known = new Set(['kpi','leader','gap','trend','root cause','cause','analysis','market leader']);
+  let oursVal;
+  // First try common patterns
+  oursVal = _scrapedPick(r, 'codere', 'our value', 'our', 'value');
+  // Then try the operator name itself
+  if (oursVal === undefined && window._lastDisplayName) {
+    oursVal = _scrapedPick(r, window._lastDisplayName);
+  }
+  // Fallback: pick the first column whose normalized name isn't in `known` and isn't 'kpi'
+  if (oursVal === undefined) {
+    for (const [k, v] of Object.entries(r)) {
+      const nk = _normHeader(k);
+      if (nk === 'kpi') continue;
+      if (known.has(nk)) continue;
+      if (/leader|gap|trend|root|cause|analysis/.test(nk)) continue;
+      if (v !== '' && v !== undefined && v !== null) { oursVal = v; break; }
+    }
+  }
   return {
     kpi:        _scrapedPick(r, 'kpi') ?? '',
-    ours:       String(_scrapedPick(r, 'codere', 'our value', 'our', 'value') ?? ''),
+    ours:       String(oursVal ?? ''),
     leader:     String(_scrapedPick(r, 'market leader', 'leader') ?? ''),
     gap:        String(_scrapedPick(r, 'gap') ?? ''),
     root_cause: String(_scrapedPick(r, 'root cause', 'cause', 'analysis') ?? ''),
@@ -5398,6 +5427,39 @@ async function generateDeck() {
 
   showToast('🎯 Generating deck — this takes ~10s on free tier (cold start)…');
 
+  // Swap every Generate Deck button to a spinner state while the fetch runs.
+  // Re-runnable: stores per-button original text + style so the same button
+  // can be clicked again after a previous run.
+  const _genBtns = document.querySelectorAll('.js-generate-deck-btn');
+  const _genOrig = [];
+  _genBtns.forEach(btn => {
+    _genOrig.push({
+      btn,
+      text:    btn.textContent,
+      opacity: btn.style.opacity,
+      cursor:  btn.style.cursor,
+      pointer: btn.style.pointerEvents,
+    });
+    btn.textContent       = '⏳ Generating…';
+    btn.style.opacity     = '0.75';
+    btn.style.cursor      = 'wait';
+    btn.style.pointerEvents = 'none';
+    btn.disabled = true;
+  });
+  const _genRestore = () => {
+    _genOrig.forEach(({btn, text, opacity, cursor, pointer}) => {
+      btn.textContent = text;
+      btn.style.opacity = opacity || '';
+      btn.style.cursor  = cursor  || '';
+      btn.style.pointerEvents = pointer || '';
+      btn.disabled = false;
+    });
+    // Refresh in case the active agent changed during the run
+    if (typeof _updateGenerateButtonLabel === 'function') {
+      try { _updateGenerateButtonLabel(); } catch (_) {}
+    }
+  };
+
   try {
     const res = await fetch(DECK_SERVICE_URL, {
       method:  'POST',
@@ -5427,6 +5489,8 @@ async function generateDeck() {
   } catch (e) {
     console.error('Deck generation error:', e);
     showToast('❌ Deck generation failed: ' + e.message, true);
+  } finally {
+    _genRestore();
   }
 }
 
