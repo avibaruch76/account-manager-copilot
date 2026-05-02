@@ -1546,6 +1546,22 @@ function buildResearchPrompt(entity, scope, dateRange, enabledOptionalIds, perso
           builtinIds.add(id);
         }
       });
+    } else {
+      // FULL RUN — include ALL custom mandatory checks that have a definition.
+      // (A custom check that's optional+enabled is already covered by the
+      //  enabledOptionalIds branch above; one that's optional+disabled would
+      //  also live in checkDefinitions but is intentionally skipped here, since
+      //  by the time a user disables an optional check it shouldn't run.)
+      // Heuristic: a check whose id starts with "custom_" and isn't in
+      // enabledOptionalIds is treated as a mandatory custom check.
+      Object.keys(checkDefinitions).forEach(id => {
+        if (builtinIds.has(id)) return;
+        if (!id.startsWith('custom_')) return;
+        if (enabledOptionalIds.includes(id)) return; // already handled above
+        const def = checkDefinitions[id];
+        selectedChecks.push({ id, query: def.question || def.query || def.name || id });
+        builtinIds.add(id);
+      });
     }
   }
 
@@ -2733,10 +2749,10 @@ process.on('SIGTERM', () => {
   }
   _activeSSeClients.clear();
 
-  // Give in-flight responses a moment to flush, then exit
-  server.close(() => process.exit(0));
-  setTimeout(() => process.exit(0), 3000);
+  // CRITICAL: give writes a moment to flush before Render kills us
+  setTimeout(() => process.exit(0), 1000);
 });
+
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
