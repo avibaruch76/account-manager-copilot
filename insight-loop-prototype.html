@@ -4950,6 +4950,8 @@ function classifyScrapedTable(headers, data, headingLower) {
     return 'monthly';
   }
   if (/growth\s*lever/.test(h))                              return 'growth_levers';
+  // Studio analysis (custom check): per-studio summary table feeds Slide 3
+  if (/studio\s*analy/.test(h) || /by\s*studio/.test(h))     return 'studio_summary';
   if (/top\s*games|games\s*by\s*ggr|game\s*concentration/.test(h)) return 'top_games';
   if (/portfolio\s*gap|market\s*comparison|missing\s*hits/.test(h)) return 'tier_gap';
   if (/recently\s*launched|new\s*launch|new\s*games?\s*launched/.test(h)) return 'new_games';
@@ -4985,6 +4987,18 @@ function _rowToMonthly(r, idx) {
     players:         _toNum(_scrapedPick(r, 'players', 'active players')),
     mom_players:     null,
     ggr_per_player:  _toNum(_scrapedPick(r, 'ggr/player', 'ggr per player', 'rev/player')),
+  };
+}
+function _rowToStudioSummary(r) {
+  // Per-studio aggregate row (from a "Studio analysis" custom check).
+  return {
+    studio:           _scrapedPick(r, 'studio') ?? '',
+    games_released:   _toNum(_scrapedPick(r, 'games released', 'games', 'game count')),
+    total_bets:       _toNum(_scrapedPick(r, 'total bets', 'bets')),
+    bet_share_pct:    _toNum(_scrapedPick(r, 'bet share', 'bets share', 'share % bets')),
+    total_ggr:        _toNum(_scrapedPick(r, 'total ggr', 'ggr')),
+    ggr_share_pct:    _toNum(_scrapedPick(r, 'ggr share', 'share % ggr')),
+    bets_per_game:    _toNum(_scrapedPick(r, 'bets per game', 'bets/game')),
   };
 }
 function _rowToTopGame(r, idx) {
@@ -5064,6 +5078,7 @@ function buildScrapedPayload(scraped, displayName) {
   const slots = {
     monthly: [], top_games: [], growth_levers: [],
     tier_buckets: [], new_games: [], top_players: [], kpi_gap: [],
+    studio_summary: [],   // per-studio aggregate from "Studio analysis" check
     kpis_summary: null, promo: null, retention: null, segments: null, max_bet: null,
   };
   const claimed = {};   // slot → true once filled (so first match wins)
@@ -5087,6 +5102,7 @@ function buildScrapedPayload(scraped, displayName) {
     switch (cat) {
       case 'monthly':       slots.monthly       = cleanRows.map(_rowToMonthly); break;
       case 'top_games':     slots.top_games     = cleanRows.map(_rowToTopGame); break;
+      case 'studio_summary':slots.studio_summary= cleanRows.map(_rowToStudioSummary); break;
       case 'growth_levers': slots.growth_levers = cleanRows.map(_rowToGrowthLever); break;
       case 'tier_gap':      slots.tier_buckets.push(cleanRows.map(_rowToTierGap)); claimed[cat] = false; break;
       case 'new_games':     slots.new_games     = cleanRows.map(_rowToNewGame); break;
@@ -5135,6 +5151,7 @@ function buildScrapedPayload(scraped, displayName) {
       ggr_per_player:  totalPlayers ? +(totalGgr / totalPlayers).toFixed(2) : 0,
     },
     monthly:        slots.monthly,
+    studio_summary: slots.studio_summary,
     top_games:      slots.top_games,
     growth_levers:  slots.growth_levers,
     tier1_gap:      tier1,
