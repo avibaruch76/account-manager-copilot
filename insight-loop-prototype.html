@@ -4987,12 +4987,24 @@ function scrapeSectionFindingsFromDom() {
     let cur = h.nextElementSibling;
     while (cur && !/^H[1-6]$/.test(cur.tagName)) {
       const tag = cur.tagName;
-      // Skip elements that contain a <table> — the table is captured separately
-      // by scrapeTablesFromDom and its textContent shouldn't pollute the findings.
+      // Skip elements that contain a <table> — captured separately by
+      // scrapeTablesFromDom; its textContent shouldn't pollute findings.
       const containsTable = cur.querySelector ? !!cur.querySelector('table') : false;
-      if ((tag === 'P' || tag === 'UL' || tag === 'OL' || tag === 'DIV') && !containsTable) {
-        const t = cur.textContent.trim();
-        if (t) parts.push(t);
+      if (!containsTable) {
+        if (tag === 'UL' || tag === 'OL') {
+          // Expand each <li> as its own line so downstream renderers
+          // can keep them as separate bullet rows. textContent on a UL
+          // concatenates child <li> text with no separator, which is
+          // why a bulleted list collapsed into one big paragraph
+          // upstream — fixed here at the source.
+          cur.querySelectorAll('li').forEach(li => {
+            const t = li.textContent.trim();
+            if (t) parts.push(t);
+          });
+        } else if (tag === 'P' || tag === 'DIV') {
+          const t = cur.textContent.trim();
+          if (t) parts.push(t);
+        }
       }
       cur = cur.nextElementSibling;
     }
