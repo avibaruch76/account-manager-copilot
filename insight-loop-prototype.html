@@ -545,7 +545,10 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
 <!-- RESEARCH CONFIG PANEL                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div class="config-section" id="config-panel">
-  <div class="section-title">⚙️ Research Config</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:4px;">
+    <div class="section-title" style="margin:0;">⚙️ Research Config</div>
+    <button onclick="_agentSaveCurrent()" style="padding:8px 16px;background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">💾 Save as Agent</button>
+  </div>
   <div class="section-sub">Control what the agent researches. Mandatory checks always run. Optional checks are chosen by the agent when relevant.</div>
 
   <div class="config-intro">
@@ -6727,10 +6730,19 @@ function _agentLoad(id) {
   a.lastUsedAt = new Date().toISOString();
   a.useCount = (a.useCount || 0) + 1;
   _agentSave(list);
-  // Close modal + jump to Run Analysis
+  // Close modal + redirect to Research Config so the user sees the loaded checks.
   document.getElementById('agents-modal')?.remove();
-  showToast('✅ Loaded agent: ' + a.name);
-  document.querySelector('#run-btn')?.scrollIntoView({ behavior:'smooth', block:'center' });
+  showToast('✅ Loaded agent: ' + a.name + ' — review checks below');
+  const configNavLink = document.querySelector('.nav a[href="#config"]');
+  if (typeof showSection === 'function' && configNavLink) {
+    showSection('config', configNavLink);
+  }
+  setTimeout(() => {
+    const target = document.querySelector('#config-panel') ||
+                   document.querySelector('#config') ||
+                   configNavLink;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 80);
 }
 function _agentDelete(id) {
   const list = _agentList();
@@ -6852,7 +6864,7 @@ function _showAgentsModal() {
         <button onclick="document.getElementById('agents-modal').remove()" style="background:none;border:none;font-size:18px;color:#64748B;cursor:pointer;line-height:1;">✕</button>
       </div>
       <div style="font-size:11px;color:#94A3B8;margin-bottom:14px;">Saved check profiles — load one to apply its check configuration.</div>
-      <button onclick="_agentSaveCurrent()" style="margin-bottom:14px;padding:10px 14px;background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save current as new agent</button>
+      <div style="margin-bottom:14px;padding:10px 14px;background:#F8FAFC;border:1px dashed #E2E8F0;border-radius:8px;font-size:11px;color:#64748B;">💡 To save the current check configuration as a new agent, go to <strong>Research Config</strong> and click <strong>💾 Save as Agent</strong>.</div>
       <div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;">${rows}</div>
     </div>`;
   document.body.appendChild(modal);
