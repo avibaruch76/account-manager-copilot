@@ -2419,6 +2419,15 @@ async function runAnalysis(customPrompt, partialCheckIds) {
     displayName = names.length <= 3 ? names.join(', ') : names.slice(0,2).join(', ') + ' +' + (names.length-2) + ' more';
   }
 
+  // Pin the operator name globally + on the DOM header NOW, so every downstream
+  // pipeline (research-report, structured-checks, history save, Generate Deck)
+  // can read it back. Previously this was only set inside the structured branch
+  // — the new text-based pipeline returned early and "Unknown Operator" leaked
+  // through into history / exports.
+  window._lastDisplayName = displayName;
+  const _phn = document.getElementById('persona-header-name');
+  if (_phn) _phn.textContent = displayName;
+
   // SSE handles real-time progress — just a simple elapsed timer for backup
   const progressTimer = setInterval(() => {
     // Light nudge if SSE hasn't moved the bar yet
@@ -4278,6 +4287,13 @@ function confirmAndRun() {
   };
   const displayName = confirmedName;
 
+  // Pin operator name globally + on the DOM header IMMEDIATELY (see runAnalysis
+  // for full rationale — the text-based research pipeline returns early without
+  // ever assigning these, causing "Unknown Operator" leaks downstream).
+  window._lastDisplayName = displayName;
+  const _phn2 = document.getElementById('persona-header-name');
+  if (_phn2) _phn2.textContent = displayName;
+
   // Show progress overlay for the real analysis
   _analysisRunning = true;
   _analysisAbortController = new AbortController();
@@ -4878,9 +4894,10 @@ function scrapeTablesFromDom() {
     if (!title) title = `Table ${i + 1}`;
 
     out.push({
-      id:   'scraped_' + i,
-      name: title,
-      data: data,
+      id:      'scraped_' + i,
+      name:    title,
+      heading: title,           // explicit field for classifier
+      data:    data,
       columns: headers,
       finding: title,
     });
@@ -4897,32 +4914,62 @@ function _toNum(v) {
   return isNaN(n) ? 0 : n;
 }
 
+// Normalize header text: lowercase, strip currency symbols/parens, collapse whitespace
+// around punctuation like "GGR / Player (€)" → "ggr/player".
+function _normHeader(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\s*\(\s*[€$£]\s*\)\s*/g, '')   // drop "(€)" / "($)"
+    .replace(/\s*\/\s*/g, '/')                // "ggr / player" → "ggr/player"
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // Pick a value out of a row by trying multiple header substrings (case-insensitive).
+// Both the row keys and the needles are normalized so spacing/currency variants match.
 function _scrapedPick(row, ...needles) {
-  const keys = Object.keys(row);
+  const entries = Object.entries(row).map(([k, v]) => [_normHeader(k), v]);
   for (const needle of needles) {
-    const k = keys.find(k => k.toLowerCase().includes(needle.toLowerCase()));
-    if (k && row[k] !== '' && row[k] !== undefined) return row[k];
+    const n = _normHeader(needle);
+    const found = entries.find(([k]) => k === n) || entries.find(([k]) => k.includes(n));
+    if (found && found[1] !== '' && found[1] !== undefined) return found[1];
   }
   return undefined;
 }
 
-// Classify a scraped table by its headers; return one of the deck-payload slots
-// or null for "send to appendix".
-function classifyScrapedTable(headers, data) {
-  const norm = headers.map(h => String(h || '').toLowerCase().trim());
-  const has = (...kws) => kws.every(kw => norm.some(h => h.includes(kw)));
-  const any = (...kws) => kws.some(kw => norm.some(h => h.includes(kw)));
+// Classify a scraped table — heading-based PRIMARY, column-based fallback.
+// `headingLower` is the section heading text immediately above the table.
+function classifyScrapedTable(headers, data, headingLower) {
+  const h = String(headingLower || '').toLowerCase();
+  const norm = headers.map(c => _normHeader(c));
+  const has = (...kws) => kws.every(kw => norm.some(n => n.includes(kw)));
+  const any = (...kws) => kws.some(kw => norm.some(n => n.includes(kw)));
 
-  if (has('month')   && any('bets') && any('ggr')) return 'monthly';
-  if (has('kpi')     && any('total','q1','q2','q3','q4','jan','feb','mar','value')) return 'kpis_summary';
-  if (has('kpi')     && any('gap','market leader','leader')) return 'kpi_gap';
-  if (any('round type') || any('free round') || any('promo')) return 'promo';
-  if (has('game')    && any('studio') && any('share')) return 'top_games';
-  if (has('game')    && any('benchmark','avg players','gap')) return 'growth_levers';
-  if (has('game')    && any('rank') && any('priority','tier','market')) return 'tier_gap';
-  if (has('game')    && any('launch','status')) return 'new_games';
-  if (any('player')  && any('bets') && any('rounds')) return 'top_players';
+  // ---- Heading-based PRIMARY classification (most reliable) ----
+  if (/executive\s*summary|brand\s*growing|performance\s*review|monthly\s*performance/.test(h)) {
+    return 'monthly';
+  }
+  if (/growth\s*lever/.test(h))                              return 'growth_levers';
+  if (/top\s*games|games\s*by\s*ggr|game\s*concentration/.test(h)) return 'top_games';
+  if (/portfolio\s*gap|market\s*comparison|missing\s*hits/.test(h)) return 'tier_gap';
+  if (/recently\s*launched|new\s*launch|new\s*games?\s*launched/.test(h)) return 'new_games';
+  if (/top\s*players|vip|revenue\s*concentration|high.{0,3}value/.test(h)) return 'top_players';
+  if (/promo|free\s*round/.test(h))                          return 'promo';
+  if (/kpi\s*gap|per.player\s*kpi|engagement\s*depth/.test(h)) return 'kpi_gap';
+  if (/retention/.test(h))                                   return 'retention';
+  if (/segmentation|player\s*mix/.test(h))                   return 'segments';
+  if (/max\s*bet|high.stake/.test(h))                        return 'max_bet';
+  if (/action\s*item|recommended/.test(h))                   return 'actions';
+
+  // ---- Column-based FALLBACK (in case heading is missing or generic) ----
+  if (has('month') && any('bets') && any('ggr'))            return 'monthly';
+  if (has('kpi')   && any('total','jan','feb','mar','value')) return 'kpis_summary';
+  if (has('kpi')   && any('gap','market leader','leader'))  return 'kpi_gap';
+  if (has('game')  && any('studio') && any('share'))        return 'top_games';
+  if (has('game')  && any('benchmark','avg players','gap')) return 'growth_levers';
+  if (has('game')  && any('rank') && any('priority','tier','market')) return 'tier_gap';
+  if (has('game')  && any('launch','status'))               return 'new_games';
+  if (any('player') && any('bets') && any('rounds'))        return 'top_players';
   return null;
 }
 
@@ -5003,28 +5050,54 @@ function _rowToKpiGap(r) {
   };
 }
 
+// Detect a "TOTAL" / "Average" / "Subtotal" footer row that shouldn't end up in monthly bars.
+function _isAggregateRow(row) {
+  if (!row || typeof row !== 'object') return false;
+  const firstVal = Object.values(row)[0];
+  return /^\s*(total|subtotal|average|grand\s*total|all\s*months?)\s*$/i.test(String(firstVal || ''));
+}
+
 // Build a deck payload from scraped tables (text-pipeline fallback).
+// First match wins per slot — so the canonical (Executive Summary) table beats
+// any later monthly-shaped tables further down the page.
 function buildScrapedPayload(scraped, displayName) {
   const slots = {
     monthly: [], top_games: [], growth_levers: [],
     tier_buckets: [], new_games: [], top_players: [], kpi_gap: [],
-    kpis_summary: null, promo: null,
+    kpis_summary: null, promo: null, retention: null, segments: null, max_bet: null,
   };
+  const claimed = {};   // slot → true once filled (so first match wins)
   const unclassified = [];
 
   scraped.forEach(t => {
-    const cat = classifyScrapedTable(t.columns || [], t.data);
+    const cat = classifyScrapedTable(t.columns || [], t.data, t.heading || t.name || '');
+    if (!cat || claimed[cat]) {
+      // already filled OR unclassified → push to appendix
+      if (!cat || cat === 'kpis_summary' || cat === 'retention' || cat === 'segments' || cat === 'max_bet') {
+        // For slots we don't render structurally yet, the table goes to appendix as-is
+        if (claimed[cat]) unclassified.push(t);
+        else unclassified.push(t);
+      } else {
+        unclassified.push(t);
+      }
+      return;
+    }
+    claimed[cat] = true;
+    const cleanRows = t.data.filter(r => !_isAggregateRow(r));
     switch (cat) {
-      case 'monthly':       slots.monthly       = t.data.map(_rowToMonthly); break;
-      case 'top_games':     slots.top_games     = t.data.map(_rowToTopGame); break;
-      case 'growth_levers': slots.growth_levers = t.data.map(_rowToGrowthLever); break;
-      case 'tier_gap':      slots.tier_buckets.push(t.data.map(_rowToTierGap)); break;
-      case 'new_games':     slots.new_games     = t.data.map(_rowToNewGame); break;
-      case 'top_players':   slots.top_players   = t.data.map(_rowToTopPlayer); break;
-      case 'kpi_gap':       slots.kpi_gap       = t.data.map(_rowToKpiGap); break;
-      case 'kpis_summary':  slots.kpis_summary  = t.data; break;
-      case 'promo':         slots.promo         = t.data; break;
-      default: unclassified.push(t);
+      case 'monthly':       slots.monthly       = cleanRows.map(_rowToMonthly); break;
+      case 'top_games':     slots.top_games     = cleanRows.map(_rowToTopGame); break;
+      case 'growth_levers': slots.growth_levers = cleanRows.map(_rowToGrowthLever); break;
+      case 'tier_gap':      slots.tier_buckets.push(cleanRows.map(_rowToTierGap)); claimed[cat] = false; break;
+      case 'new_games':     slots.new_games     = cleanRows.map(_rowToNewGame); break;
+      case 'top_players':   slots.top_players   = cleanRows.map(_rowToTopPlayer); break;
+      case 'kpi_gap':       slots.kpi_gap       = cleanRows.map(_rowToKpiGap); break;
+      case 'kpis_summary':  slots.kpis_summary  = cleanRows; break;
+      case 'promo':         slots.promo         = cleanRows; break;
+      case 'retention':     slots.retention     = cleanRows; break;
+      case 'segments':      slots.segments      = cleanRows; break;
+      case 'max_bet':       slots.max_bet       = cleanRows; break;
+      default: unclassified.push(t); claimed[cat] = false;
     }
   });
 
@@ -6162,9 +6235,13 @@ function _pptxEsc(str) {
 function _saveAnalysisHistory() {
   const cr = document.getElementById('check-results');
   if (!cr || !cr.innerHTML.trim()) return;
-  const operator = document.getElementById('persona-header-name')?.textContent?.trim()
-    || window._lastDisplayName
+  // Hardened operator-name capture. Try every plausible source before giving up.
+  const operator =
+       window._lastDisplayName
+    || document.getElementById('persona-header-name')?.textContent?.trim()
     || (_runSession && _runSession.entity)
+    || (typeof getOperatorNameFromDom === 'function' ? getOperatorNameFromDom() : null)
+    || (window._confirmationSelection && (window._confirmationSelection.entity || (Array.isArray(window._confirmationSelection.values) && window._confirmationSelection.values.join(', '))))
     || 'Unknown Operator';
   const latestRun = _runSession?.runs?.length ? _runSession.runs[_runSession.runs.length - 1] : null;
   const checkNames = latestRun?.checkIds?.length
