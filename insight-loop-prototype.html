@@ -4838,13 +4838,31 @@ function getOperatorNameFromDom() {
   if (persona) return persona;
   if (window._lastDisplayName) return window._lastDisplayName;
 
-  // Filter chip (operator selection)
-  const chip = document.querySelector('#operator-chips .chip, .filter-chip, [class*="chip"]');
-  if (chip) {
-    const t = chip.textContent.trim().replace(/\s*\(\d+[^)]*\)/, '').replace(/[✕×]/g, '').trim();
-    if (t) return t;
+  // Reject obvious *summary* chips like "1 operator, 1 account" / "All Portfolio"
+  const isSummaryText = (t) =>
+    /^\d+\s+(operator|account|brand)s?\b/i.test(t) ||
+    /^all\s+portfolio$/i.test(t) ||
+    /^select\s+/i.test(t);
+
+  // Filter chip (operator selection) — try multiple selectors, skip summary chips
+  const chipCandidates = document.querySelectorAll(
+    '#operator-chips .chip, ' +
+    '#dd-operator .chip, ' +
+    '.filter-chip, ' +
+    '#filter-chips > *, ' +
+    '[id*="chip" i]'
+  );
+  for (const chip of chipCandidates) {
+    const raw = chip.textContent.trim();
+    const cleaned = raw.replace(/\s*\(\d+[^)]*\)\s*/g, '')
+                       .replace(/[✕×]/g, '')
+                       .trim();
+    if (cleaned && cleaned.length < 80 && !isSummaryText(cleaned)) {
+      return cleaned;
+    }
   }
-  // First heading of the rendered check results — pattern "Operator — Title"
+
+  // Heading of the rendered analysis — pattern "Operator — Title"
   const cr = document.getElementById('check-results');
   if (cr) {
     const heading = cr.querySelector('h1, h2, h3, h4');
@@ -4854,12 +4872,43 @@ function getOperatorNameFromDom() {
       if (m && m[1].length < 80) return m[1].trim();
     }
   }
+
   // Operator selector dropdown current value
   const sel = document.querySelector('select[id*="operator" i], select[name*="operator" i]');
   if (sel && sel.options[sel.selectedIndex]?.text) {
     return sel.options[sel.selectedIndex].text.trim();
   }
+
   return 'Account';
+}
+
+// Walk #check-results and grab the FINDINGS text from each numbered/headed section.
+// Used to surface narrative findings (like "No promo rounds detected") even when
+// a section has no tabular data. Returns a list of {heading, text} pairs.
+function scrapeSectionFindingsFromDom() {
+  const cr = document.getElementById('check-results');
+  if (!cr) return [];
+  const out = [];
+  // Sections are typically opened by an h-tag. Grab heading + the few text
+  // paragraphs that follow it (until the next heading or end).
+  const headings = cr.querySelectorAll('h1, h2, h3, h4, h5');
+  headings.forEach(h => {
+    const heading = h.textContent.trim();
+    if (!heading) return;
+    // Walk siblings until the next heading; collect short text content
+    const parts = [];
+    let cur = h.nextElementSibling;
+    while (cur && !/^H[1-6]$/.test(cur.tagName)) {
+      const tag = cur.tagName;
+      if (tag === 'P' || tag === 'UL' || tag === 'OL' || tag === 'DIV') {
+        const t = cur.textContent.trim();
+        if (t) parts.push(t);
+      }
+      cur = cur.nextElementSibling;
+    }
+    out.push({ heading, text: parts.join('\n').slice(0, 1200) });
+  });
+  return out;
 }
 
 // Walk #check-results HTML and extract every <table> as a structured object.
@@ -4946,22 +4995,28 @@ function classifyScrapedTable(headers, data, headingLower) {
   const any = (...kws) => kws.some(kw => norm.some(n => n.includes(kw)));
 
   // ---- Heading-based PRIMARY classification (most reliable) ----
-  if (/executive\s*summary|brand\s*growing|performance\s*review|monthly\s*performance/.test(h)) {
+  // Generous regexes so the classifier catches naming variations.
+  if (/executive\s*summary|brand\s*growing|performance\s*review|monthly\s*performance|is\s*the\s*brand/.test(h)) {
     return 'monthly';
   }
-  if (/growth\s*lever/.test(h))                              return 'growth_levers';
-  // Studio analysis (custom check): per-studio summary table feeds Slide 3
-  if (/studio\s*analy/.test(h) || /by\s*studio/.test(h))     return 'studio_summary';
+  if (/growth\s*lever|hidden\s*gem|under(weight|expos|reach)/.test(h)) return 'growth_levers';
+  // Studio: matches "Studio Summary", "Studio Analysis", "Studio Analyis" (typo),
+  // "Studio Mix", "By Studio", "Per Studio".
+  if (/\bstudio\b/.test(h) && !/\bgame\b/.test(h.replace(/studio/g, ''))) return 'studio_summary';
   if (/top\s*games|games\s*by\s*ggr|game\s*concentration/.test(h)) return 'top_games';
-  if (/portfolio\s*gap|market\s*comparison|missing\s*hits/.test(h)) return 'tier_gap';
-  if (/recently\s*launched|new\s*launch|new\s*games?\s*launched/.test(h)) return 'new_games';
-  if (/top\s*players|vip|revenue\s*concentration|high.{0,3}value/.test(h)) return 'top_players';
-  if (/promo|free\s*round/.test(h))                          return 'promo';
-  if (/kpi\s*gap|per.player\s*kpi|engagement\s*depth/.test(h)) return 'kpi_gap';
+  if (/portfolio\s*gap|market\s*comparison|missing\s*hits|tier\s*[12]/.test(h)) return 'tier_gap';
+  // New games: catches "Recently Launched", "New Games Launched", "Latest Game
+  // Releases", "Adoption Check", "Recent Releases".
+  if (/(recently|new|latest|recent).*(launch|release)|adoption\s*check|game\s*release/.test(h)) return 'new_games';
+  if (/top\s*players|\bvip\b|revenue\s*concentration|high.{0,3}value/.test(h)) return 'top_players';
+  if (/\bpromo|free\s*round|promotional/.test(h))           return 'promo';
+  // KPI gap: catches "KPI Gap", "Per-Player KPI Gap", "Per Player KPI",
+  // "Performance vs Market", "Benchmark Comparison".
+  if (/kpi.*(gap|compar|leader|benchmark)|per.?player.*kpi|engagement\s*depth|(vs\.?|versus)\s*(market|leader)/.test(h)) return 'kpi_gap';
   if (/retention/.test(h))                                   return 'retention';
-  if (/segmentation|player\s*mix/.test(h))                   return 'segments';
+  if (/segmentation|player\s*mix|player\s*segment/.test(h))  return 'segments';
   if (/max\s*bet|high.stake/.test(h))                        return 'max_bet';
-  if (/action\s*item|recommended/.test(h))                   return 'actions';
+  if (/action\s*item|recommended\s*action|next\s*step/.test(h)) return 'actions';
 
   // ---- Column-based FALLBACK (in case heading is missing or generic) ----
   if (has('month') && any('bets') && any('ggr'))            return 'monthly';
@@ -5180,13 +5235,24 @@ async function generateDeck() {
   if (data && Array.isArray(data.checks) && data.checks.length) {
     payload = buildDeckPayload(data, displayName);
   } else {
-    const scraped = scrapeTablesFromDom();
-    if (!scraped.length) {
+    const scraped  = scrapeTablesFromDom();
+    const findings = scrapeSectionFindingsFromDom();
+    if (!scraped.length && !findings.length) {
       showToast('⚠️ No analysis to send. Run an analysis first.', true);
       return;
     }
     payload = buildScrapedPayload(scraped, displayName);
     mode = 'scraped';
+
+    // Attach findings keyed by classified slot — so even text-only sections
+    // (e.g. "No promo rounds detected") can drive a slide narrative.
+    payload.findings_by_slot = {};
+    findings.forEach(f => {
+      const cat = classifyScrapedTable([], [], f.heading);
+      if (!cat) return;
+      payload.findings_by_slot[cat] = (payload.findings_by_slot[cat] ?
+        payload.findings_by_slot[cat] + '\n\n' : '') + f.text;
+    });
   }
 
   if (window.console) {
@@ -5194,10 +5260,14 @@ async function generateDeck() {
     if (mode === 'scraped') {
       console.log('Slot counts:',
         'monthly=' + payload.monthly.length,
+        'studio_summary=' + (payload.studio_summary?.length || 0),
         'top_games=' + payload.top_games.length,
+        'growth_levers=' + payload.growth_levers.length,
         'tier1=' + payload.tier1_gap.length,
         'tier2=' + payload.tier2_gap.length,
         'top_players=' + payload.top_players.length,
+        'kpi_gap=' + payload.kpi_gap.length,
+        'new_games=' + payload.new_games.length,
         'appendix=' + payload.appendix.length);
     }
   }
