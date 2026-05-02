@@ -4902,32 +4902,39 @@ function scrapeActionsFromDom() {
   const heading = headings.find(h => actionHeadingRx.test(h.textContent));
   if (!heading) return [];
 
-  // Walk forward from the heading; collect text until next heading.
-  const buf = [];
+  // Walk forward from the heading. Collect items into TWO streams:
+  //   liItems — text from <li> children of <ol>/<ul> (already a numbered item by
+  //              structure; the digit prefix lives on the marker, not the text).
+  //   pTexts  — raw text from <p>/<div>; may contain inline "1. ... 2. ..." runs.
+  const liItems = [];
+  const pTexts  = [];
   let cur = heading.nextElementSibling;
   while (cur && !/^H[1-6]$/.test(cur.tagName)) {
     if (cur.tagName === 'OL' || cur.tagName === 'UL') {
-      cur.querySelectorAll('li').forEach(li => buf.push(li.textContent.trim()));
+      cur.querySelectorAll('li').forEach(li => {
+        const t = li.textContent.trim();
+        if (t) liItems.push(t);
+      });
     } else if (cur.tagName === 'P' || cur.tagName === 'DIV') {
-      // Paragraphs may contain "1.Foo bar\n2.Baz qux" inline — split on leading numbers
-      const txt = cur.textContent.trim();
-      if (txt) buf.push(txt);
+      const t = cur.textContent.trim();
+      if (t) pTexts.push(t);
     }
     cur = cur.nextElementSibling;
   }
 
-  // Flatten any inline-numbered paragraphs into one item per number.
-  const flat = [];
-  buf.forEach(chunk => {
-    // Split before "1.", "2.", etc. that appear at line starts or after newlines
-    const parts = chunk.split(/(?:^|\n)\s*(?=\d+\.\s*[A-Z])/);
-    parts.forEach(p => {
+  // Flatten any inline-numbered paragraph runs into one item per number,
+  // then keep ONLY items that start with "N." (the prelude lines won't).
+  const numberedFromP = [];
+  pTexts.forEach(chunk => {
+    chunk.split(/(?:^|\n)\s*(?=\d+\.\s*[A-Z])/).forEach(p => {
       const t = p.trim();
-      if (t) flat.push(t);
+      if (/^\d+\./.test(t)) numberedFromP.push(t.replace(/^\d+\.\s*/, ''));
     });
   });
 
-  // Normalise: strip leading "N." or "N." prefix; classify priority by keywords.
+  // All candidate items (li already number-stripped by structure).
+  const candidates = [...liItems, ...numberedFromP];
+
   const PRIO_RULES = [
     [/critical|massive|zero\b|#?\s*[12](?:st|nd)?\b|top\s*[12]\b|biggest\s*gap/i, 'CRITICAL'],
     [/high|top\s*5\b|top\s*10\b|fast.{0,3}rising/i,                              'HIGH'],
@@ -4940,28 +4947,25 @@ function scrapeActionsFromDom() {
   };
 
   const actions = [];
-  flat.forEach(item => {
-    // Skip prelude lines that are NOT numbered (e.g. "For your call with X:" / colon endings).
-    if (!/^\d+\.\s/.test(item.trim())) return;
-    let cleaned = item.replace(/^\d+\.\s*/, '').trim();
+  candidates.forEach(item => {
+    const cleaned = item.trim();
     if (!cleaned) return;
-    // Skip cleaned items that look like a heading (end in colon, no real content)
+    // Skip "For your call with X:" type prelude lines accidentally captured.
     if (/^[^.!?]{2,80}:\s*$/.test(cleaned)) return;
-    // Split on first em/en dash (or " - ") into title vs rationale
+    // Split on first em/en dash into title vs rationale
     const m = cleaned.match(/^(.+?)\s*[—–\-]\s*(.+)$/);
     let title, rationale;
     if (m) {
       title = m[1].trim();
       rationale = m[2].trim();
     } else {
-      // No dash — use first sentence as title
       const sm = cleaned.match(/^([^.!?]+[.!?])\s*(.+)?$/);
       if (sm) { title = sm[1].trim(); rationale = (sm[2] || '').trim(); }
       else    { title = cleaned.slice(0, 80); rationale = cleaned; }
     }
-    actions.push({ title, priority: detectPriority(item), rationale });
+    actions.push({ title, priority: detectPriority(cleaned), rationale });
   });
-  return actions.slice(0, 6);   // slide 13 fits up to 5 (6th becomes overflow)
+  return actions.slice(0, 6);
 }
 
 // Walk #check-results and grab the FINDINGS text from each numbered/headed section.
@@ -5361,6 +5365,14 @@ function buildScrapedPayload(scraped, displayName) {
     top_players:    slots.top_players,
     vip_data_available: slots.top_players.length > 0,
     kpi_gap:        slots.kpi_gap,
+    // Pass-through slots that the deck-service renders structurally as tables.
+    // Each row is the raw scraped object {colName: cellText, ...} — slide_9
+    // auto-derives column headers from the first row's keys.
+    promo:          slots.promo || [],
+    retention:      slots.retention || [],
+    segments:       slots.segments || [],
+    max_bet:        slots.max_bet || [],
+    kpis_summary:   slots.kpis_summary || [],
     actions:        [],
     next_30_days:   [],
     appendix:       unclassified.map(t => ({
