@@ -4882,6 +4882,76 @@ function getOperatorNameFromDom() {
   return 'Account';
 }
 
+// Walk #check-results and extract the Action Items section as structured cards.
+// Returns array of {title, priority, rationale} ready for slide 13.
+function scrapeActionsFromDom() {
+  const cr = document.getElementById('check-results');
+  if (!cr) return [];
+
+  // Find a heading that looks like the Action Items / Recommended Actions section.
+  const headings = [...cr.querySelectorAll('h1,h2,h3,h4,h5')];
+  const actionHeadingRx = /action\s*items?(?:\s+for\s+call)?|recommended\s+action|account\s*manager.*action/i;
+  const heading = headings.find(h => actionHeadingRx.test(h.textContent));
+  if (!heading) return [];
+
+  // Walk forward from the heading; collect text until next heading.
+  const buf = [];
+  let cur = heading.nextElementSibling;
+  while (cur && !/^H[1-6]$/.test(cur.tagName)) {
+    if (cur.tagName === 'OL' || cur.tagName === 'UL') {
+      cur.querySelectorAll('li').forEach(li => buf.push(li.textContent.trim()));
+    } else if (cur.tagName === 'P' || cur.tagName === 'DIV') {
+      // Paragraphs may contain "1.Foo bar\n2.Baz qux" inline — split on leading numbers
+      const txt = cur.textContent.trim();
+      if (txt) buf.push(txt);
+    }
+    cur = cur.nextElementSibling;
+  }
+
+  // Flatten any inline-numbered paragraphs into one item per number.
+  const flat = [];
+  buf.forEach(chunk => {
+    // Split before "1.", "2.", etc. that appear at line starts or after newlines
+    const parts = chunk.split(/(?:^|\n)\s*(?=\d+\.\s*[A-Z])/);
+    parts.forEach(p => {
+      const t = p.trim();
+      if (t) flat.push(t);
+    });
+  });
+
+  // Normalise: strip leading "N." or "N." prefix; classify priority by keywords.
+  const PRIO_RULES = [
+    [/critical|massive|zero\b|#?\s*[12](?:st|nd)?\b|top\s*[12]\b|biggest\s*gap/i, 'CRITICAL'],
+    [/high|top\s*5\b|top\s*10\b|fast.{0,3}rising/i,                              'HIGH'],
+    [/medium|moderate/i,                                                         'MEDIUM'],
+    [/monitor|watch/i,                                                           'MONITOR'],
+  ];
+  const detectPriority = (text) => {
+    for (const [rx, p] of PRIO_RULES) if (rx.test(text)) return p;
+    return 'HIGH';
+  };
+
+  const actions = [];
+  flat.forEach(item => {
+    let cleaned = item.replace(/^\d+\.\s*/, '').trim();
+    if (!cleaned) return;
+    // Split on first em/en dash (or " - ") into title vs rationale
+    const m = cleaned.match(/^(.+?)\s*[—–\-]\s*(.+)$/);
+    let title, rationale;
+    if (m) {
+      title = m[1].trim();
+      rationale = m[2].trim();
+    } else {
+      // No dash — use first sentence as title
+      const sm = cleaned.match(/^([^.!?]+[.!?])\s*(.+)?$/);
+      if (sm) { title = sm[1].trim(); rationale = (sm[2] || '').trim(); }
+      else    { title = cleaned.slice(0, 80); rationale = cleaned; }
+    }
+    actions.push({ title, priority: detectPriority(item), rationale });
+  });
+  return actions.slice(0, 6);   // slide 13 fits up to 5 (6th becomes overflow)
+}
+
 // Walk #check-results and grab the FINDINGS text from each numbered/headed section.
 // Used to surface narrative findings (like "No promo rounds detected") even when
 // a section has no tabular data. Returns a list of {heading, text} pairs.
@@ -5272,6 +5342,13 @@ async function generateDeck() {
       payload.findings_by_slot[cat] = (payload.findings_by_slot[cat] ?
         payload.findings_by_slot[cat] + '\n\n' : '') + f.text;
     });
+
+    // Pull actions from the "Account Manager Action Items" section (text/list,
+    // not a table — scrapeTablesFromDom can't see it).
+    const scrapedActions = scrapeActionsFromDom();
+    if (scrapedActions.length) {
+      payload.actions = scrapedActions;
+    }
   }
 
   if (window.console) {
@@ -5287,6 +5364,7 @@ async function generateDeck() {
         'top_players=' + payload.top_players.length,
         'kpi_gap=' + payload.kpi_gap.length,
         'new_games=' + payload.new_games.length,
+        'actions=' + (payload.actions?.length || 0),
         'appendix=' + payload.appendix.length);
     }
   }
