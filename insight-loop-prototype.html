@@ -776,7 +776,7 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
         <button onclick="downloadAnalysisPDF()" style="padding:7px 14px;background:#1E2761;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ PDF</button>
         <button onclick="downloadAnalysisWord()" style="padding:7px 14px;background:#1D6A39;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ Word</button>
         <button onclick="openPresentationBuilder()" id="pptx-btn" style="padding:7px 14px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">✦ Create Presentation</button>
-        <button onclick="generateDeck()" id="generate-deck-btn" style="padding:7px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">🎯 Generate Deck</button>
+        <button onclick="generateDeck()" id="generate-deck-btn" class="js-generate-deck-btn" style="padding:7px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">📊 Generate QBR Presentation</button>
       </div>
     </div>
   </div>
@@ -4139,7 +4139,7 @@ function renderDataAnalystView(checks, data, displayName, dateStr) {
   html += `</div>`;
   html += `<div style="display:flex;gap:8px;">`;
   html += `<button onclick="generateWordReport()" style="background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Download Word</button>`;
-  html += `<button onclick="generateDeck()" style="background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🎯 Generate Deck</button>`;
+  html += `<button onclick="generateDeck()" class="js-generate-deck-btn" style="background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${typeof _currentDeckButtonLabel === 'function' ? _currentDeckButtonLabel() : '📊 Generate QBR Presentation'}</button>`;
   html += `</div>`;
   html += `</div>`;
 
@@ -6518,7 +6518,7 @@ function _renderAnalysesTab() {
 function _renderPresentationsTab() {
   const history = JSON.parse(localStorage.getItem('deck_history') || '[]');
   if (!history.length) {
-    return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No presentations yet — click 🎯 Generate Deck to save one here.</div>';
+    return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No presentations yet — click 📊 Generate Presentation to save one here.</div>';
   }
   const byOp = {};
   history.forEach(e => { const k = e.operator || 'Unknown Operator'; (byOp[k] = byOp[k] || []).push(e); });
@@ -6708,6 +6708,33 @@ function _agentSeedDefaultIfEmpty() {
   });
   _agentSave(list);
 }
+// ── Active agent + dynamic Generate button label ─────────────────
+function _activeAgentName() {
+  // Returns the active agent's display name with trailing "Agent" stripped.
+  // Falls back to "QBR" when no agent has been seeded yet.
+  let list = JSON.parse(localStorage.getItem('check_agents') || '[]');
+  if (!list.length && typeof _agentSeedDefaultIfEmpty === 'function') {
+    _agentSeedDefaultIfEmpty();
+    list = JSON.parse(localStorage.getItem('check_agents') || '[]');
+  }
+  const id = localStorage.getItem('last_loaded_agent_id');
+  const a = (id && list.find(x => x.id === id)) || list[0] || null;
+  if (!a) return 'QBR';
+  return (a.name || '').replace(/\s*Agent\s*$/i, '').trim() || a.name || 'QBR';
+}
+function _currentDeckButtonLabel() {
+  return '📊 Generate ' + _activeAgentName() + ' Presentation';
+}
+function _updateGenerateButtonLabel() {
+  const label = _currentDeckButtonLabel();
+  document.querySelectorAll('.js-generate-deck-btn').forEach(btn => { btn.textContent = label; });
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { try { _updateGenerateButtonLabel(); } catch(_){} });
+} else {
+  setTimeout(() => { try { _updateGenerateButtonLabel(); } catch(_){} }, 50);
+}
+
 function _agentCounts(checks) {
   const arr = Array.isArray(checks) ? checks : [];
   const m = arr.filter(c => c.type === 'mandatory').length;
@@ -6726,10 +6753,12 @@ function _agentLoad(id) {
   _checks = JSON.parse(JSON.stringify(a.checks));
   if (typeof saveChecks === 'function') saveChecks();
   if (typeof renderCheckLists === 'function') renderCheckLists();
-  // Update usage stats
+  // Update usage stats + remember as the active agent for the deck button label
   a.lastUsedAt = new Date().toISOString();
   a.useCount = (a.useCount || 0) + 1;
   _agentSave(list);
+  localStorage.setItem('last_loaded_agent_id', a.id);
+  if (typeof _updateGenerateButtonLabel === 'function') _updateGenerateButtonLabel();
   // Close modal + redirect to Research Config so the user sees the loaded checks.
   document.getElementById('agents-modal')?.remove();
   showToast('✅ Loaded agent: ' + a.name + ' — review checks below');
@@ -6750,6 +6779,7 @@ function _agentDelete(id) {
   if (!a) return;
   if (!confirm('Delete agent "' + a.name + '"? This cannot be undone.')) return;
   _agentSave(list.filter(e => e.id !== id));
+  if (typeof _updateGenerateButtonLabel === 'function') _updateGenerateButtonLabel();
   _showAgentsModal();
 }
 function _agentRename(id) {
@@ -6826,6 +6856,7 @@ function _agentSaveCommit() {
   _agentSave(list);
   document.getElementById('save-agent-modal')?.remove();
   showToast('✅ Agent saved: ' + name);
+  if (typeof _updateGenerateButtonLabel === 'function') _updateGenerateButtonLabel();
   _showAgentsModal();
 }
 function _showAgentsModal() {
