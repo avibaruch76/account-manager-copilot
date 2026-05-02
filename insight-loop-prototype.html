@@ -4965,7 +4965,8 @@ function scrapeActionsFromDom() {
     }
     actions.push({ title, priority: detectPriority(cleaned), rationale });
   });
-  return actions.slice(0, 6);
+  // Pass through up to 12 — the deck flexibly fits whatever comes in.
+  return actions.slice(0, 12);
 }
 
 // Walk #check-results and grab the FINDINGS text from each numbered/headed section.
