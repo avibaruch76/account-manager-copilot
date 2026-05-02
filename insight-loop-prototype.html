@@ -5122,9 +5122,14 @@ function classifyScrapedTable(headers, data, headingLower) {
   if (/monthly\s*studio|studio\s*monthly|monthly.*by\s*studio|studio.*monthly\s*performance/.test(h)) {
     return 'monthly_by_studio';
   }
-  if (/executive\s*summary|brand\s*growing|performance\s*review|monthly\s*performance|is\s*the\s*brand/.test(h)) {
+  // "Executive Summary" intentionally NOT in this regex — it's an intro
+  // section, not the monthly-trend table. Letting it match here used to
+  // claim the 'monthly' slot before the real "Monthly Performance Trend"
+  // table arrived, pushing the trend table to appendix.
+  if (/brand\s*growing|performance\s*review|monthly\s*performance|monthly.*trend|is\s*the\s*brand/.test(h)) {
     return 'monthly';
   }
+  if (/executive\s*summary/.test(h)) return 'kpis_summary';
   if (/growth\s*lever|hidden\s*gem|under(weight|expos|reach)/.test(h)) return 'growth_levers';
   // Studio: matches "Studio Summary", "Studio Analysis", "Studio Analyis" (typo),
   // "Studio Mix", "By Studio", "Per Studio".
@@ -5437,6 +5442,7 @@ async function generateDeck() {
     if (mode === 'scraped') {
       console.log('Slot counts:',
         'monthly=' + payload.monthly.length,
+        'monthly_by_studio=' + (payload.monthly_by_studio?.length || 0),
         'studio_summary=' + (payload.studio_summary?.length || 0),
         'top_games=' + payload.top_games.length,
         'growth_levers=' + payload.growth_levers.length,
@@ -5445,6 +5451,11 @@ async function generateDeck() {
         'top_players=' + payload.top_players.length,
         'kpi_gap=' + payload.kpi_gap.length,
         'new_games=' + payload.new_games.length,
+        'promo=' + (payload.promo?.length || 0),
+        'retention=' + (payload.retention?.length || 0),
+        'segments=' + (payload.segments?.length || 0),
+        'max_bet=' + (payload.max_bet?.length || 0),
+        'kpis_summary=' + (payload.kpis_summary?.length || 0),
         'actions=' + (payload.actions?.length || 0),
         'appendix=' + payload.appendix.length);
     }
