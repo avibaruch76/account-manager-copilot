@@ -4931,15 +4931,34 @@ function scrapeTablesFromDom() {
     }).filter(r => Object.values(r).some(v => v));
     if (!data.length) return;
 
-    // Try to find a contextual title — nearest preceding heading or strong/h-element
-    let title = '';
-    let prev = t.previousElementSibling;
-    while (prev && !title) {
-      if (/^H[1-6]$/.test(prev.tagName) || prev.tagName === 'STRONG') {
-        title = prev.textContent.trim().slice(0, 80);
+    // Find the nearest preceding heading. Walk up parents AND back through
+    // siblings, because rendered analyses often nest tables inside wrappers
+    // (cards, divs, sections) where the heading is not a direct sibling.
+    function _findHeadingFor(el) {
+      let cur = el;
+      const SAFETY = 200;   // never walk forever
+      let steps = 0;
+      while (cur && steps++ < SAFETY) {
+        // Walk back through previous siblings of `cur`
+        let p = cur.previousElementSibling;
+        while (p) {
+          // Direct heading tag
+          if (/^H[1-6]$/.test(p.tagName)) {
+            return p.textContent.trim().slice(0, 120);
+          }
+          // Heading nested inside this sibling (search descendants)
+          const nested = p.querySelector ? p.querySelector('h1, h2, h3, h4, h5, h6') : null;
+          if (nested) {
+            return nested.textContent.trim().slice(0, 120);
+          }
+          p = p.previousElementSibling;
+        }
+        cur = cur.parentElement;
+        if (!cur || cur.id === 'check-results' || cur.tagName === 'BODY') break;
       }
-      prev = prev.previousElementSibling;
+      return '';
     }
+    let title = _findHeadingFor(t);
     if (!title) title = `Table ${i + 1}`;
 
     out.push({
