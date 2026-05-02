@@ -767,6 +767,7 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">
     <div class="section-title" style="margin:0">📊 Analysis Results</div>
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <button onclick="_showAgentsModal()" style="padding:7px 14px;background:#F1F5F9;color:#475569;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">🤖 Agents</button>
       <button onclick="_showAnalysisHistory()" style="padding:7px 14px;background:#F1F5F9;color:#475569;border:1.5px solid #E2E8F0;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">📋 History</button>
       <div id="download-btns" style="display:none;gap:8px;">
         <button onclick="downloadAnalysisPDF()" style="padding:7px 14px;background:#1E2761;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ PDF</button>
@@ -6674,6 +6675,187 @@ function _deleteAnalysisHistory(id) {
   if (entry && entry.dataKey) localStorage.removeItem(entry.dataKey);
   localStorage.setItem('analysis_history', JSON.stringify(history.filter(e => e.id !== id)));
   _showAnalysisHistory();
+}
+
+// ── Agents (saved check profiles) ─────────────────────────────────
+const _AGENTS_LIMIT = 30;
+function _agentList() {
+  return JSON.parse(localStorage.getItem('check_agents') || '[]');
+}
+function _agentSave(list) {
+  localStorage.setItem('check_agents', JSON.stringify(list.slice(0, _AGENTS_LIMIT)));
+}
+function _agentSnapshotChecks() {
+  // Deep-clone _checks so future edits don't mutate the saved profile.
+  return JSON.parse(JSON.stringify(_checks || []));
+}
+function _agentSeedDefaultIfEmpty() {
+  // First time the agents modal opens, capture the current check state as
+  // "Default QBR Agent" so the user always has a seed entry to work from.
+  const list = _agentList();
+  if (list.length || !_checks || !_checks.length) return;
+  list.unshift({
+    id: 'agent_' + Date.now(),
+    name: 'Default QBR Agent',
+    notes: 'Auto-created from your initial check configuration.',
+    createdAt: new Date().toISOString(),
+    lastUsedAt: null,
+    useCount: 0,
+    checks: _agentSnapshotChecks(),
+  });
+  _agentSave(list);
+}
+function _agentCounts(checks) {
+  const arr = Array.isArray(checks) ? checks : [];
+  const m = arr.filter(c => c.type === 'mandatory').length;
+  const o = arr.filter(c => c.type === 'optional' && c.enabled).length;
+  return { mandatory: m, optional: o };
+}
+function _agentLoad(id) {
+  const list = _agentList();
+  const a = list.find(e => e.id === id);
+  if (!a) { showToast('Agent not found', true); return; }
+  if (!Array.isArray(a.checks) || !a.checks.length) {
+    showToast('Agent has no checks saved', true); return;
+  }
+  // Replace the live check config with the saved snapshot. Deep-clone so
+  // editing checks afterwards doesn't retroactively mutate the agent.
+  _checks = JSON.parse(JSON.stringify(a.checks));
+  if (typeof saveChecks === 'function') saveChecks();
+  if (typeof renderCheckLists === 'function') renderCheckLists();
+  // Update usage stats
+  a.lastUsedAt = new Date().toISOString();
+  a.useCount = (a.useCount || 0) + 1;
+  _agentSave(list);
+  // Close modal + jump to Run Analysis
+  document.getElementById('agents-modal')?.remove();
+  showToast('✅ Loaded agent: ' + a.name);
+  document.querySelector('#run-btn')?.scrollIntoView({ behavior:'smooth', block:'center' });
+}
+function _agentDelete(id) {
+  const list = _agentList();
+  const a = list.find(e => e.id === id);
+  if (!a) return;
+  if (!confirm('Delete agent "' + a.name + '"? This cannot be undone.')) return;
+  _agentSave(list.filter(e => e.id !== id));
+  _showAgentsModal();
+}
+function _agentRename(id) {
+  const list = _agentList();
+  const a = list.find(e => e.id === id);
+  if (!a) return;
+  const newName = prompt('Rename agent:', a.name);
+  if (newName === null) return;
+  const trimmed = newName.trim();
+  if (!trimmed) { showToast('Name cannot be empty', true); return; }
+  a.name = trimmed.slice(0, 80);
+  _agentSave(list);
+  _showAgentsModal();
+}
+function _agentSaveCurrent() {
+  // Build the save modal — name field required, save button disabled until typed.
+  const counts = _agentCounts(_checks);
+  if (counts.mandatory + counts.optional === 0) {
+    showToast('No checks to save — configure checks first', true); return;
+  }
+  const overlay = document.createElement('div');
+  overlay.id = 'save-agent-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:8100;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML = `
+    <div style="background:white;border-radius:14px;padding:24px;width:100%;max-width:480px;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:800;color:#1E293B;">💾 Save as agent</div>
+        <button onclick="document.getElementById('save-agent-modal').remove()" style="background:none;border:none;font-size:18px;color:#64748B;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#1E293B;margin-bottom:6px;">Name *</label>
+      <input id="save-agent-name" type="text" maxlength="80" placeholder="e.g., QBR Standard, Deep Dive Mexico, Pre-Renewal" style="width:100%;padding:10px 14px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:6px;">
+      <div style="font-size:11px;color:#94A3B8;margin-bottom:12px;">Examples: <em>QBR Standard</em> · <em>Deep Dive</em> · <em>Pre-Call</em></div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#1E293B;margin-bottom:6px;">Notes (optional)</label>
+      <textarea id="save-agent-notes" rows="2" maxlength="280" placeholder="What's this agent for? When would you use it?" style="width:100%;padding:8px 12px;border:1.5px solid #D7BDE2;border-radius:8px;font-size:12px;font-family:inherit;box-sizing:border-box;resize:vertical;margin-bottom:14px;"></textarea>
+      <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#475569;">
+        Saving <strong>${counts.mandatory}</strong> mandatory + <strong>${counts.optional}</strong> optional checks
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button onclick="document.getElementById('save-agent-modal').remove()" style="padding:8px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Cancel</button>
+        <button id="save-agent-btn" disabled onclick="_agentSaveCommit()" style="padding:8px 18px;background:#1E2761;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:not-allowed;opacity:0.5;">Save Agent</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const input = document.getElementById('save-agent-name');
+  const btn = document.getElementById('save-agent-btn');
+  input.focus();
+  input.addEventListener('input', () => {
+    const ok = input.value.trim().length > 0;
+    btn.disabled = !ok;
+    btn.style.cursor = ok ? 'pointer' : 'not-allowed';
+    btn.style.opacity = ok ? '1' : '0.5';
+  });
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !btn.disabled) _agentSaveCommit();
+  });
+}
+function _agentSaveCommit() {
+  const nameEl  = document.getElementById('save-agent-name');
+  const notesEl = document.getElementById('save-agent-notes');
+  if (!nameEl) return;
+  const name = nameEl.value.trim();
+  if (!name) return;
+  const list = _agentList();
+  list.unshift({
+    id: 'agent_' + Date.now(),
+    name: name.slice(0, 80),
+    notes: (notesEl?.value || '').trim().slice(0, 280),
+    createdAt: new Date().toISOString(),
+    lastUsedAt: null,
+    useCount: 0,
+    checks: _agentSnapshotChecks(),
+  });
+  _agentSave(list);
+  document.getElementById('save-agent-modal')?.remove();
+  showToast('✅ Agent saved: ' + name);
+  _showAgentsModal();
+}
+function _showAgentsModal() {
+  const existing = document.getElementById('agents-modal');
+  if (existing) { existing.remove(); return; }
+  _agentSeedDefaultIfEmpty();
+  const list = _agentList();
+  const fmt = (ts) => ts ? new Date(ts).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) : '—';
+  const rows = list.length ? list.map(a => {
+    const c = _agentCounts(a.checks);
+    const lastUsed = a.lastUsedAt ? `last used ${fmt(a.lastUsedAt)}` : `created ${fmt(a.createdAt)}`;
+    const notesLine = a.notes ? `<div style="font-size:11px;color:#64748B;margin-top:4px;font-style:italic;">${a.notes.replace(/[<>&]/g, x => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[x])}</div>` : '';
+    return `
+      <div style="display:flex;align-items:flex-start;gap:10px;padding:14px 16px;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:8px;">
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:700;font-size:14px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.name}</div>
+          <div style="font-size:11px;color:#64748B;margin-top:3px;">${c.mandatory} mandatory · ${c.optional} optional · ${lastUsed}</div>
+          ${notesLine}
+        </div>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button onclick="_agentLoad('${a.id}')" title="Load this agent" style="padding:6px 12px;background:linear-gradient(135deg,#1D6A39,#27AE60);color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">▶ Load</button>
+          <button onclick="_agentRename('${a.id}')" title="Rename" style="padding:6px 9px;background:#F1F5F9;color:#475569;border:1.5px solid #E2E8F0;border-radius:6px;font-size:11px;cursor:pointer;">✏</button>
+          <button onclick="_agentDelete('${a.id}')" title="Delete" style="padding:6px 9px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;">✕</button>
+        </div>
+      </div>`;
+  }).join('') : '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No agents saved yet.</div>';
+
+  const modal = document.createElement('div');
+  modal.id = 'agents-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:8000;display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;';
+  modal.onclick = e => { if (e.target === modal) modal.remove(); };
+  modal.innerHTML = `
+    <div style="background:white;border-radius:14px;padding:24px;width:100%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+        <div style="font-size:17px;font-weight:800;color:#1E293B;">🤖 Agents</div>
+        <button onclick="document.getElementById('agents-modal').remove()" style="background:none;border:none;font-size:18px;color:#64748B;cursor:pointer;line-height:1;">✕</button>
+      </div>
+      <div style="font-size:11px;color:#94A3B8;margin-bottom:14px;">Saved check profiles — load one to apply its check configuration.</div>
+      <button onclick="_agentSaveCurrent()" style="margin-bottom:14px;padding:10px 14px;background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">💾 Save current as new agent</button>
+      <div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto;">${rows}</div>
+    </div>`;
+  document.body.appendChild(modal);
 }
 
 // ── Presentation History ─────────────────────────────────────────
