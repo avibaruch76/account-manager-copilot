@@ -5243,7 +5243,7 @@ function _rowToNewGame(r) {
 function _rowToTopPlayer(r, idx) {
   return {
     rank:          _toNum(_scrapedPick(r, 'rank')) || (idx + 1),
-    key:           _scrapedPick(r, 'player key', 'player id', 'key', 'player') ?? '',
+    key:           _scrapedPick(r, 'player key', 'player id', 'player_id', 'user id', 'user_id', 'account id', 'account', 'username', 'user', 'hash', 'uuid', 'key', 'player', 'id') ?? '',
     bets:          _toNum(_scrapedPick(r, 'bets')),
     ggr:           _toNum(_scrapedPick(r, 'ggr')),
     rounds:        _toNum(_scrapedPick(r, 'rounds')),
