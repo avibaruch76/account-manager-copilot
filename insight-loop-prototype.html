@@ -5135,7 +5135,7 @@ function classifyScrapedTable(headers, data, headingLower) {
   // "Studio Mix", "By Studio", "Per Studio".
   if (/\bstudio\b/.test(h) && !/\bgame\b/.test(h.replace(/studio/g, ''))) return 'studio_summary';
   if (/top\s*games|games\s*by\s*ggr|game\s*concentration/.test(h)) return 'top_games';
-  if (/portfolio\s*gap|market\s*comparison|missing\s*hits|tier\s*[12]/.test(h)) return 'tier_gap';
+  if (/portfolio\s*gap|market\s*comparison|missing\s*hits|tier[\s\-]*[12]|missing\s*from\s*(?:the\s*)?(?:operator|portfolio)|top\s*market\s*games?\s*missing|critical\s*opportunit|high.?value\s*opportunit|opportunity\s*game/.test(h)) return 'tier_gap';
   // New games: catches "Recently Launched", "New Games Launched", "Latest Game
   // Releases", "Adoption Check", "Recent Releases".
   if (/(recently|new|latest|recent).*(launch|release)|adoption\s*check|game\s*release/.test(h)) return 'new_games';
@@ -5156,6 +5156,9 @@ function classifyScrapedTable(headers, data, headingLower) {
   if (has('game')  && any('studio') && any('share'))        return 'top_games';
   if (has('game')  && any('benchmark','avg players','gap')) return 'growth_levers';
   if (has('game')  && any('rank') && any('priority','tier','market')) return 'tier_gap';
+  // Stronger column signal: a Game + Priority column (with CRITICAL/HIGH-style
+  // values) is almost always a tier_gap / portfolio-opportunity table.
+  if (has('game')  && any('priority'))                                return 'tier_gap';
   if (has('game')  && any('launch','status'))               return 'new_games';
   if (any('player') && any('bets') && any('rounds'))        return 'top_players';
   return null;
