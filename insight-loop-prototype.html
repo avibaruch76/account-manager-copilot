@@ -5825,6 +5825,13 @@ async function generateDeck() {
   // from the user's saved manual rows; conflicts prompt for choice.
   await _applyManualOverrides(payload, displayName);
 
+  // Phase 2: include only the slides the active agent selected.
+  // Empty/missing list = render all (backward compatible).
+  const slideInclude = (typeof _activeAgentSlideList === 'function') ? _activeAgentSlideList() : null;
+  if (slideInclude && slideInclude.length && slideInclude.length < 13) {
+    payload.slide_include = slideInclude;
+  }
+
   if (window.console) {
     console.log('Deck payload:', payload, '| mode:', mode);
     if (mode === 'scraped') {
@@ -7202,6 +7209,38 @@ function _agentSeedDefaultIfEmpty() {
   _agentSave(list);
 }
 // ── Active agent + dynamic Generate button label ─────────────────
+
+
+// Phase 2: slide list per Agent. Each agent stores which deck slides to render.
+// Default for legacy agents = all 13.
+const _DECK_SLIDES = [
+  { id: 1,  label: 'Title' },
+  { id: 2,  label: 'Performance at a glance' },
+  { id: 3,  label: 'Studio mix' },
+  { id: 4,  label: 'Recently launched' },
+  { id: 5,  label: 'Retention' },
+  { id: 6,  label: 'Player segmentation' },
+  { id: 7,  label: 'VIP / Top players' },
+  { id: 8,  label: 'Max-bet players' },
+  { id: 9,  label: 'Promotional mechanics' },
+  { id: 10, label: 'Portfolio gap (Tier 1+2)' },
+  { id: 11, label: 'Growth levers' },
+  { id: 12, label: 'KPI gap vs. market' },
+  { id: 13, label: 'Recommended actions' },
+];
+const _DEFAULT_SLIDE_LIST = _DECK_SLIDES.map(s => s.id);
+
+function _activeAgentSlideList() {
+  try {
+    const list = JSON.parse(localStorage.getItem('check_agents') || '[]');
+    const id   = localStorage.getItem('last_loaded_agent_id');
+    const a    = list.find(x => x.id === id);
+    if (a && Array.isArray(a.slide_list) && a.slide_list.length) return a.slide_list;
+  } catch (e) {}
+  return _DEFAULT_SLIDE_LIST.slice();
+}
+
+
 function _activeAgentName() {
   // Returns the active agent's display name with trailing "Agent" stripped.
   // Falls back to "QBR" when no agent has been seeded yet.
@@ -7311,6 +7350,10 @@ function _agentSaveCurrent() {
       <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#475569;">
         Saving <strong>${counts.mandatory}</strong> mandatory + <strong>${counts.optional}</strong> optional checks
       </div>
+      <label style="display:block;font-size:12px;font-weight:700;color:#1E293B;margin-bottom:6px;">Slides to include</label>
+      <div id="save-agent-slides" style="display:grid;grid-template-columns:repeat(2,1fr);gap:6px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:10px 14px;margin-bottom:14px;max-height:200px;overflow:auto;">
+        ${_DECK_SLIDES.map(s => `<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1E293B;cursor:pointer;"><input type="checkbox" data-slide-id="${s.id}" checked style="margin:0;"><span><span style="display:inline-block;min-width:22px;color:#94A3B8;font-weight:700;">${s.id}.</span>${s.label}</span></label>`).join("")}
+      </div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button onclick="document.getElementById('save-agent-modal').remove()" style="padding:8px 18px;background:#F1F5F9;color:#475569;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">Cancel</button>
         <button id="save-agent-btn" disabled onclick="_agentSaveCommit()" style="padding:8px 18px;background:#1E2761;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:not-allowed;opacity:0.5;">Save Agent</button>
@@ -7337,6 +7380,9 @@ function _agentSaveCommit() {
   const name = nameEl.value.trim();
   if (!name) return;
   const list = _agentList();
+  // Snapshot which slides this agent will render in the deck.
+  const slideEls = document.querySelectorAll("#save-agent-slides input[type=checkbox]");
+  const slide_list = [...slideEls].filter(cb => cb.checked).map(cb => Number(cb.dataset.slideId));
   list.unshift({
     id: 'agent_' + Date.now(),
     name: name.slice(0, 80),
@@ -7345,6 +7391,7 @@ function _agentSaveCommit() {
     lastUsedAt: null,
     useCount: 0,
     checks: _agentSnapshotChecks(),
+    slide_list: slide_list.length ? slide_list : _DEFAULT_SLIDE_LIST.slice(),
   });
   _agentSave(list);
   document.getElementById('save-agent-modal')?.remove();
