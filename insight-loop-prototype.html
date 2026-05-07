@@ -775,8 +775,8 @@ Format each item with the category prefix (DO/DON'T/ASK) followed by the action.
       <div id="download-btns" style="display:none;gap:8px;">
         <button onclick="downloadAnalysisPDF()" style="padding:7px 14px;background:#1E2761;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ PDF</button>
         <button onclick="downloadAnalysisWord()" style="padding:7px 14px;background:#1D6A39;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer">⬇ Word</button>
-        <button onclick="openPresentationBuilder()" id="pptx-btn" style="padding:7px 14px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">✦ Create Presentation</button>
-        <button onclick="generateDeck()" id="generate-deck-btn" class="js-generate-deck-btn" style="padding:7px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">📊 Generate QBR Presentation</button>
+        <button onclick="openPresentationBuilder()" id="pptx-btn" style="display:none;padding:7px 14px;background:linear-gradient(135deg,#4A235A,#7C3AED);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;align-items:center;gap:5px;">✦ Create Presentation</button>
+        <button onclick="_showManualDataModal()" id="manual-data-btn" style="padding:7px 14px;background:#0F172A;color:white;border:1.5px solid #475569;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;" title="Add data to slides where Jedify doesn't have it yet">📝 Manual Data</button><button onclick="generateDeck()" id="generate-deck-btn" class="js-generate-deck-btn" style="padding:7px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">📊 Generate QBR Presentation</button>
       </div>
     </div>
   </div>
@@ -5403,6 +5403,349 @@ function buildScrapedPayload(scraped, displayName) {
   };
 }
 
+
+
+/* ============================================================
+   MANUAL DATA — per-slot, per-operator overrides
+   localStorage key: cowork_manual_data_v1
+   Shape: { [operator]: { [slot]: rows[] } }
+   ============================================================ */
+const _MANUAL_LS_KEY = 'cowork_manual_data_v1';
+
+const _MANUAL_SCHEMAS = {
+  monthly: {
+    title: 'Monthly Performance — Slide 2',
+    note:  'One row per month. Drives the KPI bar charts.',
+    cols: [
+      { key: 'month',          label: 'Month',          type: 'text',   placeholder: 'Jan 2026' },
+      { key: 'bets',           label: 'Bets (€)',       type: 'number', placeholder: '1500000' },
+      { key: 'ggr',            label: 'GGR (€)',        type: 'number', placeholder: '85000' },
+      { key: 'players',        label: 'Players',        type: 'number', placeholder: '4500' },
+      { key: 'ggr_per_player', label: 'GGR/Player (€)', type: 'number', placeholder: '18.90' },
+    ],
+  },
+  retention: {
+    title: 'Retention curve — Slide 5',
+    note:  'One row per cohort with day-bucket retention %s.',
+    cols: [
+      { key: 'Cohort', label: 'Cohort', type: 'text',   placeholder: 'Q1 2026' },
+      { key: 'D1',     label: 'D1 %',   type: 'text',   placeholder: '62' },
+      { key: 'D7',     label: 'D7 %',   type: 'text',   placeholder: '28' },
+      { key: 'D14',    label: 'D14 %',  type: 'text',   placeholder: '19' },
+      { key: 'D30',    label: 'D30 %',  type: 'text',   placeholder: '11' },
+      { key: 'D60',    label: 'D60 %',  type: 'text',   placeholder: '7' },
+    ],
+  },
+  segments: {
+    title: 'Player segmentation — Slide 6',
+    note:  'One row per month with player counts by segment.',
+    cols: [
+      { key: 'Month',        label: 'Month',        type: 'text',   placeholder: 'Jan 2026' },
+      { key: 'New',          label: 'New',          type: 'number', placeholder: '1850' },
+      { key: 'Returning',    label: 'Returning',    type: 'number', placeholder: '980' },
+      { key: 'Reactivated',  label: 'Reactivated',  type: 'number', placeholder: '320' },
+      { key: 'High Value',   label: 'High Value',   type: 'number', placeholder: '166' },
+    ],
+  },
+  top_players: {
+    title: 'Top VIP players — Slide 7',
+    note:  'Up to 10 highest-GGR players. Player Key = anonymized identifier.',
+    cols: [
+      { key: 'rank',          label: 'Rank',         type: 'number', placeholder: '1' },
+      { key: 'key',           label: 'Player Key',   type: 'text',   placeholder: 'P_a8f31...' },
+      { key: 'bets',          label: 'Bets (€)',     type: 'number', placeholder: '120000' },
+      { key: 'ggr',           label: 'GGR (€)',      type: 'number', placeholder: '8200' },
+      { key: 'rounds',        label: 'Rounds',       type: 'number', placeholder: '14500' },
+      { key: 'play_days',     label: 'Play Days',    type: 'number', placeholder: '67' },
+      { key: 'avg_bet_round', label: 'Avg Bet (€)',  type: 'number', placeholder: '8.30' },
+    ],
+  },
+  max_bet: {
+    title: 'Max-bet players — Slide 8',
+    note:  'Per-month max-bet player count + GGR contribution.',
+    cols: [
+      { key: 'Month',             label: 'Month',                type: 'text',   placeholder: 'Jan 2026' },
+      { key: 'Max-Bet Players',   label: 'Max-Bet Players',      type: 'number', placeholder: '42' },
+      { key: 'GGR (€)',           label: 'GGR (€)',              type: 'number', placeholder: '36000' },
+      { key: '% of MAU',          label: '% of MAU',             type: 'text',   placeholder: '1.8' },
+    ],
+  },
+  promo: {
+    title: 'Promo rounds — Slide 9',
+    note:  'One row per round type. Slide also reads `findings_by_slot.promo` for narrative.',
+    cols: [
+      { key: 'Round Type',      label: 'Round Type',      type: 'text',   placeholder: 'Regular Round' },
+      { key: 'Bets (€)',        label: 'Bets (€)',        type: 'text',   placeholder: '108858212' },
+      { key: 'Rounds',          label: 'Rounds',          type: 'text',   placeholder: '86541879' },
+      { key: 'GGR (€)',         label: 'GGR (€)',         type: 'text',   placeholder: '6251079' },
+      { key: 'Share of Rounds', label: 'Share of Rounds', type: 'text',   placeholder: '82.6%' },
+    ],
+  },
+  tier1_gap: {
+    title: 'Tier 1 — critical opportunities — Slide 10',
+    note:  'Top-5 market games absent or underweight at this account.',
+    cols: [
+      { key: 'game',         label: 'Game',         type: 'text',   placeholder: 'Loco Habanero' },
+      { key: 'studio',       label: 'Studio',       type: 'text',   placeholder: 'Ruby Play' },
+      { key: 'rank',         label: 'Market Rank',  type: 'text',   placeholder: 'Top 5' },
+      { key: 'account_bets', label: 'Account Bets', type: 'text',   placeholder: '€0' },
+      { key: 'priority',     label: 'Priority',     type: 'text',   placeholder: 'CRITICAL' },
+    ],
+  },
+  tier2_gap: {
+    title: 'Tier 2 — high-value opportunities — Slide 10',
+    note:  'Top-10 market games underweight at this account.',
+    cols: [
+      { key: 'game',         label: 'Game',         type: 'text' },
+      { key: 'studio',       label: 'Studio',       type: 'text' },
+      { key: 'rank',         label: 'Market Rank',  type: 'text', placeholder: 'Top 10' },
+      { key: 'account_bets', label: 'Account Bets', type: 'text' },
+      { key: 'priority',     label: 'Priority',     type: 'text', placeholder: 'HIGH' },
+    ],
+  },
+  growth_levers: {
+    title: 'Growth levers — Slide 11',
+    note:  'High GGR/Player titles with low player reach.',
+    cols: [
+      { key: 'game',          label: 'Game',         type: 'text' },
+      { key: 'studio',        label: 'Studio',       type: 'text' },
+      { key: 'ggr_per_player',label: 'GGR/Player',   type: 'number', placeholder: '14.50' },
+      { key: 'players',       label: 'Players',      type: 'number', placeholder: '2300' },
+      { key: 'benchmark',     label: 'Benchmark',    type: 'text',   placeholder: '€10–12' },
+      { key: 'gap',           label: 'Gap',          type: 'text',   placeholder: '+25%' },
+      { key: 'action',        label: 'Action',       type: 'text',   placeholder: 'Promote' },
+    ],
+  },
+  kpi_gap: {
+    title: 'KPI gap vs. market leader — Slide 12',
+    note:  'Per-player KPIs vs the top operator in the market.',
+    cols: [
+      { key: 'kpi',        label: 'KPI',          type: 'text', placeholder: 'Bets / Player' },
+      { key: 'ours',       label: 'Ours',         type: 'text', placeholder: '€382.59' },
+      { key: 'leader',     label: 'Market Leader',type: 'text', placeholder: '5× higher' },
+      { key: 'gap',        label: 'Gap',          type: 'text', placeholder: '80% below' },
+      { key: 'root_cause', label: 'Root Cause',   type: 'text', placeholder: 'Lower bet/round' },
+    ],
+  },
+  actions: {
+    title: 'Recommended actions — Slide 13',
+    note:  'Up to 12 recommended actions. Priority: CRITICAL / HIGH / MEDIUM / MONITOR.',
+    cols: [
+      { key: 'title',     label: 'Title',     type: 'text',  placeholder: 'Activate Turbo Storm' },
+      { key: 'priority',  label: 'Priority',  type: 'text',  placeholder: 'HIGH' },
+      { key: 'rationale', label: 'Rationale', type: 'text',  placeholder: 'Top 5 in US market with €0...' },
+    ],
+  },
+};
+
+function _manualLoadAll() {
+  try { return JSON.parse(localStorage.getItem(_MANUAL_LS_KEY) || '{}'); }
+  catch (e) { return {}; }
+}
+function _manualSaveAll(d) {
+  try { localStorage.setItem(_MANUAL_LS_KEY, JSON.stringify(d)); }
+  catch (e) { showToast('Could not save manual data: ' + e.message, true); }
+}
+function _manualOpName() {
+  return (window._lastDisplayName || (typeof getOperatorNameFromDom === 'function' ? getOperatorNameFromDom() : '') || '').trim();
+}
+function _manualLoadOperator(op) {
+  return _manualLoadAll()[op] || {};
+}
+function _manualSaveSlot(op, slot, rows) {
+  const all = _manualLoadAll();
+  if (!all[op]) all[op] = {};
+  if (rows.length) all[op][slot] = rows;
+  else delete all[op][slot];
+  if (Object.keys(all[op]).length === 0) delete all[op];
+  _manualSaveAll(all);
+}
+
+function _showManualDataModal() {
+  const op = _manualOpName();
+  if (!op) {
+    showToast('Run an analysis first so I know which operator the manual data is for.', true);
+    return;
+  }
+  document.getElementById('manual-data-subtitle').textContent =
+    'Operator: ' + op + ' · Saved per operator. Manual rows fill slides Jedify left empty.';
+  const body = document.getElementById('manual-data-body');
+  body.innerHTML = '';
+  const opData = _manualLoadOperator(op);
+  Object.entries(_MANUAL_SCHEMAS).forEach(([slot, schema]) => {
+    body.appendChild(_buildManualSection(op, slot, schema, opData[slot] || []));
+  });
+  document.getElementById('manual-data-overlay').style.display = 'flex';
+}
+function _hideManualDataModal() {
+  document.getElementById('manual-data-overlay').style.display = 'none';
+}
+function _clearManualForOperator() {
+  const op = _manualOpName();
+  if (!op) return;
+  if (!confirm('Delete ALL manual data for ' + op + '? Cannot be undone.')) return;
+  const all = _manualLoadAll();
+  delete all[op];
+  _manualSaveAll(all);
+  _showManualDataModal();
+  showToast('Manual data cleared for ' + op);
+}
+
+function _buildManualSection(op, slot, schema, rows) {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'border:1px solid #E2E8F0;border-radius:10px;margin-bottom:14px;background:#F8FAFC;';
+  // header
+  const hdr = document.createElement('div');
+  hdr.style.cssText = 'padding:12px 16px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;user-select:none;';
+  const filledBadge = rows.length
+    ? '<span style="margin-left:8px;padding:2px 8px;background:#10B981;color:white;border-radius:4px;font-size:10px;font-weight:700;">' + rows.length + ' row' + (rows.length===1?'':'s') + '</span>'
+    : '<span style="margin-left:8px;padding:2px 8px;background:#E2E8F0;color:#64748B;border-radius:4px;font-size:10px;font-weight:700;">empty</span>';
+  hdr.innerHTML =
+    '<div><span style="font-weight:700;color:#0F172A;">'+schema.title+'</span>'+filledBadge+
+    '<div style="font-size:11px;color:#64748B;margin-top:3px;">'+schema.note+'</div></div>'+
+    '<span class="manual-toggle" style="font-size:18px;color:#94A3B8;">▾</span>';
+  // table container
+  const tbl = document.createElement('div');
+  tbl.style.cssText = 'padding:0 16px 14px;display:none;';
+  // build table
+  function rerender() {
+    tbl.innerHTML = '';
+    const t = document.createElement('table');
+    t.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
+    // headers
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    schema.cols.forEach(c => {
+      const th = document.createElement('th');
+      th.textContent = c.label;
+      th.style.cssText = 'text-align:left;padding:6px 8px;background:#0F172A;color:white;font-weight:600;border:1px solid #1E293B;';
+      trh.appendChild(th);
+    });
+    const thAct = document.createElement('th');
+    thAct.style.cssText = 'background:#0F172A;border:1px solid #1E293B;width:40px;';
+    trh.appendChild(thAct);
+    thead.appendChild(trh);
+    t.appendChild(thead);
+    // body
+    const tbody = document.createElement('tbody');
+    rows.forEach((row, idx) => {
+      const tr = document.createElement('tr');
+      schema.cols.forEach(c => {
+        const td = document.createElement('td');
+        td.style.cssText = 'border:1px solid #E2E8F0;padding:0;background:white;';
+        const inp = document.createElement('input');
+        inp.type = c.type === 'number' ? 'text' : 'text';
+        inp.value = row[c.key] != null ? row[c.key] : '';
+        inp.placeholder = c.placeholder || '';
+        inp.style.cssText = 'width:100%;border:none;padding:6px 8px;font-size:12px;background:transparent;outline:none;';
+        inp.addEventListener('input', () => {
+          let v = inp.value;
+          if (c.type === 'number' && v !== '') {
+            const n = Number(String(v).replace(/[^\d.\-]/g, ''));
+            if (!Number.isNaN(n)) v = n;
+          }
+          rows[idx][c.key] = v;
+          _manualSaveSlot(op, slot, rows);
+          // Update header badge live
+          _showManualDataModal();
+        });
+        td.appendChild(inp);
+        tr.appendChild(td);
+      });
+      const tdAct = document.createElement('td');
+      tdAct.style.cssText = 'border:1px solid #E2E8F0;text-align:center;background:white;';
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.style.cssText = 'border:none;background:transparent;color:#DC2626;cursor:pointer;font-size:14px;padding:6px 8px;';
+      del.title = 'Remove row';
+      del.addEventListener('click', () => {
+        rows.splice(idx, 1);
+        _manualSaveSlot(op, slot, rows);
+        _showManualDataModal();
+      });
+      tdAct.appendChild(del);
+      tr.appendChild(tdAct);
+      tbody.appendChild(tr);
+    });
+    t.appendChild(tbody);
+    tbl.appendChild(t);
+    // add row btn
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Add row';
+    addBtn.style.cssText = 'margin-top:8px;padding:6px 12px;background:#0F172A;color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;';
+    addBtn.addEventListener('click', () => {
+      const blank = {};
+      schema.cols.forEach(c => blank[c.key] = '');
+      rows.push(blank);
+      _manualSaveSlot(op, slot, rows);
+      _showManualDataModal();
+    });
+    tbl.appendChild(addBtn);
+  }
+  rerender();
+  // toggle expand
+  hdr.addEventListener('click', () => {
+    const open = tbl.style.display !== 'none';
+    tbl.style.display = open ? 'none' : 'block';
+    hdr.querySelector('.manual-toggle').textContent = open ? '▾' : '▴';
+  });
+  if (rows.length) {
+    tbl.style.display = 'block';
+    hdr.querySelector('.manual-toggle').textContent = '▴';
+  }
+  wrap.appendChild(hdr);
+  wrap.appendChild(tbl);
+  return wrap;
+}
+
+/* ─── Conflict prompt: returns Promise<'use'|'ignore'|'delete'> ─── */
+let _manualConflictResolver = null;
+function _showManualConflict(slot) {
+  return new Promise(resolve => {
+    _manualConflictResolver = resolve;
+    document.getElementById('manual-conflict-slot').textContent = slot;
+    document.getElementById('manual-conflict-overlay').style.display = 'flex';
+  });
+}
+function _resolveManualConflict(choice) {
+  document.getElementById('manual-conflict-overlay').style.display = 'none';
+  if (_manualConflictResolver) {
+    _manualConflictResolver(choice);
+    _manualConflictResolver = null;
+  }
+}
+
+/* ─── Apply manual overrides into the deck payload before send ─── */
+async function _applyManualOverrides(payload, op) {
+  if (!op) return [];
+  const manual = _manualLoadOperator(op);
+  const slots = Object.keys(manual).filter(k => Array.isArray(manual[k]) && manual[k].length);
+  if (!slots.length) return [];
+  const used = [];
+  for (const slot of slots) {
+    const cur = payload[slot];
+    const hasJedify = Array.isArray(cur) && cur.length > 0;
+    if (hasJedify) {
+      const choice = await _showManualConflict(slot);
+      if (choice === 'use') {
+        payload[slot] = manual[slot];
+        used.push(slot);
+      } else if (choice === 'delete') {
+        const all = _manualLoadAll();
+        if (all[op]) { delete all[op][slot]; if (Object.keys(all[op]).length === 0) delete all[op]; }
+        _manualSaveAll(all);
+      }
+      // 'ignore' = leave Jedify, keep saved
+    } else {
+      payload[slot] = manual[slot];
+      used.push(slot);
+    }
+  }
+  payload._manual_slots = used;
+  return used;
+}
+
+
 async function generateDeck() {
   let data = window._lastResearchResult;
   const displayName = window._lastDisplayName || getOperatorNameFromDom();
@@ -5439,6 +5782,10 @@ async function generateDeck() {
       payload.actions = scrapedActions;
     }
   }
+
+  // Layer manual data on top — slots Jedify didn't fill silently fill
+  // from the user's saved manual rows; conflicts prompt for choice.
+  await _applyManualOverrides(payload, displayName);
 
   if (window.console) {
     console.log('Deck payload:', payload, '| mode:', mode);
@@ -9598,5 +9945,41 @@ async function _pptxHandleFile(file) {
 }
 
 </script>
+
+<!-- Manual Data modal — populated dynamically by _showManualDataModal() -->
+<div id="manual-data-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9000;align-items:center;justify-content:center;padding:24px;">
+  <div id="manual-data-modal" style="background:#fff;width:min(1200px,96vw);max-height:92vh;border-radius:14px;display:flex;flex-direction:column;box-shadow:0 24px 48px rgba(0,0,0,0.4);">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:18px 24px;border-bottom:1px solid #E2E8F0;">
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#0F172A;">📝 Manual Data</div>
+        <div id="manual-data-subtitle" style="font-size:12px;color:#64748B;margin-top:3px;">Saved per operator. Manual rows fill slides that Jedify left empty.</div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="_clearManualForOperator()" style="padding:7px 13px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">Clear all for this operator</button>
+        <button onclick="_hideManualDataModal()" style="padding:7px 13px;background:#0F172A;color:white;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;">Done</button>
+      </div>
+    </div>
+    <div id="manual-data-body" style="overflow:auto;padding:18px 24px;flex:1;">
+      <!-- Slot sections rendered dynamically -->
+    </div>
+  </div>
+</div>
+
+<!-- Conflict prompt — shown when both Jedify + Manual data exist for a slot -->
+<div id="manual-conflict-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9001;align-items:center;justify-content:center;padding:24px;">
+  <div style="background:#fff;width:min(540px,92vw);border-radius:14px;padding:22px 26px;box-shadow:0 24px 48px rgba(0,0,0,0.4);">
+    <div style="font-size:17px;font-weight:800;color:#0F172A;">Data conflict on <span id="manual-conflict-slot" style="color:#C72031;"></span></div>
+    <div style="font-size:13px;color:#475569;margin-top:8px;line-height:1.5;">
+      You have <strong>manual</strong> rows saved for this slot, and Jedify also returned <strong>real</strong> data.
+      What should I do?
+    </div>
+    <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;">
+      <button onclick="_resolveManualConflict('use')"    style="flex:1;padding:11px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Use Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(override)</span></button>
+      <button onclick="_resolveManualConflict('ignore')" style="flex:1;padding:11px 14px;background:#0F172A;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Ignore Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(keep saved)</span></button>
+      <button onclick="_resolveManualConflict('delete')" style="flex:1;padding:11px 14px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Delete Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(use Jedify)</span></button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
