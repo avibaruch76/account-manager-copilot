@@ -2433,6 +2433,7 @@ async function runAnalysis(customPrompt, partialCheckIds) {
   // — the new text-based pipeline returned early and "Unknown Operator" leaked
   // through into history / exports.
   window._lastDisplayName = displayName;
+      if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
   const _phn = document.getElementById('persona-header-name');
   if (_phn) _phn.textContent = displayName;
 
@@ -2484,6 +2485,7 @@ async function runAnalysis(customPrompt, partialCheckIds) {
         // Store last research result for persona rendering
         window._lastResearchResult = data;
         window._lastDisplayName = displayName;
+      if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
 
         renderCheckResults(data, displayName);
         renderPersonaTabs(data, displayName);
@@ -4299,6 +4301,7 @@ function confirmAndRun() {
   // for full rationale — the text-based research pipeline returns early without
   // ever assigning these, causing "Unknown Operator" leaks downstream).
   window._lastDisplayName = displayName;
+      if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
   const _phn2 = document.getElementById('persona-header-name');
   if (_phn2) _phn2.textContent = displayName;
 
@@ -4365,6 +4368,7 @@ function confirmAndRun() {
         console.log('[confirmAndRun] Rendering results:', data.checks?.length, 'checks');
         window._lastResearchResult = data;
         window._lastDisplayName = displayName;
+      if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
         try {
           renderCheckResults(data, displayName);
           renderPersonaTabs(data, displayName);
@@ -5545,7 +5549,31 @@ function _manualLoadAll() {
 function _manualSaveAll(d) {
   try { localStorage.setItem(_MANUAL_LS_KEY, JSON.stringify(d)); }
   catch (e) { showToast('Could not save manual data: ' + e.message, true); }
+  if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
 }
+
+function _updateManualDataBadge() {
+  const btn = document.getElementById('manual-data-btn');
+  if (!btn) return;
+  const op = _manualOpName();
+  let slots = 0;
+  if (op) {
+    const data = _manualLoadOperator(op);
+    slots = Object.values(data).filter(r => Array.isArray(r) && r.length).length;
+  }
+  if (slots === 0) {
+    btn.innerHTML = '\u{1F4DD} Manual Data';
+    btn.style.background = '#0F172A';
+    btn.style.borderColor = '#475569';
+    btn.title = 'Add data to slides where Jedify doesn\u2019t have it yet';
+  } else {
+    btn.innerHTML = '\u{1F4DD} Manual Data <span style="margin-left:5px;padding:1px 7px;background:#10B981;color:white;border-radius:9px;font-size:10px;font-weight:800;">'+slots+'</span>';
+    btn.style.background = '#064E3B';
+    btn.style.borderColor = '#10B981';
+    btn.title = slots + ' slot' + (slots === 1 ? '' : 's') + ' have manual rows for this operator';
+  }
+}
+
 function _manualOpName() {
   return (window._lastDisplayName || (typeof getOperatorNameFromDom === 'function' ? getOperatorNameFromDom() : '') || '').trim();
 }
@@ -5713,6 +5741,16 @@ function _resolveManualConflict(choice) {
     _manualConflictResolver(choice);
     _manualConflictResolver = null;
   }
+  if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
+}
+
+
+
+// Initial badge state — runs once the DOM is ready.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _updateManualDataBadge);
+} else {
+  setTimeout(_updateManualDataBadge, 0);
 }
 
 /* ─── Apply manual overrides into the deck payload before send ─── */
@@ -7101,6 +7139,7 @@ function _restoreAnalysisHistory(id) {
         if (parsed && parsed.data) {
           window._lastResearchResult = parsed.data;
           window._lastDisplayName = parsed.displayName || entry.operator;
+      if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
           restoredData = parsed.data;
         }
       }
