@@ -5306,7 +5306,7 @@ function buildScrapedPayload(scraped, displayName) {
     tier_buckets: [], new_games: [], top_players: [], kpi_gap: [],
     studio_summary: [],         // per-studio aggregate from "Studio analysis" check
     monthly_by_studio: [],      // per-month × per-studio breakdown for slide 2 stacked bars
-    kpis_summary: null, promo: null, retention: null, segments: null, max_bet: null,
+    kpis_summary: null, promo: null, retention: null, segments: null, segments_rfm: null, max_bet: null,
   };
   const claimed = {};   // slot → true once filled (so first match wins)
   const unclassified = [];
@@ -5396,6 +5396,7 @@ function buildScrapedPayload(scraped, displayName) {
     promo:          slots.promo || [],
     retention:      slots.retention || [],
     segments:       slots.segments || [],
+    segments_rfm:   slots.segments_rfm || [],
     max_bet:        slots.max_bet || [],
     kpis_summary:   slots.kpis_summary || [],
     actions:        [],
@@ -5442,14 +5443,23 @@ const _MANUAL_SCHEMAS = {
     ],
   },
   segments: {
-    title: 'Player segmentation — Slide 6',
-    note:  'One row per month with player counts by segment.',
+    title: 'Activity segmentation — Slide 6 (top)',
+    note:  'One row per month with activity-based player counts: New, Returning, Reactivated.',
     cols: [
       { key: 'Month',        label: 'Month',        type: 'text',   placeholder: 'Jan 2026' },
       { key: 'New',          label: 'New',          type: 'number', placeholder: '1850' },
       { key: 'Returning',    label: 'Returning',    type: 'number', placeholder: '980' },
       { key: 'Reactivated',  label: 'Reactivated',  type: 'number', placeholder: '320' },
-      { key: 'High Value',   label: 'High Value',   type: 'number', placeholder: '166' },
+    ],
+  },
+  segments_rfm: {
+    title: 'RFM segmentation — Slide 6 (bottom)',
+    note:  'Point-in-time RFM mix. One row per (Source × Segment). Source = Operator or Market. Operator rows fill Players + Share %. Market rows fill Share % only (Players optional).',
+    cols: [
+      { key: 'Source',  label: 'Source',  type: 'text',   placeholder: 'Operator | Market' },
+      { key: 'Segment', label: 'Segment', type: 'text',   placeholder: 'VIPs | Loyal Customers | Explorers | Passive Players | At Risk | Lost' },
+      { key: 'Players', label: 'Players', type: 'number', placeholder: '1240' },
+      { key: 'Share %', label: 'Share %', type: 'text',   placeholder: '12.5' },
     ],
   },
   top_players: {
@@ -7008,15 +7018,33 @@ function _renderAnalysesTab() {
   if (!history.length) {
     return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No analysis history yet — run an analysis to save it here.</div>';
   }
-  return history.map(e => `
-    <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:#F8FAFC;border:1.5px solid #E2E8F0;border-radius:8px;">
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:700;font-size:13px;color:#1E293B;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${e.operator}</div>
-        <div style="font-size:11px;color:#64748B;margin-top:2px;">${_fmtDateTime(e.timestamp)}</div>
-      </div>
-      <button onclick="_restoreAnalysisHistory('${e.id}')" style="padding:5px 12px;background:#1E2761;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Restore</button>
-      <button onclick="_deleteAnalysisHistory('${e.id}')" style="padding:5px 8px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>
-    </div>`).join('');
+  // Group by operator. Operators sorted A→Z; entries within each operator
+  // sorted newest first.
+  const byOp = {};
+  history.forEach(e => {
+    const k = (e.operator || 'Unknown Operator').trim();
+    (byOp[k] = byOp[k] || []).push(e);
+  });
+  const operators = Object.keys(byOp).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
+  return operators.map(op => {
+    const items = byOp[op].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const itemHtml = items.map(e => `
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:#F8FAFC;border:1px solid #E2E8F0;border-radius:6px;">
+        <div style="flex:1;min-width:0;font-size:12px;color:#475569;">${_fmtDateTime(e.timestamp)}</div>
+        <button onclick="_restoreAnalysisHistory('${e.id}')" style="padding:5px 12px;background:#1E2761;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;">Restore</button>
+        <button onclick="_deleteAnalysisHistory('${e.id}')" style="padding:5px 8px;background:#FEF2F2;color:#CC0000;border:1px solid #FECACA;border-radius:6px;font-size:11px;cursor:pointer;flex-shrink:0;">✕</button>
+      </div>`).join('');
+    return `
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 6px;border-bottom:1.5px solid #E2E8F0;margin-bottom:8px;">
+          <div style="font-size:13px;font-weight:800;color:#1E293B;">📁 ${op}</div>
+          <div style="font-size:11px;color:#94A3B8;">${items.length} analys${items.length === 1 ? 'is' : 'es'}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">${itemHtml}</div>
+      </div>`;
+  }).join('');
 }
 function _renderPresentationsTab() {
   const history = JSON.parse(localStorage.getItem('deck_history') || '[]');
@@ -7024,12 +7052,10 @@ function _renderPresentationsTab() {
     return '<div style="padding:24px;text-align:center;color:#94A3B8;font-size:13px;">No presentations yet — click 📊 Generate Presentation to save one here.</div>';
   }
   const byOp = {};
-  history.forEach(e => { const k = e.operator || 'Unknown Operator'; (byOp[k] = byOp[k] || []).push(e); });
-  const operators = Object.keys(byOp).sort((a, b) => {
-    const ta = Math.max(...byOp[a].map(e => new Date(e.timestamp).getTime()));
-    const tb = Math.max(...byOp[b].map(e => new Date(e.timestamp).getTime()));
-    return tb - ta;
-  });
+  history.forEach(e => { const k = (e.operator || 'Unknown Operator').trim(); (byOp[k] = byOp[k] || []).push(e); });
+  const operators = Object.keys(byOp).sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: 'base' })
+  );
   return operators.map(op => {
     const items = byOp[op].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     const itemHtml = items.map(e => `
@@ -7041,7 +7067,7 @@ function _renderPresentationsTab() {
     return `
       <div style="margin-bottom:14px;">
         <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0 6px;border-bottom:1.5px solid #E2E8F0;margin-bottom:8px;">
-          <div style="font-size:13px;font-weight:800;color:#1E293B;">${op}</div>
+          <div style="font-size:13px;font-weight:800;color:#1E293B;">📁 ${op}</div>
           <div style="font-size:11px;color:#94A3B8;">${items.length} deck${items.length === 1 ? '' : 's'}</div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;">${itemHtml}</div>
