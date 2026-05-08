@@ -5644,6 +5644,142 @@ function _clearManualForOperator() {
   showToast('Manual data cleared for ' + op);
 }
 
+
+
+/* ────── CSV import helpers ────── */
+function _normalizeKey(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+function _detectDelimiter(text) {
+  // Pick the delimiter with the most consistent count across non-empty lines.
+  const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 8);
+  if (!lines.length) return ',';
+  const candidates = ['\t', ',', ';'];
+  let best = ',', bestScore = -1;
+  for (const d of candidates) {
+    const counts = lines.map(l => (l.split(d).length - 1));
+    if (counts.every(c => c === 0)) continue;
+    const avg = counts.reduce((a, b) => a + b, 0) / counts.length;
+    // Score: prefer high counts and low variance
+    const variance = counts.reduce((a, b) => a + (b - avg) ** 2, 0) / counts.length;
+    const score = avg - variance;
+    if (score > bestScore) { bestScore = score; best = d; }
+  }
+  return best;
+}
+function _parseCsvLine(line, delim) {
+  // Minimal CSV parser supporting quoted fields with commas/newlines.
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQ = false; }
+      else { cur += ch; }
+    } else {
+      if (ch === '"') { inQ = true; }
+      else if (ch === delim) { out.push(cur); cur = ''; }
+      else { cur += ch; }
+    }
+  }
+  out.push(cur);
+  return out.map(s => s.trim());
+}
+function _parseCsvToRows(text, schema) {
+  const delim = _detectDelimiter(text);
+  const rawLines = text.split(/\r?\n/);
+  const lines = rawLines.filter(l => l.trim());
+  if (!lines.length) return { rows: [], errors: ['(empty input)'] };
+  const headerCells = _parseCsvLine(lines[0], delim);
+  // Build a map: column-key → header-index, case-insensitive
+  const colByNorm = {};
+  schema.cols.forEach(c => { colByNorm[_normalizeKey(c.label)] = c.key; colByNorm[_normalizeKey(c.key)] = c.key; });
+  const headerToColKey = headerCells.map(h => colByNorm[_normalizeKey(h)] || null);
+  const matched = headerToColKey.filter(Boolean).length;
+  const rows = [];
+  for (let i = 1; i < lines.length; i++) {
+    const cells = _parseCsvLine(lines[i], delim);
+    if (cells.every(c => c === '')) continue;
+    const r = {};
+    schema.cols.forEach(c => r[c.key] = '');
+    for (let j = 0; j < cells.length; j++) {
+      const key = headerToColKey[j];
+      if (!key) continue;
+      let v = cells[j];
+      // Numeric coercion for number-typed columns
+      const colDef = schema.cols.find(c => c.key === key);
+      if (colDef && colDef.type === 'number' && v !== '') {
+        const n = Number(String(v).replace(/[^\d.\-]/g, ''));
+        if (!Number.isNaN(n)) v = n;
+      }
+      r[key] = v;
+    }
+    rows.push(r);
+  }
+  const errors = [];
+  if (matched === 0) {
+    errors.push('No CSV headers matched this slot\u2019s columns. Expected: ' +
+                schema.cols.map(c => c.label).join(', '));
+  } else if (matched < headerCells.length) {
+    const ignored = headerCells.filter((_, j) => !headerToColKey[j]).map(s => '"' + s + '"');
+    if (ignored.length) errors.push('Ignored unknown columns: ' + ignored.join(', '));
+  }
+  return { rows, errors, matched, total: headerCells.length, delim };
+}
+
+function _showCsvInput(op, slot, schema, rowsRef, hostEl, onApply) {
+  // Hide if already shown
+  const existing = hostEl.querySelector('.manual-csv-input');
+  if (existing) { existing.remove(); return; }
+  const wrap = document.createElement('div');
+  wrap.className = 'manual-csv-input';
+  wrap.style.cssText = 'background:#0F172A;border:1px solid #475569;border-radius:8px;padding:12px;margin-bottom:10px;';
+  wrap.innerHTML = `
+    <div style="font-size:11px;color:#94A3B8;margin-bottom:6px;">
+      Paste rows from Excel/Google Sheets (tab-separated) or CSV.<br>
+      First row should be headers. Expected columns:
+      <strong style="color:#E2E8F0;">${schema.cols.map(c => c.label).join(', ')}</strong>
+    </div>
+    <textarea class="csv-text" placeholder="Paste here..." style="width:100%;min-height:120px;padding:8px;border:1px solid #475569;border-radius:6px;font-family:Consolas,Monaco,monospace;font-size:11px;background:#1E293B;color:#E2E8F0;outline:none;box-sizing:border-box;"></textarea>
+    <div style="display:flex;align-items:center;gap:14px;margin-top:8px;flex-wrap:wrap;">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#E2E8F0;cursor:pointer;">
+        <input type="radio" name="csv-mode-${slot}" value="replace" checked> Replace rows
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:#E2E8F0;cursor:pointer;">
+        <input type="radio" name="csv-mode-${slot}" value="append"> Append
+      </label>
+      <div style="flex:1;"></div>
+      <button class="csv-cancel" style="padding:6px 12px;background:#334155;color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">Cancel</button>
+      <button class="csv-apply"  style="padding:6px 12px;background:#10B981;color:white;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Parse & apply</button>
+    </div>
+    <div class="csv-status" style="font-size:11px;color:#94A3B8;margin-top:6px;min-height:14px;"></div>
+  `;
+  hostEl.insertBefore(wrap, hostEl.firstChild);
+  const textarea = wrap.querySelector('.csv-text');
+  const status   = wrap.querySelector('.csv-status');
+  textarea.focus();
+  wrap.querySelector('.csv-cancel').addEventListener('click', () => wrap.remove());
+  wrap.querySelector('.csv-apply').addEventListener('click', () => {
+    const text = textarea.value.trim();
+    if (!text) { status.textContent = '(nothing pasted)'; status.style.color = '#F87171'; return; }
+    const result = _parseCsvToRows(text, schema);
+    if (!result.rows.length) {
+      status.textContent = (result.errors && result.errors.join(' \u00b7 ')) || 'No rows parsed';
+      status.style.color = '#F87171';
+      return;
+    }
+    const mode = wrap.querySelector('input[name="csv-mode-' + slot + '"]:checked').value;
+    onApply(mode, result.rows);
+    let msg = '\u2713 Parsed ' + result.rows.length + ' row' + (result.rows.length === 1 ? '' : 's');
+    if (result.errors && result.errors.length) msg += ' \u00b7 ' + result.errors.join(' \u00b7 ');
+    status.textContent = msg;
+    status.style.color = '#10B981';
+    setTimeout(() => wrap.remove(), 900);
+  });
+}
+
+
 function _buildManualSection(op, slot, schema, rows) {
   const wrap = document.createElement('div');
   wrap.style.cssText = 'border:1px solid #E2E8F0;border-radius:10px;margin-bottom:14px;background:#F8FAFC;';
@@ -5654,8 +5790,9 @@ function _buildManualSection(op, slot, schema, rows) {
     ? '<span style="margin-left:8px;padding:2px 8px;background:#10B981;color:white;border-radius:4px;font-size:10px;font-weight:700;">' + rows.length + ' row' + (rows.length===1?'':'s') + '</span>'
     : '<span style="margin-left:8px;padding:2px 8px;background:#E2E8F0;color:#64748B;border-radius:4px;font-size:10px;font-weight:700;">empty</span>';
   hdr.innerHTML =
-    '<div><span style="font-weight:700;color:#0F172A;">'+schema.title+'</span>'+filledBadge+
+    '<div style="flex:1;min-width:0;"><span style="font-weight:700;color:#0F172A;">'+schema.title+'</span>'+filledBadge+
     '<div style="font-size:11px;color:#64748B;margin-top:3px;">'+schema.note+'</div></div>'+
+    '<button class="manual-csv-btn" title="Paste rows from Excel/CSV" style="margin-right:8px;padding:5px 10px;background:#1E2761;color:white;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;">📋 Paste CSV</button>'+
     '<span class="manual-toggle" style="font-size:18px;color:#94A3B8;">▾</span>';
   // table container
   const tbl = document.createElement('div');
@@ -5739,6 +5876,22 @@ function _buildManualSection(op, slot, schema, rows) {
     tbl.appendChild(addBtn);
   }
   rerender();
+  // CSV import button — stops event bubbling so click doesn\'t toggle the section.
+  const csvBtn = hdr.querySelector('.manual-csv-btn');
+  if (csvBtn) {
+    csvBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      // Ensure the section is expanded so the CSV input is visible.
+      tbl.style.display = 'block';
+      hdr.querySelector('.manual-toggle').textContent = '\u25b4';
+      _showCsvInput(op, slot, schema, rows, tbl, (mode, parsed) => {
+        if (mode === 'replace') { rows.length = 0; }
+        parsed.forEach(p => rows.push(p));
+        _manualSaveSlot(op, slot, rows);
+        _showManualDataModal();
+      });
+    });
+  }
   // toggle expand
   hdr.addEventListener('click', () => {
     const open = tbl.style.display !== 'none';
