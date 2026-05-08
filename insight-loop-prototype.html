@@ -5430,14 +5430,15 @@ const _MANUAL_SCHEMAS = {
   },
   retention: {
     title: 'Retention curve — Slide 5',
-    note:  'One row per cohort with day-bucket retention %s.',
+    note:  'One row per cohort+period. Each (Cohort, Period) draws its own line. Empty cells are fine — newer cohorts may not have D60 yet.',
     cols: [
-      { key: 'Cohort', label: 'Cohort', type: 'text',   placeholder: 'Q1 2026' },
-      { key: 'D1',     label: 'D1 %',   type: 'text',   placeholder: '62' },
-      { key: 'D7',     label: 'D7 %',   type: 'text',   placeholder: '28' },
-      { key: 'D14',    label: 'D14 %',  type: 'text',   placeholder: '19' },
-      { key: 'D30',    label: 'D30 %',  type: 'text',   placeholder: '11' },
-      { key: 'D60',    label: 'D60 %',  type: 'text',   placeholder: '7' },
+      { key: 'Cohort', label: 'Cohort', type: 'text', placeholder: 'Jan registrants' },
+      { key: 'Period', label: 'Period', type: 'text', placeholder: 'Jan 2026' },
+      { key: 'D1',     label: 'D1 %',   type: 'text', placeholder: '62' },
+      { key: 'D7',     label: 'D7 %',   type: 'text', placeholder: '28' },
+      { key: 'D14',    label: 'D14 %',  type: 'text', placeholder: '19' },
+      { key: 'D30',    label: 'D30 %',  type: 'text', placeholder: '11' },
+      { key: 'D60',    label: 'D60 %',  type: 'text', placeholder: '7' },
     ],
   },
   segments: {
@@ -5466,12 +5467,15 @@ const _MANUAL_SCHEMAS = {
   },
   max_bet: {
     title: 'Max-bet players — Slide 8',
-    note:  'Per-month max-bet player count + GGR contribution.',
+    note:  'One row per Month per Source. Use Source=Operator for your data, Source=Market for benchmark. Market rows can leave GGR/Total/% blank — only Max Bettors and Max Bet are needed for comparison.',
     cols: [
-      { key: 'Month',             label: 'Month',                type: 'text',   placeholder: 'Jan 2026' },
-      { key: 'Max-Bet Players',   label: 'Max-Bet Players',      type: 'number', placeholder: '42' },
-      { key: 'GGR (€)',           label: 'GGR (€)',              type: 'number', placeholder: '36000' },
-      { key: '% of MAU',          label: '% of MAU',             type: 'text',   placeholder: '1.8' },
+      { key: 'Source',        label: 'Source',         type: 'text',   placeholder: 'Operator | Market' },
+      { key: 'Month',         label: 'Month',          type: 'text',   placeholder: 'Jan 2026' },
+      { key: 'Max Bettors',   label: 'Max Bettors',    type: 'number', placeholder: '42' },
+      { key: 'Max Bet (€)',   label: 'Max Bet (€)',    type: 'number', placeholder: '10' },
+      { key: 'GGR (€)',       label: 'GGR (€)',        type: 'number', placeholder: '36000' },
+      { key: 'Total GGR (€)', label: 'Total GGR (€)',  type: 'number', placeholder: '200000' },
+      { key: 'GGR %',         label: 'GGR %',          type: 'text',   placeholder: '18' },
     ],
   },
   promo: {
