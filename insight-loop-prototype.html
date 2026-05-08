@@ -5681,6 +5681,9 @@ function _buildManualSection(op, slot, schema, rows) {
         inp.placeholder = c.placeholder || '';
         inp.style.cssText = 'width:100%;border:none;padding:6px 8px;font-size:12px;background:transparent;outline:none;';
         inp.addEventListener('input', () => {
+          // IMPORTANT: do NOT re-render the modal here — that destroys the
+          // input element you're typing in and the browser drops focus after
+          // every keystroke. Just save + update the button-level badge.
           let v = inp.value;
           if (c.type === 'number' && v !== '') {
             const n = Number(String(v).replace(/[^\d.\-]/g, ''));
@@ -5688,8 +5691,8 @@ function _buildManualSection(op, slot, schema, rows) {
           }
           rows[idx][c.key] = v;
           _manualSaveSlot(op, slot, rows);
-          // Update header badge live
-          _showManualDataModal();
+          // _manualSaveSlot already calls _updateManualDataBadge internally,
+          // so the button badge stays in sync without touching this modal.
         });
         td.appendChild(inp);
         tr.appendChild(td);
