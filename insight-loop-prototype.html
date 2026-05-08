@@ -5437,11 +5437,11 @@ const _MANUAL_SCHEMAS = {
     cols: [
       { key: 'Cohort', label: 'Cohort', type: 'text', placeholder: 'Jan registrants' },
       { key: 'Period', label: 'Period', type: 'text', placeholder: 'Jan 2026' },
-      { key: 'D1',     label: 'D1 %',   type: 'text', placeholder: '62' },
-      { key: 'D7',     label: 'D7 %',   type: 'text', placeholder: '28' },
-      { key: 'D14',    label: 'D14 %',  type: 'text', placeholder: '19' },
-      { key: 'D30',    label: 'D30 %',  type: 'text', placeholder: '11' },
-      { key: 'D60',    label: 'D60 %',  type: 'text', placeholder: '7' },
+      { key: 'D1',     label: 'D1 %',   type: 'text', placeholder: '62', aliases: ['D1', 'Day 1', 'Day-1'] },
+      { key: 'D7',     label: 'D7 %',   type: 'text', placeholder: '28', aliases: ['D7', 'Day 7', 'Day-7'] },
+      { key: 'D14',    label: 'D14 %',  type: 'text', placeholder: '19', aliases: ['D14', 'Day 14', 'Day-14'] },
+      { key: 'D30',    label: 'D30 %',  type: 'text', placeholder: '11', aliases: ['D30', 'Day 30', 'Day-30'] },
+      { key: 'D60',    label: 'D60 %',  type: 'text', placeholder: '7',  aliases: ['D60', 'Day 60', 'Day-60'] },
     ],
   },
   segments: {
@@ -5487,7 +5487,8 @@ const _MANUAL_SCHEMAS = {
       { key: 'Max Bet',      label: 'Max Bet',      type: 'number', placeholder: '500' },
       { key: 'GGR',          label: 'GGR',          type: 'number', placeholder: '106000' },
       { key: 'Total GGR',    label: 'Total GGR',    type: 'number', placeholder: '1321577' },
-      { key: 'GGR %',        label: 'GGR %',        type: 'text',   placeholder: '8.02' },
+      { key: 'GGR %',        label: 'GGR %',        type: 'text',   placeholder: '8.02',
+        aliases: ['GGR PCT', 'GGR Percent', 'GGR Pct', 'Percent', 'Pct', 'GGR Share'] },
     ],
   },
   max_bet_market: {
@@ -5648,7 +5649,8 @@ function _clearManualForOperator() {
 
 /* ────── CSV import helpers ────── */
 function _normalizeKey(s) {
-  return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  // Keep `%` and `#` so e.g. "GGR %" doesn't collapse to the same key as "GGR".
+  return String(s || '').toLowerCase().replace(/[^a-z0-9%#]+/g, '');
 }
 function _detectDelimiter(text) {
   // Pick the delimiter with the most consistent count across non-empty lines.
@@ -5692,9 +5694,20 @@ function _parseCsvToRows(text, schema) {
   const lines = rawLines.filter(l => l.trim());
   if (!lines.length) return { rows: [], errors: ['(empty input)'] };
   const headerCells = _parseCsvLine(lines[0], delim);
-  // Build a map: column-key → header-index, case-insensitive
+  // Build a map: normalized-name → column-key. First-wins on collision
+  // so the schema-column that defines its label first owns its tokens;
+  // a later column that happens to normalize the same way doesn't steal it.
+  // Each column may declare `aliases: ['GGR PCT', 'Percent']` for fuzzy matches.
   const colByNorm = {};
-  schema.cols.forEach(c => { colByNorm[_normalizeKey(c.label)] = c.key; colByNorm[_normalizeKey(c.key)] = c.key; });
+  const setIfFree = (norm, key) => {
+    const k = _normalizeKey(norm);
+    if (k && !(k in colByNorm)) colByNorm[k] = key;
+  };
+  schema.cols.forEach(c => {
+    setIfFree(c.label, c.key);
+    setIfFree(c.key,   c.key);
+    (c.aliases || []).forEach(a => setIfFree(a, c.key));
+  });
   const headerToColKey = headerCells.map(h => colByNorm[_normalizeKey(h)] || null);
   const matched = headerToColKey.filter(Boolean).length;
   const rows = [];
