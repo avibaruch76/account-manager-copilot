@@ -2742,9 +2742,51 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
 
           if (status && status.report !== undefined) {
             renderResearchReport(status);
+            // CRITICAL: pin the result + display name on `window` so:
+            //   1. Generate Deck has data to ship to deck-service
+            //   2. _saveAnalysisHistory() picks up the right operator
+            //   3. Manual Data modal knows which operator the rows are for
+            // Without these, the polling fallback path silently leaves the
+            // browser in a broken state (HTML on screen, but no in-memory
+            // result + history save fails to "Unknown Operator").
+            window._lastResearchResult = status;
+            const _opFromStatus =
+              status.entity ||
+              status.operator ||
+              document.getElementById('persona-header-name')?.textContent?.trim() ||
+              window._lastDisplayName;
+            if (_opFromStatus) window._lastDisplayName = _opFromStatus;
+            if (typeof _updateManualDataBadge === 'function') _updateManualDataBadge();
+            // Persist the run to history. _saveAnalysisHistory has its own
+            // dedupe guard so a second call here is harmless.
+            if (typeof _saveAnalysisHistory === 'function') {
+              try { _saveAnalysisHistory(); }
+              catch (e) { console.warn('[insight-loop] history save failed:', e.message); }
+            }
             if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
             showToast('✅ Full analysis ready — click Analysis Results to view');
             setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
+            return;
+          }
+
+          // Surface poisoned-completion / pipeline failures with a real toast
+          // instead of letting the loop spin forever. The server returns
+          // { failed: true, code, error, ... } when the run is dead.
+          if (status && status.failed) {
+            console.warn('[insight-loop] Background run failed:', status.code, status.error);
+            if (navLink) navLink.textContent = 'Analysis Results';
+            if (checkResults) {
+              checkResults.innerHTML = `
+                <div style="padding:24px 20px;text-align:center;">
+                  <div style="font-size:28px;margin-bottom:10px;">⚠️</div>
+                  <div style="font-size:13px;font-weight:700;color:#1A1A1A;margin-bottom:6px;">Analysis failed</div>
+                  <div style="font-size:12px;color:#64748B;margin-bottom:16px;line-height:1.5;max-width:520px;margin-left:auto;margin-right:auto;">${
+                    String(status.error || 'Unknown error').replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'})[c])
+                  }</div>
+                  <button onclick="window._retryFullAnalysis && window._retryFullAnalysis()" style="padding:8px 20px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">↺ Retry analysis</button>
+                </div>`;
+            }
+            showToast('❌ ' + (status.error || 'Analysis failed — please retry'), true);
             return;
           }
 
@@ -10344,12 +10386,10 @@ async function _pptxHandleFile(file) {
       </div>
     </div>
     <div id="manual-data-body" style="overflow:auto;padding:18px 24px;flex:1;">
-      <!-- Slot sections rendered dynamically -->
     </div>
   </div>
 </div>
 
-<!-- Conflict prompt — shown when both Jedify + Manual data exist for a slot -->
 <div id="manual-conflict-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9001;align-items:center;justify-content:center;padding:24px;">
   <div style="background:#fff;width:min(540px,92vw);border-radius:14px;padding:22px 26px;box-shadow:0 24px 48px rgba(0,0,0,0.4);">
     <div style="font-size:17px;font-weight:800;color:#0F172A;">Data conflict on <span id="manual-conflict-slot" style="color:#C72031;"></span></div>

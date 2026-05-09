@@ -1695,8 +1695,39 @@ async function askJedifyResearch(prompt, onStage, onHeartbeat, cancelToken, onIn
 
         if (generalStatus === 'done' || statusParsed.is_complete) {
           const report = statusParsed.final_answer || statusParsed.answer || statusParsed.report || '';
-          console.log(`[jedify-research] Done in ${i * pollInterval / 1000}s, report length: ${report.length}`);
-          _bgProgress = null; // clear progress — run is done
+          const elapsedS = i * pollInterval / 1000;
+          console.log(`[jedify-research] Done in ${elapsedS}s, report length: ${report.length}`);
+
+          // Detect 'poisoned completion': Jedify reports done but the report
+          // is a stub (typically <500 chars, no markdown structure). This
+          // happens when SSE drops + multiple session reconnects break the
+          // inquiry context — Jedify can't resume cleanly so it returns a
+          // boilerplate error/notice with status=done. Treat as failure so
+          // the browser shows a real error toast instead of rendering 173
+          // chars of garbage as the analysis.
+          const looksLikeStub =
+            report.length < 500 &&
+            !/^#{1,6}\s/m.test(report) &&
+            !/\|\s*[-:]+\s*\|/.test(report);
+          if (looksLikeStub) {
+            console.warn(
+              `[jedify-research] \u26a0\ufe0f Poisoned completion — report only ${report.length} chars, no markdown structure. ` +
+              `Likely SSE-drop / session-reconnect corrupted the inquiry context.`
+            );
+            console.warn(`[jedify-research] Stub content: ${JSON.stringify(report.slice(0, 300))}`);
+            _bgProgress = null;
+            const err = new Error(
+              `Analysis ended without a real report (${report.length} chars; expected ~10\u201325KB). ` +
+              `This usually means the connection to Jedify dropped mid-flight and the inquiry could not resume. ` +
+              `Please retry the analysis.`
+            );
+            err.code = 'POISONED_COMPLETION';
+            err.reportLength = report.length;
+            err.elapsedSeconds = elapsedS;
+            throw err;
+          }
+
+          _bgProgress = null;
           if (onStage) onStage(RESEARCH_STAGES.length - 1, RESEARCH_STAGES[RESEARCH_STAGES.length - 1]);
           return report;
         }
@@ -1719,6 +1750,7 @@ let _cancelToken = null;
 let _lastCompletedResult = null;
 // Per-runId completed results — keyed by runId so concurrent runs don't overwrite each other
 const _completedResultsByRunId = new Map(); // runId → result
+const _failedRunsByRunId       = new Map(); // runId → { code, error, reportLength?, elapsedSeconds? }
 const _activeRunIds = new Set();             // runIds currently executing
 const _bgInquiryByRunId = new Map();         // runId → Jedify inquiry_id (for resume after restart)
 // Live progress for the active background run — exposed via /api/research-status
@@ -1941,6 +1973,14 @@ goTo(0);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } else {
+        // Did this run fail? Surface the error so the client stops polling
+        // and shows a real toast instead of looping forever.
+        const failure = _failedRunsByRunId.get(runId);
+        if (failure) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ failed: true, ...failure }));
+          return;
+        }
         const active = _activeRunIds.has(runId);
         // Return the specific inquiry_id for this runId (more reliable than the global _activeInquiryId)
         const inquiryId = _bgInquiryByRunId.get(runId) || (active ? _activeInquiryId : null);
@@ -2244,6 +2284,18 @@ goTo(0);
             .catch(err => {
               _activeRunIds.delete(bgRunId);
               _bgInquiryByRunId.delete(bgRunId);
+              // Persist the failure so the polling client can surface it as
+              // a clear toast (otherwise it sees 'no result' forever).
+              _failedRunsByRunId.set(bgRunId, {
+                code:           err.code || 'PIPELINE_ERROR',
+                error:          err.message || String(err),
+                reportLength:   err.reportLength,
+                elapsedSeconds: err.elapsedSeconds,
+                failedAt:       new Date().toISOString(),
+              });
+              if (_failedRunsByRunId.size > 20) {
+                _failedRunsByRunId.delete(_failedRunsByRunId.keys().next().value);
+              }
               console.error(`[noSSE background] Run ${bgRunId} failed:`, err.message);
             });
           return;
