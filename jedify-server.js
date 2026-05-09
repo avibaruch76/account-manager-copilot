@@ -1750,6 +1750,38 @@ let _cancelToken = null;
 let _lastCompletedResult = null;
 // Per-runId completed results — keyed by runId so concurrent runs don't overwrite each other
 const _completedResultsByRunId = new Map(); // runId → result
+
+// ── Shared checks (visible to all users of this server) ─────────────────
+// Persisted to data/shared_checks.json. On free-tier Render the file is
+// ephemeral across deploys/restarts but survives normal usage. Browser can
+// re-publish from localStorage if the server-side list ever resets.
+const SHARED_CHECKS_FILE = path.join(process.cwd(), 'data', 'shared_checks.json');
+let _sharedChecks = [];
+function _loadSharedChecks() {
+  try {
+    if (fs.existsSync(SHARED_CHECKS_FILE)) {
+      const raw = fs.readFileSync(SHARED_CHECKS_FILE, 'utf-8');
+      _sharedChecks = JSON.parse(raw) || [];
+      console.log(`[shared-checks] loaded ${_sharedChecks.length} from disk`);
+    } else {
+      _sharedChecks = [];
+    }
+  } catch (e) {
+    console.warn('[shared-checks] load failed, starting empty:', e.message);
+    _sharedChecks = [];
+  }
+}
+function _saveSharedChecks() {
+  try {
+    const dir = path.dirname(SHARED_CHECKS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(SHARED_CHECKS_FILE, JSON.stringify(_sharedChecks, null, 2));
+  } catch (e) {
+    console.warn('[shared-checks] save failed:', e.message);
+  }
+}
+_loadSharedChecks();
+
 const _failedRunsByRunId       = new Map(); // runId → { code, error, reportLength?, elapsedSeconds? }
 const _activeRunIds = new Set();             // runIds currently executing
 const _bgInquiryByRunId = new Map();         // runId → Jedify inquiry_id (for resume after restart)
@@ -1960,6 +1992,57 @@ goTo(0);
   // All other /api/* routes require authentication
   if (req.url.startsWith('/api/') && !isAuthenticated(req)) {
     return rejectUnauth(res);
+  }
+
+  // ── Shared checks endpoints ─────────────────────────────────────────
+  if (req.method === 'GET' && req.url === '/api/shared-checks') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(_sharedChecks));
+    return;
+  }
+  if (req.method === 'POST' && req.url === '/api/shared-checks') {
+    let body = '';
+    req.on('data', d => { body += d; if (body.length > 256 * 1024) req.destroy(); });
+    req.on('end', () => {
+      try {
+        const parsed = JSON.parse(body || '{}');
+        // Accept either a single check or { checks: [...] } for bulk upsert.
+        const incoming = Array.isArray(parsed) ? parsed
+                       : Array.isArray(parsed.checks) ? parsed.checks
+                       : [parsed];
+        let added = 0, updated = 0;
+        for (const c of incoming) {
+          if (!c || !c.id || !c.name) continue;
+          const i = _sharedChecks.findIndex(x => x.id === c.id);
+          // Stamp shared-server fields
+          const stored = {
+            ...c,
+            builtin: true,        // appear like a built-in to all clients
+            shared:  true,
+            sharedAt: c.sharedAt || new Date().toISOString(),
+          };
+          if (i >= 0) { _sharedChecks[i] = stored; updated++; }
+          else        { _sharedChecks.push(stored);    added++; }
+        }
+        _saveSharedChecks();
+        console.log(`[shared-checks] upsert: +${added} added, ~${updated} updated, total=${_sharedChecks.length}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, added, updated, total: _sharedChecks.length }));
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: e.message }));
+      }
+    });
+    return;
+  }
+  if (req.method === 'DELETE' && req.url.startsWith('/api/shared-checks/')) {
+    const id = decodeURIComponent(req.url.slice('/api/shared-checks/'.length));
+    const before = _sharedChecks.length;
+    _sharedChecks = _sharedChecks.filter(c => c.id !== id);
+    if (_sharedChecks.length !== before) _saveSharedChecks();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, removed: before - _sharedChecks.length }));
+    return;
   }
 
   if (req.method === 'GET' && req.url.startsWith('/api/research-status')) {

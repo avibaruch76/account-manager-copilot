@@ -659,9 +659,17 @@ hr.div{border:none;border-top:2px solid #E0E8F0;margin:0}
         <label>Trigger Conditions</label>
         <textarea id="new-check-triggers" placeholder="When should the agent run this? e.g., 'When GGR is declining' or 'When AM mentions promotions'" style="min-height:40px"></textarea>
       </div>
+      <div class="form-row" style="margin-top:4px;display:flex;align-items:center;gap:8px;">
+        <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:#1E2761;cursor:pointer;font-weight:600;">
+          <input type="checkbox" id="new-check-share" style="margin:0;cursor:pointer;">
+          👥 Share with all users
+        </label>
+        <span style="font-size:11px;color:#64748B;">— makes this check visible to everyone, like a built-in.</span>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;margin-top:4px;flex-wrap:wrap">
         <button class="btn-add" onclick="addNewCheck()">Add Check to Config</button>
         <button class="btn-secondary" onclick="clearForm()">Clear</button>
+        <button class="btn-secondary" onclick="_promoteAllCustomChecks()" title="Make all your private custom checks visible to all users" style="margin-left:8px;">👥 Promote my custom checks</button>
         <span class="save-indicator" id="save-indicator">💾 Saved</span>
         <span id="check-count" style="font-size:11px;color:#64748B;margin-left:auto"></span>
       </div>
@@ -1409,6 +1417,99 @@ function loadChecks() {
   saveChecks();
 }
 
+
+/* ── Shared-checks helpers (live across all users) ── */
+async function _fetchSharedChecks() {
+  try {
+    const r = await fetch('/api/shared-checks');
+    if (!r.ok) return [];
+    return await r.json();
+  } catch (e) {
+    console.warn('[shared-checks] fetch failed:', e.message);
+    return [];
+  }
+}
+async function _publishCheckShared(check) {
+  // POST a check to the server so all users can see it.
+  try {
+    const r = await fetch('/api/shared-checks', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ ...check, shared: true })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return true;
+  } catch (e) {
+    console.warn('[shared-checks] publish failed:', e.message);
+    return false;
+  }
+}
+async function _mergeSharedIntoChecks() {
+  // Pull shared checks from server and slot them into _checks. Existing
+  // entries with the same id are upgraded to shared (so a check the user
+  // had locally and someone published gets the shared badge).
+  const shared = await _fetchSharedChecks();
+  if (!shared.length) return 0;
+  const existingIds = new Set(_checks.map(c => c.id));
+  let added = 0, upgraded = 0;
+  shared.forEach(s => {
+    if (existingIds.has(s.id)) {
+      const existing = _checks.find(c => c.id === s.id);
+      if (existing) {
+        existing.shared = true;
+        existing.builtin = true;   // appear in the built-in section visually
+        // Refresh fields the server is the source of truth for
+        if (s.description) existing.description = s.description;
+        if (s.question) existing.question = s.question;
+        if (s.triggers != null) existing.triggers = s.triggers;
+        if (s.why != null) existing.why = s.why;
+        upgraded++;
+      }
+    } else {
+      _checks.push({
+        ...s,
+        builtin: true,
+        shared:  true,
+        enabled: s.enabled !== false,
+        order:   100 + _checks.length,
+      });
+      added++;
+    }
+  });
+  if (added || upgraded) {
+    saveChecks();
+    if (typeof renderCheckLists === 'function') renderCheckLists();
+    console.log(`[shared-checks] merged: +${added} new, ${upgraded} upgraded`);
+  }
+  return added + upgraded;
+}
+async function _promoteAllCustomChecks() {
+  const myCustom = _checks.filter(c => !c.builtin && !c.shared);
+  if (!myCustom.length) {
+    showToast('No private custom checks to share — all yours are already shared.');
+    return;
+  }
+  if (!confirm(`Promote ${myCustom.length} of your custom check${myCustom.length === 1 ? '' : 's'} to be visible to ALL users? This cannot be easily undone.`)) {
+    return;
+  }
+  try {
+    const r = await fetch('/api/shared-checks', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ checks: myCustom })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    // Mark them locally as shared + built-in so the badge renders right away
+    myCustom.forEach(c => { c.shared = true; c.builtin = true; });
+    saveChecks();
+    if (typeof renderCheckLists === 'function') renderCheckLists();
+    showToast(`✅ Promoted ${j.added + j.updated} check${(j.added + j.updated) === 1 ? '' : 's'} — visible to all users now.`);
+  } catch (e) {
+    showToast('Failed to publish: ' + e.message, true);
+  }
+}
+
 function saveChecks() {
   // Re-index order
   _checks.forEach((c, i) => { c.order = i; });
@@ -1732,6 +1833,8 @@ function fillTemplate(name, query, why) {
   document.getElementById('new-check-query').value = query;
   document.getElementById('new-check-why').value = why;
   document.getElementById('new-check-type').value = 'mandatory';
+  const shareEl = document.getElementById('new-check-share');
+  if (shareEl) shareEl.checked = false;
   document.getElementById('trigger-row').style.display = 'none';
   document.getElementById('new-check-name').scrollIntoView({behavior: 'smooth', block: 'center'});
 }
@@ -1769,6 +1872,7 @@ function addNewCheck() {
 
   // Add new custom check
   const isMandatory = type === 'mandatory';
+  const shareWithAll = !!document.getElementById('new-check-share')?.checked;
   const newCheck = {
     id: 'custom_' + Date.now(),
     name: name,
@@ -1776,7 +1880,8 @@ function addNewCheck() {
     question: query,
     type: isMandatory ? 'mandatory' : 'optional',
     enabled: true,
-    builtin: false,
+    builtin: shareWithAll,   // shared checks render in the built-in section
+    shared:  shareWithAll,
     triggers: triggers,
     why: why,
     order: _checks.length
@@ -1785,7 +1890,15 @@ function addNewCheck() {
   saveChecks();
   renderCheckLists();
 
-  showToast('"' + name + '" added as ' + (isMandatory ? 'mandatory' : 'agent-decided') + ' check!');
+  if (shareWithAll) {
+    _publishCheckShared(newCheck).then(ok => {
+      showToast(ok
+        ? '✅ "' + name + '" added — visible to all users.'
+        : '⚠️ "' + name + '" added locally but server publish failed. Click Promote to retry.', !ok);
+    });
+  } else {
+    showToast('"' + name + '" added as ' + (isMandatory ? 'mandatory' : 'agent-decided') + ' check!');
+  }
   clearForm();
 }
 
@@ -6001,6 +6114,17 @@ if (document.readyState === 'loading') {
 } else {
   setTimeout(_updateManualDataBadge, 0);
 }
+
+// Pull shared checks from the server on page load so they appear like
+// any other built-in.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => {
+    setTimeout(() => { try { _mergeSharedIntoChecks(); } catch (e) { console.warn(e); } }, 200);
+  });
+} else {
+  setTimeout(() => { try { _mergeSharedIntoChecks(); } catch (e) { console.warn(e); } }, 200);
+}
+
 
 /* ─── Apply manual overrides into the deck payload before send ─── */
 async function _applyManualOverrides(payload, op) {
