@@ -5284,7 +5284,7 @@ function _rowToKpiGap(r) {
   return {
     kpi:        _scrapedPick(r, 'kpi') ?? '',
     ours:       String(oursVal ?? ''),
-    leader:     String(_scrapedPick(r, 'market leader', 'leader') ?? ''),
+    leader:     String(_scrapedPick(r, 'market leader', 'leader', 'top 3 avg', 'top 3', 'top3 avg', 'top3', 'market avg', 'market overall', 'market', 'benchmark', 'avg', 'mean', 'overall') ?? ''),
     gap:        String(_scrapedPick(r, 'gap') ?? ''),
     root_cause: String(_scrapedPick(r, 'root cause', 'cause', 'analysis') ?? ''),
   };
@@ -5397,6 +5397,7 @@ function buildScrapedPayload(scraped, displayName) {
     retention:      slots.retention || [],
     segments:       slots.segments || [],
     segments_rfm:   slots.segments_rfm || [],
+    segment_kpis:   [],
     max_bet:        slots.max_bet || [],
     max_bet_operator: [],
     max_bet_market:   [],
@@ -5555,6 +5556,18 @@ const _MANUAL_SCHEMAS = {
       { key: 'leader',     label: 'Market Leader',type: 'text', placeholder: '5× higher' },
       { key: 'gap',        label: 'Gap',          type: 'text', placeholder: '80% below' },
       { key: 'root_cause', label: 'Root Cause',   type: 'text', placeholder: 'Lower bet/round' },
+    ],
+  },
+  segment_kpis: {
+    title: 'Player segment KPIs — Slide 14',
+    note:  'Per-segment behavioral KPIs. One row per segment. GGR Band = % of total GGR contributed by that segment.',
+    cols: [
+      { key: 'Segment',         label: 'Segment',           type: 'text',   placeholder: 'VIPs | Loyal Customers | Explorers | Passive | At Risk | Lost' },
+      { key: 'Avg Bet/Round',   label: 'Avg Bet / Round',   type: 'number', placeholder: '1.20' },
+      { key: 'Rounds/Day',      label: 'Rounds / Day',      type: 'number', placeholder: '180' },
+      { key: 'D7 Retention',    label: 'D7 Retention',      type: 'text',   placeholder: '62' },
+      { key: 'D30 Retention',   label: 'D30 Retention',     type: 'text',   placeholder: '21' },
+      { key: 'GGR Band',        label: 'GGR Band',          type: 'text',   placeholder: '40' },
     ],
   },
   actions: {
@@ -6046,6 +6059,7 @@ async function generateDeck() {
         'max_bet=' + (payload.max_bet?.length || 0),
         'max_bet_operator=' + (payload.max_bet_operator?.length || 0),
         'max_bet_market=' + (payload.max_bet_market?.length || 0),
+        'segment_kpis=' + (payload.segment_kpis?.length || 0),
         'kpis_summary=' + (payload.kpis_summary?.length || 0),
         'actions=' + (payload.actions?.length || 0),
         'appendix=' + payload.appendix.length);
@@ -7510,6 +7524,7 @@ const _DECK_SLIDES = [
   { id: 11, label: 'Growth levers' },
   { id: 12, label: 'KPI gap vs. market' },
   { id: 13, label: 'Recommended actions' },
+  { id: 14, label: 'Segment KPIs' },
 ];
 const _DEFAULT_SLIDE_LIST = _DECK_SLIDES.map(s => s.id);
 
