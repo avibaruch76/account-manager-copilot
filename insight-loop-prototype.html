@@ -5325,7 +5325,9 @@ function classifyScrapedTable(headers, data, headingLower) {
   // New games: catches "Recently Launched", "New Games Launched", "Latest Game
   // Releases", "Adoption Check", "Recent Releases".
   if (/(recently|new|latest|recent).*(launch|release)|adoption\s*check|game\s*release/.test(h)) return 'new_games';
-  if (/top\s*players|\bvip\b|revenue\s*concentration|high.{0,3}value/.test(h)) return 'top_players';
+  // Allow digits/whitespace between 'top' and 'players' so headings like
+  // "12. Top 10 Players by Total Bets" still classify correctly.
+  if (/top\s*\d*\s*players?|\bvip\b|revenue\s*concentration|high.{0,3}value/.test(h)) return 'top_players';
   if (/\bpromo|free\s*round|promotional/.test(h))           return 'promo';
   // KPI gap: catches "KPI Gap", "Per-Player KPI Gap", "Per Player KPI",
   // "Performance vs Market", "Benchmark Comparison".
@@ -5347,6 +5349,11 @@ function classifyScrapedTable(headers, data, headingLower) {
   if (has('game')  && any('priority'))                                return 'tier_gap';
   if (has('game')  && any('launch','status'))               return 'new_games';
   if (any('player') && any('bets') && any('rounds'))        return 'top_players';
+  // Real top-player tables sometimes ship with '#' as the rank column and
+  // no explicit player-id column. Detect the activity-shape instead.
+  if (any('bets') && any('rounds') && any('playdays', 'play days', 'days') && any('avg bet', 'bet/round', 'per round')) return 'top_players';
+  // Promo round-type tables
+  if (any('round type', 'promo type', 'bonus type', 'campaign')) return 'promo';
   return null;
 }
 
@@ -5433,13 +5440,23 @@ function _rowToNewGame(r) {
   };
 }
 function _rowToTopPlayer(r, idx) {
+  // Rank — accept '#' as a column alias when the analysis ranks by row order.
+  const rank = _toNum(_scrapedPick(r, 'rank', '#')) || (idx + 1);
+  // Key — try every common alias; fall back to 'Player #N' so the slide
+  // still has an identifier when the analysis doesn't expose a player id.
+  const rawKey = _scrapedPick(r,
+    'player key', 'player id', 'player_id', 'user id', 'user_id',
+    'account id', 'account', 'username', 'user', 'hash', 'uuid',
+    'key', 'player', 'id'
+  );
+  const key = (rawKey && String(rawKey).trim()) ? String(rawKey).trim() : ('Player #' + rank);
   return {
-    rank:          _toNum(_scrapedPick(r, 'rank')) || (idx + 1),
-    key:           _scrapedPick(r, 'player key', 'player id', 'player_id', 'user id', 'user_id', 'account id', 'account', 'username', 'user', 'hash', 'uuid', 'key', 'player', 'id') ?? '',
-    bets:          _toNum(_scrapedPick(r, 'bets')),
+    rank:          rank,
+    key:           key,
+    bets:          _toNum(_scrapedPick(r, 'total bets', 'bets')),
     ggr:           _toNum(_scrapedPick(r, 'ggr')),
     rounds:        _toNum(_scrapedPick(r, 'rounds')),
-    play_days:     _toNum(_scrapedPick(r, 'days', 'play days')),
+    play_days:     _toNum(_scrapedPick(r, 'playdays', 'play days', 'days')),
     avg_bet_round: _toNum(_scrapedPick(r, 'avg bet', 'bet/round', 'per round')),
   };
 }
