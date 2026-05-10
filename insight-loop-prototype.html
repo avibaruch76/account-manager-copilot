@@ -5465,8 +5465,16 @@ function _rowToKpiGap(r) {
   return {
     kpi:        _scrapedPick(r, 'kpi') ?? '',
     ours:       String(oursVal ?? ''),
+    // Capture each comparator separately so the slide can show all of them
+    // (Top 3 Avg + Market Overall) plus the % gap vs each.
+    top3:       String(_scrapedPick(r, 'top 3 avg', 'top 3', 'top3 avg', 'top3', 'leader', 'market leader', 'benchmark') ?? ''),
+    market:     String(_scrapedPick(r, 'market overall', 'market avg', 'market average', 'overall', 'mean') ?? ''),
+    gap_top3:   String(_scrapedPick(r, 'vs top 3', 'gap vs top 3', 'gap vs top3', 'gap vs top') ?? ''),
+    gap_market: String(_scrapedPick(r, 'vs market', 'gap vs market') ?? ''),
+    // Legacy single-value 'leader' + 'gap' fields kept for backward compat
+    // with older agents/charts that still read these names.
     leader:     String(_scrapedPick(r, 'market leader', 'leader', 'top 3 avg', 'top 3', 'top3 avg', 'top3', 'market avg', 'market overall', 'market', 'benchmark', 'avg', 'mean', 'overall') ?? ''),
-    gap:        String(_scrapedPick(r, 'gap') ?? ''),
+    gap:        String(_scrapedPick(r, 'vs top 3', 'gap vs top 3', 'gap') ?? ''),
     root_cause: String(_scrapedPick(r, 'root cause', 'cause', 'analysis') ?? ''),
   };
 }
