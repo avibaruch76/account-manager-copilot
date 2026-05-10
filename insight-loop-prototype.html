@@ -4921,7 +4921,8 @@ function buildDeckPayload(data, displayName) {
   const mapTier = (r) => ({
     game:         _pick(r, 'game_group', 'game', 'game_name') ?? '',
     studio:       _pick(r, 'studio', 'studio_name') ?? '',
-    rank:         String(_pick(r, 'market_rank', 'rank') ?? ''),
+    rank:         String(_pick(r, 'market_rank', 'rank_in_market', 'rank') ?? ''),
+    rank_in_operator: String(_pick(r, 'rank_in_operator', 'operator_rank', 'rank_at_operator', 'our_rank', 'account_rank') ?? ''),
     account_bets: String(_pick(r, 'account_bets', 'bets', 'our_bets') ?? '€0'),
     priority:     String(_pick(r, 'priority', 'severity') ?? 'HIGH').toUpperCase(),
   });
@@ -5414,7 +5415,10 @@ function _rowToTierGap(r) {
   return {
     game:         _scrapedPick(r, 'game') ?? '',
     studio:       _scrapedPick(r, 'studio') ?? '',
-    rank:         String(_scrapedPick(r, 'rank') ?? ''),
+    // Disambiguate: prefer "rank in market" / "market rank" so we don't accidentally
+    // pick the operator-rank column when both are present in the analysis table.
+    rank:         String(_scrapedPick(r, 'rank in market', 'market rank', 'market', 'rank') ?? ''),
+    rank_in_operator: String(_scrapedPick(r, 'rank in operator', 'operator rank', 'rank in op', 'rank at operator', 'our rank', 'account rank') ?? ''),
     account_bets: String(_scrapedPick(r, 'account bets', 'bets', 'our') ?? '€0'),
     priority:     String(_scrapedPick(r, 'priority', 'tier') ?? '').toUpperCase() || 'HIGH',
   };
@@ -5503,7 +5507,14 @@ function buildScrapedPayload(scraped, displayName) {
   scraped.forEach(t => {
     const cat = classifyScrapedTable(t.columns || [], t.data, t.heading || t.name || '');
     if (!cat || claimed[cat]) {
-      // already filled OR unclassified → push to appendix
+      // already filled OR unclassified → push to appendix.
+      // EXCEPT for slots that already have a dedicated structural slide and
+      // we don't want to render twice (e.g. top_players → slide 7). Drop
+      // duplicates silently rather than leaking them into the appendix.
+      const SLOT_NO_DUPLICATE_APPENDIX = new Set(['top_players']);
+      if (claimed[cat] && SLOT_NO_DUPLICATE_APPENDIX.has(cat)) {
+        return;
+      }
       if (!cat || cat === 'kpis_summary' || cat === 'retention' || cat === 'segments' || cat === 'max_bet') {
         // For slots we don't render structurally yet, the table goes to appendix as-is
         if (claimed[cat]) unclassified.push(t);
