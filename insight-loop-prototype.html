@@ -2602,6 +2602,15 @@ async function runAnalysis(customPrompt, partialCheckIds) {
 
         renderCheckResults(data, displayName);
         renderPersonaTabs(data, displayName);
+        // Persist to history. The SSE foreground fast-path used to skip
+        // this, leaving today's analyses absent from history even though
+        // decks generated successfully (decks read _lastResearchResult,
+        // not history). _saveAnalysisHistory has its own dedupe guard so
+        // a second call from another path is harmless.
+        if (typeof _saveAnalysisHistory === 'function') {
+          try { _saveAnalysisHistory(); }
+          catch (e) { console.warn('[insight-loop] history save failed (SSE fast path):', e.message); }
+        }
         // Show both panels — Analysis Results + Output by Persona
         document.getElementById('react-panel').style.display = 'block';
         document.getElementById('output-panel').style.display = 'block';
@@ -2854,6 +2863,27 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
           if (status.inquiry_id) _storedInquiryId = status.inquiry_id;
 
           if (status && status.report !== undefined) {
+            // Soft-fail detector: Jedify returned a "Research Could Not Be
+            // Completed" / "System Unavailable" report. Treat it like a
+            // failure rather than a normal analysis - show a retry CTA,
+            // do NOT save to history, do NOT pin _lastResearchResult.
+            if (isJedifyErrorReport(status.report)) {
+              console.warn('[insight-loop] Soft-fail report detected - not saving to history.');
+              const checkResults = document.getElementById('check-results');
+              if (checkResults) {
+                checkResults.innerHTML = `
+                  <div style="padding:24px 20px;text-align:center;">
+                    <div style="font-size:28px;margin-bottom:10px;">⚠️</div>
+                    <div style="font-size:14px;font-weight:700;color:#1A1A1A;margin-bottom:6px;">Jedify reports the data platform is unavailable</div>
+                    <div style="font-size:12px;color:#64748B;margin-bottom:14px;line-height:1.5;max-width:520px;margin-left:auto;margin-right:auto;">The analysis returned a "could not be completed" report (HTTP 500s from the semantic layer / DB). This is a Jedify-side outage, not an issue with this app. Please retry in a few minutes.</div>
+                    <button onclick="window._retryFullAnalysis && window._retryFullAnalysis()" style="padding:10px 24px;background:#CC0000;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;">↺ Retry analysis</button>
+                  </div>`;
+              }
+              if (navLink) navLink.textContent = 'Analysis Results';
+              showToast('⚠️ Jedify side appears unavailable - please retry', true);
+              return;
+            }
+
             renderResearchReport(status);
             // CRITICAL: pin the result + display name on `window` so:
             //   1. Generate Deck has data to ship to deck-service
@@ -2877,7 +2907,7 @@ async function fetchJedifyAnalysis(selection, abortSignal, customPrompt, partial
               catch (e) { console.warn('[insight-loop] history save failed:', e.message); }
             }
             if (navLink) navLink.innerHTML = 'Analysis Results <span style="font-size:11px;background:#1D6A39;color:white;padding:2px 6px;border-radius:10px;margin-left:4px;">✅ Ready</span>';
-            showToast('✅ Full analysis ready — click Analysis Results to view');
+            showToast('✅ Full analysis ready - click Analysis Results to view');
             setTimeout(() => { if (navLink) navLink.textContent = 'Analysis Results'; }, 5000);
             return;
           }
@@ -3423,7 +3453,12 @@ function initOrUpdateSession(data, checkedIds) {
 // Detect Jedify's "I couldn't complete" error messages — these shouldn't be cached or treated as success
 function isJedifyErrorReport(report) {
   if (!report || typeof report !== 'string') return false;
-  return /ran into some trouble|wasn.t able to finish|give it another shot|couldn.t complete|unable to gather|sorry.*couldn.t|please try again later/i.test(report);
+  // Catches both Jedify's soft apology language and the explicit
+  // "Research Could Not Be Completed" outage report shape (HTTP 500s
+  // from the semantic layer / DB). The latter contains real-looking
+  // sections ("WHAT WAS ATTEMPTED" / "WHAT DATA IS AVAILABLE") so we
+  // detect it from failure phrases inside, not from structure.
+  return /ran into some trouble|wasn.t able to finish|give it another shot|couldn.t complete|unable to gather|sorry.*couldn.t|please try again later|research could not be completed|system unavailable|zero data points were successfully retrieved|i apologize for the inability|system.?wide outage|could not be completed due to|http\s*500\s*internal|database authorization error|all data retrieval methods|the underlying data platform appears to be experiencing/i.test(report);
 }
 
 function renderResearchReport(data) {
