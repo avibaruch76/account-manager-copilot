@@ -4566,6 +4566,16 @@ function confirmAndRun() {
           console.error('[confirmAndRun] Render error:', renderErr);
           showToast('Rendering error: ' + renderErr.message, true);
         }
+        // Persist to history. The confirmAndRun fast-path used to skip
+        // this entirely, leaving today's analyses absent from history
+        // even when decks generated successfully (decks read from
+        // _lastResearchResult, not history). _saveAnalysisHistory has
+        // its own dedupe guard so a second call from another path is
+        // harmless.
+        if (typeof _saveAnalysisHistory === 'function') {
+          try { _saveAnalysisHistory(); }
+          catch (e) { console.warn('[confirmAndRun] history save failed:', e.message); }
+        }
         document.getElementById('react-panel').style.display = 'block';
         document.getElementById('output-panel').style.display = 'block';
         document.querySelector('hr.div').style.display = 'block';
