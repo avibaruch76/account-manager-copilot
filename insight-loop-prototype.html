@@ -4333,8 +4333,9 @@ function renderDataAnalystView(checks, data, displayName, dateStr) {
   html += `<p style="font-size:13px;font-weight:700;color:#4A235A;">📊 Full Data Analyst Report — ${displayName}</p>`;
   html += `<p style="font-size:11px;color:#64748B;margin-top:4px;">${dateStr} · ${checks.length} checks · Complete Jedify Research Output</p>`;
   html += `</div>`;
-  html += `<div style="display:flex;gap:8px;">`;
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;">`;
   html += `<button onclick="generateWordReport()" style="background:linear-gradient(135deg,#1E2761,#4A235A);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📄 Download Word</button>`;
+  html += `<button onclick="exportForGamma()" title="Download a Word file structured as a Gamma-ready prompt" style="background:linear-gradient(135deg,#7C3AED,#4C1D95);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">✨ Export for Gamma</button>`;
   html += `<button onclick="generateDeck()" class="js-generate-deck-btn" style="background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;padding:10px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${typeof _currentDeckButtonLabel === 'function' ? _currentDeckButtonLabel() : '📊 Generate QBR Presentation'}</button>`;
   html += `</div>`;
   html += `</div>`;
@@ -6408,6 +6409,73 @@ async function generateDeck() {
     showToast('❌ Deck generation failed: ' + e.message, true);
   } finally {
     _genRestore();
+  }
+}
+
+// Export the current analysis as a Gamma-ready Word file.
+// Mirrors generateDeck() but POSTs to /export-gamma-docx and downloads a .docx.
+async function exportForGamma() {
+  let data = window._lastResearchResult;
+  const displayName = window._lastDisplayName || (typeof getOperatorNameFromDom === 'function' ? getOperatorNameFromDom() : 'Operator');
+
+  let payload;
+  if (data && Array.isArray(data.checks) && data.checks.length) {
+    payload = buildDeckPayload(data, displayName);
+  } else {
+    const scraped  = (typeof scrapeTablesFromDom === 'function') ? scrapeTablesFromDom() : [];
+    const findings = (typeof scrapeSectionFindingsFromDom === 'function') ? scrapeSectionFindingsFromDom() : [];
+    if (!scraped.length && !findings.length) {
+      showToast('⚠️ No analysis to send. Run an analysis first.', true);
+      return;
+    }
+    payload = buildScrapedPayload(scraped, displayName);
+    payload.findings_by_slot = {};
+    findings.forEach(f => {
+      const cat = classifyScrapedTable([], [], f.heading);
+      if (!cat) return;
+      payload.findings_by_slot[cat] = (payload.findings_by_slot[cat]
+        ? payload.findings_by_slot[cat] + '\n\n'
+        : '') + f.text;
+    });
+  }
+
+  // Find all buttons that look like the Gamma export — disable while running.
+  const btns = Array.from(document.querySelectorAll('button')).filter(b => /export for gamma/i.test(b.textContent || ''));
+  const prev = btns.map(b => ({ html: b.innerHTML, disabled: b.disabled }));
+  btns.forEach(b => { b.innerHTML = '⏳ Building...'; b.disabled = true; });
+  const restoreBtns = () => btns.forEach((b, i) => { b.innerHTML = prev[i].html; b.disabled = prev[i].disabled; });
+
+  // Derive the export URL from DECK_SERVICE_URL (same host, swapped path).
+  const exportUrl = (typeof DECK_SERVICE_URL === 'string')
+    ? DECK_SERVICE_URL.replace(/\/generate(\/?$|\?)/, '/export-gamma-docx$1')
+    : 'https://rubyplay-deck-service.onrender.com/export-gamma-docx';
+
+  try {
+    const res = await fetch(exportUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      let msg = 'HTTP ' + res.status;
+      try { const j = await res.json(); if (j.error) msg = j.error; } catch (_) {}
+      throw new Error(msg);
+    }
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `${displayName.replace(/[^a-zA-Z0-9]/g, '-')}_GAMMA_${new Date().toISOString().slice(0,10)}.docx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('✅ Gamma Word file downloaded: ' + a.download);
+  } catch (e) {
+    console.error('[exportForGamma]', e);
+    showToast('❌ Gamma export failed: ' + (e.message || e), true);
+  } finally {
+    restoreBtns();
   }
 }
 
