@@ -5013,6 +5013,37 @@ function buildDeckPayload(data, displayName) {
     }));
 
   // Build the payload
+  // Pull each check's narrative (answer + explanation + finding) and map
+  // it onto the deck slot key it feeds. This is what makes Export for
+  // Gamma include real commentary, not just data tables.
+  const CHECK_TO_SLOT = {
+    'ggr_trend':     ['kpis', 'monthly'],
+    'concentration': ['top_games', 'studio_summary'],
+    'hidden_gems':   ['growth_levers'],
+    'benchmark_gap': ['tier_gap', 'kpi_gap'],
+    'new_launches':  ['new_games'],
+    'retention':     ['retention'],
+    'segmentation':  ['segments'],
+    'vip_behavior':  ['top_players'],
+    'max_bet':       ['max_bet'],
+    'promo_impact':  ['promo'],
+  };
+  const findings_by_slot = {};
+  (data.checks || []).forEach(c => {
+    const slots = CHECK_TO_SLOT[c.id];
+    if (!slots) return;
+    const parts = [c.finding, c.answer, c.explanation]
+      .filter(t => t && String(t).trim().length > 0)
+      .map(t => String(t).trim());
+    if (!parts.length) return;
+    const text = parts.join('\n\n');
+    slots.forEach(s => {
+      findings_by_slot[s] = findings_by_slot[s]
+        ? findings_by_slot[s] + '\n\n' + text
+        : text;
+    });
+  });
+
   return {
     operator: displayName,
     channel:  '',
@@ -5041,6 +5072,7 @@ function buildDeckPayload(data, displayName) {
     vip_data_available: vips.length > 0,
     kpi_gap: [],          // not produced by current checks — deck service will skip / use defaults
     actions: findings,
+    findings_by_slot,
     next_30_days: [],     // user fills in separately for now
   };
 }
