@@ -4931,17 +4931,26 @@ function buildDeckPayload(data, displayName) {
 
   // concentration → top_games
   const conc = arr('concentration');
-  const top_games = conc.slice(0, 10).map((r, i) => ({
-    rank:           Number(_pick(r, 'rank', 'position')) || (i + 1),
-    game:           _pick(r, 'game_group', 'game', 'game_name') ?? '',
-    studio:         _pick(r, 'studio', 'studio_name', 'provider') ?? '',
-    bets:           Number(_pick(r, 'total_bets', 'bets')) || 0,
-    ggr:            Number(_pick(r, 'ggr', 'total_ggr')) || 0,
-    share_pct:      Number(_pick(r, 'ggr_share_pct', 'share_pct', 'share')) || 0,
-    players:        Number(_pick(r, 'players', 'active_players')) || 0,
-    ggr_per_player: Number(_pick(r, 'ggr_per_player', 'ggr_pp')) || 0,
-    rtp_pct:        Number(_pick(r, 'rtp_pct', 'rtp')) || 0,
-  }));
+  const top_games = conc.slice(0, 10).map((r, i) => {
+    const ggr     = Number(_pick(r, 'ggr', 'total_ggr')) || 0;
+    const players = Number(_pick(r, 'players', 'active_players')) || 0;
+    let ggr_pp    = Number(_pick(r, 'ggr_per_player', 'ggr_pp')) || 0;
+    // Fallback: compute from ggr/players when Jedify didn't ship the column.
+    if ((!ggr_pp || ggr_pp === 0) && ggr > 0 && players > 0) {
+      ggr_pp = +(ggr / players).toFixed(2);
+    }
+    return {
+      rank:           Number(_pick(r, 'rank', 'position')) || (i + 1),
+      game:           _pick(r, 'game_group', 'game', 'game_name') ?? '',
+      studio:         _pick(r, 'studio', 'studio_name', 'provider') ?? '',
+      bets:           Number(_pick(r, 'total_bets', 'bets')) || 0,
+      ggr:            ggr,
+      share_pct:      Number(_pick(r, 'ggr_share_pct', 'share_pct', 'share')) || 0,
+      players:        players,
+      ggr_per_player: ggr_pp,
+      rtp_pct:        Number(_pick(r, 'rtp_pct', 'rtp')) || 0,
+    };
+  });
 
   // hidden_gems → growth_levers
   const gems = arr('hidden_gems');
@@ -5473,15 +5482,22 @@ function _rowToStudioSummary(r) {
   };
 }
 function _rowToTopGame(r, idx) {
+  const ggr     = _toNum(_scrapedPick(r, 'ggr'));
+  const players = _toNum(_scrapedPick(r, 'players'));
+  // Some Jedify responses don't ship ggr/player explicitly — compute from ggr/players.
+  let ggr_per_player = _toNum(_scrapedPick(r, 'ggr/player', 'per player', 'ggr per player', 'ggr_per_player'));
+  if ((!ggr_per_player || ggr_per_player === 0) && ggr > 0 && players > 0) {
+    ggr_per_player = +(ggr / players).toFixed(2);
+  }
   return {
     rank:           _toNum(_scrapedPick(r, '#', 'rank', 'position')) || (idx + 1),
     game:           _scrapedPick(r, 'game') ?? '',
     studio:         _scrapedPick(r, 'studio', 'provider') ?? '',
     bets:           _toNum(_scrapedPick(r, 'bets')),
-    ggr:            _toNum(_scrapedPick(r, 'ggr')),
+    ggr:            ggr,
     share_pct:      _toNum(_scrapedPick(r, 'share')),
-    players:        _toNum(_scrapedPick(r, 'players')),
-    ggr_per_player: _toNum(_scrapedPick(r, 'ggr/player', 'per player')),
+    players:        players,
+    ggr_per_player: ggr_per_player,
     rtp_pct:        _toNum(_scrapedPick(r, 'rtp')),
   };
 }
