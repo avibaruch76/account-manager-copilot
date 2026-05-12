@@ -6437,6 +6437,20 @@ async function exportForGamma() {
         ? payload.findings_by_slot[cat] + '\n\n'
         : '') + f.text;
     });
+    // Pull action items from the rendered DOM (they're not a table).
+    if (typeof scrapeActionsFromDom === 'function') {
+      const scrapedActions = scrapeActionsFromDom();
+      if (scrapedActions && scrapedActions.length) {
+        payload.actions = scrapedActions;
+      }
+    }
+  }
+
+  // Layer manual data on top — fills any slot Jedify didn't populate (segment KPIs, max bet,
+  // promo round types, etc.) so the Gamma doc matches what Generate Deck would produce.
+  if (typeof _applyManualOverrides === 'function') {
+    try { await _applyManualOverrides(payload, displayName); }
+    catch (e) { console.warn('[exportForGamma] manual overrides failed:', e); }
   }
 
   // Find all buttons that look like the Gamma export — disable while running.
