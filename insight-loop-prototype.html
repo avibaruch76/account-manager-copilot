@@ -5038,18 +5038,37 @@ function buildDeckPayload(data, displayName) {
     'promo_impact':  ['promo'],
   };
   const findings_by_slot = {};
+  const appendix = [];
   (data.checks || []).forEach(c => {
     const slots = CHECK_TO_SLOT[c.id];
-    if (!slots) return;
-    const parts = [c.finding, c.answer, c.explanation]
-      .filter(t => t && String(t).trim().length > 0)
-      .map(t => String(t).trim());
-    if (!parts.length) return;
-    const text = parts.join('\n\n');
-    slots.forEach(s => {
-      findings_by_slot[s] = findings_by_slot[s]
-        ? findings_by_slot[s] + '\n\n' + text
-        : text;
+    if (slots) {
+      // Known check — feed its narrative into the mapped slot(s).
+      const parts = [c.finding, c.answer, c.explanation]
+        .filter(t => t && String(t).trim().length > 0)
+        .map(t => String(t).trim());
+      if (parts.length) {
+        const text = parts.join('\n\n');
+        slots.forEach(s => {
+          findings_by_slot[s] = findings_by_slot[s]
+            ? findings_by_slot[s] + '\n\n' + text
+            : text;
+        });
+      }
+      return;
+    }
+    // Unknown check (e.g. a custom check from an Agent that isn't in
+    // CHECK_TO_SLOT). Only push to appendix if it has data — text-only
+    // checks without rows have nothing to render generically.
+    const rows = Array.isArray(c.data) ? c.data : null;
+    if (!rows || !rows.length) return;
+    const columns = Array.isArray(c.columns) ? c.columns : null;
+    appendix.push({
+      id:          c.id,
+      name:        c.name || c.id,
+      finding:     c.finding || c.answer || '',
+      explanation: c.explanation || '',
+      data:        rows,
+      columns:     columns,
     });
   });
 
@@ -5082,6 +5101,7 @@ function buildDeckPayload(data, displayName) {
     kpi_gap: [],          // not produced by current checks — deck service will skip / use defaults
     actions: findings,
     findings_by_slot,
+    appendix,             // unknown checks (custom agent checks) become generic appendix slides
     next_30_days: [],     // user fills in separately for now
   };
 }
