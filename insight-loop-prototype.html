@@ -5455,12 +5455,17 @@ function classifyScrapedTable(headers, data, headingLower) {
   // values) is almost always a tier_gap / portfolio-opportunity table.
   if (has('game')  && any('priority'))                                return 'tier_gap';
   if (has('game')  && any('launch','status'))               return 'new_games';
-  if (any('player') && any('bets') && any('rounds'))        return 'top_players';
-  // Real top-player tables sometimes ship with '#' as the rank column and
-  // no explicit player-id column. Detect the activity-shape instead.
-  if (any('bets') && any('rounds') && any('playdays', 'play days', 'days') && any('avg bet', 'bet/round', 'per round')) return 'top_players';
-  // Promo round-type tables
+  // CHECK PROMO ROUND-TYPE BEFORE top_players column heuristic — Round Type
+  // Breakdown tables (Regular Round / Buy Feature rows) have Players + Bets
+  // + Rounds columns and would otherwise mis-match top_players. The semantics
+  // are completely different: Round Type = aggregate per game-feature,
+  // top_players = per-individual-player.
   if (any('round type', 'promo type', 'bonus type', 'campaign')) return 'promo';
+  // Real top-player tables ship with playdays / avg bet per round — those
+  // distinguish per-player from per-something-else with the same columns.
+  if (any('bets') && any('rounds') && any('playdays', 'play days', 'days') && any('avg bet', 'bet/round', 'per round')) return 'top_players';
+  // Legacy looser rule kept as last fallback (player + bets + rounds).
+  if (any('player') && any('bets') && any('rounds'))        return 'top_players';
   return null;
 }
 
@@ -5558,20 +5563,23 @@ function _rowToTopPlayer(r, idx) {
   const rank = _toNum(_scrapedPick(r, 'rank', '#')) || (idx + 1);
   // Key — try every common alias; fall back to 'Player #N' so the slide
   // still has an identifier when the analysis doesn't expose a player id.
+  // 'player' / 'players' INTENTIONALLY excluded — a "Players" column with
+  // a count value (e.g. 337) would otherwise hijack the key field.
   const rawKey = _scrapedPick(r,
     'player key', 'player id', 'player_id', 'user id', 'user_id',
     'account id', 'account', 'username', 'user', 'hash', 'uuid',
-    'key', 'player', 'id'
+    'key', 'id'
   );
   const key = (rawKey && String(rawKey).trim()) ? String(rawKey).trim() : ('Player #' + rank);
   return {
-    rank:          rank,
-    key:           key,
-    bets:          _toNum(_scrapedPick(r, 'total bets', 'bets')),
-    ggr:           _toNum(_scrapedPick(r, 'ggr')),
-    rounds:        _toNum(_scrapedPick(r, 'rounds')),
-    play_days:     _toNum(_scrapedPick(r, 'playdays', 'play days', 'days')),
-    avg_bet_round: _toNum(_scrapedPick(r, 'avg bet', 'bet/round', 'per round')),
+    rank:           rank,
+    key:            key,
+    bets:           _toNum(_scrapedPick(r, 'total bets', 'bets')),
+    ggr:            _toNum(_scrapedPick(r, 'ggr')),
+    rounds:         _toNum(_scrapedPick(r, 'rounds')),
+    play_days:      _toNum(_scrapedPick(r, 'playdays', 'play days', 'days')),
+    avg_bet_round:  _toNum(_scrapedPick(r, 'avg bet', 'bet/round', 'per round')),
+    favourite_game: String(_scrapedPick(r, 'favourite game', 'favorite game', 'top game', 'preferred game') ?? ''),
   };
 }
 function _rowToKpiGap(r) {
@@ -10783,6 +10791,15 @@ async function _pptxHandleFile(file) {
     </div>
     <div style="display:flex;gap:8px;margin-top:18px;flex-wrap:wrap;">
       <button onclick="_resolveManualConflict('use')"    style="flex:1;padding:11px 14px;background:linear-gradient(135deg,#C72031,#8B0000);color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Use Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(override)</span></button>
+      <button onclick="_resolveManualConflict('ignore')" style="flex:1;padding:11px 14px;background:#0F172A;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Ignore Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(keep saved)</span></button>
+      <button onclick="_resolveManualConflict('delete')" style="flex:1;padding:11px 14px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Delete Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(use Jedify)</span></button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
+border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Use Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(override)</span></button>
       <button onclick="_resolveManualConflict('ignore')" style="flex:1;padding:11px 14px;background:#0F172A;color:white;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Ignore Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(keep saved)</span></button>
       <button onclick="_resolveManualConflict('delete')" style="flex:1;padding:11px 14px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;">Delete Manual<br><span style="font-weight:400;font-size:10px;opacity:0.85;">(use Jedify)</span></button>
     </div>
